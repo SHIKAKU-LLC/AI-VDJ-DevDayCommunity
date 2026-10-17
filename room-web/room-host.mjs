@@ -79,10 +79,15 @@ async function mount(raw=null){
   };
   const materialCapabilities=createOwnerSetupCapabilityRefresh({refresh:refreshCapabilities,
    isCurrent:()=>!disposed&&mountEpoch===mounted,onError:holdControls});
-  ownerSetup=mountOwnerSetup({container:$('cloud-setup'),roomId:raw.roomId,
-   request:(path,options)=>ownerRequest(path,{...options,...(/\/operator\/(?:status|media\/(?:begin|chunk|finish)|trial\/(?:prepare|start|status))$/.test(path)?{timeoutMs:300000}:{}),
-    headers:{'X-Room-Owner':raw.ownerToken}}),
-   onState:state=>materialCapabilities.observe(state)});
+  if(capabilities?.serverManaged===true&&capabilities.generation!==true){
+   const pending=document.createElement('p');pending.textContent='サーバー側の生成処理を準備しています。現在はアイデアの受付のみ利用できます。';
+   $('cloud-setup').replaceChildren(pending);
+  }else{
+   ownerSetup=mountOwnerSetup({container:$('cloud-setup'),roomId:raw.roomId,
+    request:(path,options)=>ownerRequest(path,{...options,...(/\/operator\/(?:status|media\/(?:begin|chunk|finish)|trial\/(?:prepare|start|status))$/.test(path)?{timeoutMs:300000}:{}),
+     headers:{'X-Room-Owner':raw.ownerToken}}),
+    onState:state=>materialCapabilities.observe(state)});
+  }
   drawQR(raw);$('owner-login').hidden=true;$('show-stage').hidden=false;model.snapshot((await import('./rooms/room-contract-view.mjs')).roomView(raw));
   cloudControls=mountCloudOwnerControls({capabilities,openOutput:({onState})=>{
    const headers=new Headers({'X-Room-Owner':raw.ownerToken});
@@ -142,7 +147,9 @@ async function judgeEntrance(){
  for(const name of ['owner','join','participant','output'])$(name+'-view').hidden=true;
  for(const button of document.querySelectorAll('nav button'))button.hidden=true;
  $('owner-login').hidden=false;
- $('login-status').textContent='本日限定の審査用です。ルームを作成し、参加者のアイデアから音楽と映像を生成できます。アプリのインストールやAPIキーの登録は不要です。';
+ $('login-status').textContent=capabilities.generation===true
+  ?'本日限定の審査用です。ルームを作成し、参加者のアイデアから音楽と映像を生成できます。アプリのインストールやAPIキーの登録は不要です。'
+  :'ルームを作成してアイデアを受け付けられます。音楽・映像の生成は準備中です。アプリのインストールやAPIキーの登録は不要です。';
  const hex=()=>Array.from(crypto.getRandomValues(new Uint8Array(32)),b=>b.toString(16).padStart(2,'0')).join('');
  const admission={nonce:crypto.randomUUID(),ownerToken:hex(),joinCode:hex()};
  const button=$('create-room');button.disabled=false;button.textContent='審査用ルームを作成する';

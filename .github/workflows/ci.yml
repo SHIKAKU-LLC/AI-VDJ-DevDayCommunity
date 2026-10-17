@@ -48,6 +48,7 @@ jobs:
           cache-dependency-path: |
             qa-tools/package-lock.json
             snapshot/package-lock.json
+            cloud/cloudflare/package-lock.json
       - name: Confirm 8-core runner
         run: node -e "const os = require('node:os'); const cpu = os.availableParallelism(); console.log(JSON.stringify({cpu, memoryGiB:Math.round(os.totalmem()/2**30)})); if (cpu < 8) process.exit(1)"
       - name: Install pinned local PostgreSQL verification runtime
@@ -56,6 +57,10 @@ jobs:
         run: npm ci --prefix snapshot --ignore-scripts --no-audit --no-fund
       - name: Verify portable runtime, public UI, and durable collect contract
         run: node --test --test-concurrency=4 tests/*.test.mjs snapshot/app/runtime/*.test.mjs integration/mac-host/*.test.mjs
+      - name: Install pinned Cloudflare build dependencies
+        run: npm ci --prefix cloud/cloudflare --no-audit --no-fund
+      - name: Build Cloudflare Worker and static assets without remote resources
+        run: npm run build:local --prefix cloud/cloudflare
 
   runtime-analysis:
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
@@ -107,4 +112,6 @@ jobs:
             tests/cloud-first-e2e.test.mjs \
             tests/cloud-native-continuation.test.mjs \
             tests/cloud-owner-autodj-integration.test.mjs \
+            tests/cloudflare-native-service.test.mjs \
+            tests/cloudflare-media-prepare.test.mjs \
             tests/mac-edge-launch-flow.test.mjs

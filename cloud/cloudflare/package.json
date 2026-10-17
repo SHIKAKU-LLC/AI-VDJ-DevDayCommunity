@@ -2,8 +2,20 @@
   "name": "ai-vdj-cloudflare",
   "private": true,
   "type": "module",
+  "scripts": {
+    "assets": "python3 ../../scripts/build_cloudflare_assets.py",
+    "dev": "npm run assets && cf dev --mode development",
+    "build": "npm run assets && cf build",
+    "build:local": "npm run assets && cf build --mode development"
+  },
   "devDependencies": {
+    "@cloudflare/vite-plugin": "2.0.0-beta.v.1",
     "cf": "1.0.0-beta.18",
+    "typescript": "7.0.2",
+    "vite": "8.3.0",
     "wrangler": "4.151.1"
+  },
+  "dependencies": {
+    "@cloudflare/containers": "0.3.7"
   }
 }
