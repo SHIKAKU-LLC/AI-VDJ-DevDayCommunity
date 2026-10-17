@@ -62,8 +62,9 @@ function render() {
     const job = jobs.find(j => j.id === submission.submissionId);
     name.textContent = submission.nickname; prompt.textContent = submission.prompt;
     state.textContent = job ? labels[job.state] ?? '処理中' : jobs.length >= 5 ? '生成枠の上限に達しました' : '受付済み';
+    if (job?.sceneCount > 1) state.textContent += ` · 映像 ${Object.entries(job.progress ?? {}).filter(([key, value]) => key.startsWith('video') && value === 'READY').length} / ${job.sceneCount} 本`;
     li.append(name, prompt, state);
-    if (session.owner && job?.state === 'FAILED') {
+    if (session.owner && (job?.state === 'FAILED' || Object.values(job?.progress ?? {}).includes('FAILED'))) {
       const retry = document.createElement('button'); retry.textContent = '生成済み素材の検査を再試行';
       retry.onclick = async () => {
         retry.disabled = true;
