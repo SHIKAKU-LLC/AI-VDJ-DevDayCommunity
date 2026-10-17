@@ -18,9 +18,12 @@ Workers Buildsの設定案（未接続・未配備）:
 | GitHub | `SHIKAKU-LLC/AI-VDJ-DevDayCommunity` のみ |
 | ルート | リポジトリのルート |
 | Node.js | `NODE_VERSION=24.22.0` |
-| ビルド | `npm ci --prefix cloud/cloudflare && npm run build --prefix cloud/cloudflare` |
-| 配備 | `cd cloud/cloudflare && npx cf deploy --prebuilt --mode production` |
-| 本番ブランチ | `main`。接続開始と公開は別途承認後 |
+| 検証用ビルド | `npm ci --prefix cloud/cloudflare && npm run build --prefix cloud/cloudflare -- --mode staging` |
+| 検証用配備 | `cd cloud/cloudflare && npx cf deploy --prebuilt --mode staging` |
+| 本番用ビルド | `npm ci --prefix cloud/cloudflare && npm run build --prefix cloud/cloudflare` |
+| 本番用配備 | `cd cloud/cloudflare && npx cf deploy --prebuilt --mode production` |
+| 検証ブランチ | `codex/cloudflare-runtime`。接続開始・配備は別途承認後 |
+| 本番ブランチ | `main`。PRのマージと公開は別途承認後 |
 
 ContainersのDockerfileもWorkers Builds内で組み立てる。Containersは独立した検証用Workerで動作確認してから本番へ接続する。
 ビルド用のGitHub連携・Cloudflare権限は対象を確認して設定する。生成用の秘密値はビルド変数に入れず、実行時のSecretとして別に設定する。
@@ -30,6 +33,17 @@ ContainersのDockerfileもWorkers Builds内で組み立てる。Containersは独
 通信はサーバー間の認証を必須とし、入力ファイルの上限とハッシュを確認する。同時処理は1件。
 任意のURL、ファイルパス、コマンド、利用者による検査結果の指定は受け付けない。
 現時点では検査用HTTP処理と実際のPython検査をローカルで確認済み。Cloudflareでのイメージビルド・起動は未検証。
+
+`worker-with-containers.mjs` と `native-container.mjs` で、処理用Containerを呼ぶ非公開の接続を定義している。
+通常の画面/APIからこの接続へ転送する経路は設けていない。実生成からの呼び出しは今後接続する。
+Containerは最大1台・同時処理1件・未使用3分で停止し、外部通信とSSHは無効にする。
+サーバー間の認証値は実行時に生成してDurable Object内に保持する。利用者の入力やMacのKeychainは使わない。
+再起動時の認証継続・不正な経路の拒否・同時処理制限・内部エラーの非公開化は単体テスト済み。
+
+`staging` モードは `ai-vdj-devdaycommunity-staging`、本番モードは `ai-vdj-devdaycommunity` を対象にする。
+それぞれにContainerを定義するため、通常のWorkerのプレビューだけでContainerの検証を済ませない。
+Containerを含む `cf build` はイメージも組み立てるので、CloudflareのWorkers Builds上で実行する。
+Airで実行する `build:local` はContainerを含まず、配信とルームAPIの確認用である。
 
 ## ローカルで起動する
 
