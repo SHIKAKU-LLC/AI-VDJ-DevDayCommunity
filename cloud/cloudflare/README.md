@@ -1,7 +1,8 @@
 # Cloudflareへの移行
 
 現在は、Workersによる画面配信とD1によるルーム作成・参加・投稿・受付切替まで接続している。
-音楽・映像の生成、Containersの処理、連続再生は未接続で、本番へは配備していない。
+検証用WorkerとContainerをCloudflare上で組み立て・配備し、Container単独での合成音声処理を確認した。
+音楽・映像の生成と連続再生への接続は未完了で、本番へは配備していない。
 R2の単一素材を生成サービスへ渡す期間限定の取得処理は実装・単体検証済みで、生成処理からの呼出しは未接続。
 受付画面は生成準備中であることを表示し、生成・演奏ボタンを有効にしない。
 
@@ -13,7 +14,7 @@ Air、Macの常駐プログラム、利用者のDockerには依存しない。�
 
 2026-10-18に検証用Worker `ai-vdj-devdaycommunity-staging` を作成し、既存のGitHub連携とビルド用権限を接続した。
 検証用の対象ブランチは `codex/cloudflare-runtime`。初回に自動開始された `main` のビルドは停止した。
-この設定の保存は、Containerのイメージ作成や実行の成功を示すものではない。
+ビルド・実行の確認結果と未完事項は [検証記録](../../docs/cloudflare-staging-check.md) を参照。
 
 Workers Buildsの設定（検証用は保存済み、本番用は案）:
 
@@ -36,7 +37,7 @@ ContainersのDockerfileもWorkers Builds内で組み立てる。Containersは独
 `Dockerfile` と `native-service.mjs` は、既存のPython・ffmpeg検査をContainersから呼ぶための準備。
 通信はサーバー間の認証を必須とし、入力ファイルの上限とハッシュを確認する。同時処理は1件。
 任意のURL、ファイルパス、コマンド、利用者による検査結果の指定は受け付けない。
-現時点では検査用HTTP処理と実際のPython検査をローカルで確認済み。Cloudflareでのイメージビルド・起動は未検証。
+検査用HTTP処理と実際のPython検査をローカルで確認し、Cloudflare上でもイメージ作成・配備・合成音声の処理を確認済み。
 
 `worker-with-containers.mjs` と `native-container.mjs` で、処理用Containerを呼ぶ非公開の接続を定義している。
 通常の画面/APIからこの接続へ転送する経路は設けていない。実生成からの呼び出しは今後接続する。
@@ -49,6 +50,7 @@ Container内で固定の合成音声を作り、既存のPython・ffmpeg検査�
 開始記録は新規の検証用Durable Objectに先に保存し、再送・再起動・失敗による再実行を防ぐ。
 入力素材・URL・コマンドは指定できず、D1・R2や生成サービスには書込み・要求を行わない。
 本番モードではこの経路を有効にしない。
+検証用Workerでは `**/*.md` をビルドの除外対象にし、文書だけの更新でContainerを再構築しない。
 
 `staging` モードは `ai-vdj-devdaycommunity-staging`、本番モードは `ai-vdj-devdaycommunity` を対象にする。
 それぞれにContainerを定義するため、通常のWorkerのプレビューだけでContainerの検証を済ませない。
