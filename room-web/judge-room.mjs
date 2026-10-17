@@ -18,7 +18,7 @@ const messages = {JUDGE_CLOSED: '現在はルームの受付期間外です。',
 let session, snapshot, jobs = [], capabilities, context, player, autoGenerate = true, polling = false, pendingSubmit, submitBusy = false;
 const loaded = new Map(), loadPending = new Set(), videos = new Map();
 let decodeFailures = 0, meter = {}, meterNode, playerInit, vj;
-let generationRetryAfterMs = 0;
+let generationRetryAfterMs = 0, queueBusy = false;
 const route = /^\/join\/([a-f0-9-]{36})$/.exec(location.pathname);
 let invitation = new URLSearchParams(location.search).get('code');
 if (location.search || location.hash) history.replaceState(null, '', location.pathname);
@@ -76,10 +76,13 @@ function render() {
   $('budget').textContent = `生成枠 ${jobs.length} / 5 セット。運営負担は1セット上限 $${maximum.toFixed(2)}、ルーム合計上限 $${(maximum * 5).toFixed(2)}。`;
 }
 async function queuePending() {
-  if (!session.owner || !autoGenerate || !capabilities.generation || jobs.length >= 5 || Date.now() < generationRetryAfterMs) return;
+  if (queueBusy || !session.owner || !autoGenerate || !capabilities.generation || jobs.length >= 5 || Date.now() < generationRetryAfterMs) return;
   const ids = snapshot.submissions.filter(s => !jobs.some(j => j.id === s.submissionId)).slice(0, 5 - jobs.length).map(s => s.submissionId);
-  if (ids.length) try { await request(roomPath('generation'), {submissionIds: ids}); }
-  catch (e) { generationRetryAfterMs = Date.now() + 30000; throw e; }
+  if (!ids.length) return;
+  queueBusy = true;
+  try { await request(roomPath('generation'), {submissionIds: ids}); }
+  catch (e) { generationRetryAfterMs = Date.now() + 30000; error(e); }
+  finally { queueBusy = false; }
 }
 function ensurePlayer() {
   if (playerInit) return playerInit;
@@ -156,7 +159,9 @@ async function poll() {
     snapshot = await request(roomPath()); jobs = (await request(roomPath('generation'))).jobs; render();
     if (session.owner) {
       for (const job of jobs.filter(j => j.state === 'READY')) void load(job);
-      await queuePending();
+      // Enqueue can wait behind a media inspection. Keep progress polling,
+      // completed playback and new submissions responsive while it waits.
+      void queuePending();
     }
   } catch (e) { error(e); } finally { polling = false; }
 }
