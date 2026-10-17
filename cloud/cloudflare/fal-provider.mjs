@@ -1,5 +1,6 @@
 export const MODELS = Object.freeze({initial: 'fal-ai/stable-audio-3/medium/text-to-audio',
-  continuation: 'fal-ai/stable-audio-3/medium/audio-outpainting', video: 'alibaba/wan-3.0/text-to-video'});
+  continuation: 'fal-ai/stable-audio-3/medium/audio-outpainting', video: 'minimax/h3-max/text-to-video'});
+export const LEGACY_VIDEO = 'alibaba/wan-3.0/text-to-video';
 const deny = () => { throw Error('PROVIDER_RESPONSE_INVALID'); };
 export const sha256 = async value => Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',
   typeof value === 'string' ? new TextEncoder().encode(value) : value)), v => v.toString(16).padStart(2, '0')).join('');
@@ -52,25 +53,30 @@ export function createFalProvider({key, fetchImpl = fetch} = {}) {
     return url.href;
   }
   return {
-    async preflight() {
+    async preflight({duration = 12} = {}) {
+      if (![12, 24].includes(duration)) throw Error('PROVIDER_DURATION_INVALID');
+      const models = {...MODELS, ...(duration === 24 ? {video: LEGACY_VIDEO} : {})};
       // The runtime uses a generation-only key. Billing is verified by the
       // operator; D1 reserves the event and room ceilings before paid requests.
-      const price = await json('https://api.fal.ai/v1/models/pricing?endpoint_id=' + encodeURIComponent(Object.values(MODELS).join(',')));
-      for (const [kind, endpoint] of Object.entries(MODELS)) {
+      const price = await json('https://api.fal.ai/v1/models/pricing?endpoint_id=' + encodeURIComponent(Object.values(models).join(',')));
+      for (const [kind, endpoint] of Object.entries(models)) {
         const rate = price.prices?.find(p => p.endpoint_id === endpoint);
         if (!rate || rate.currency !== 'USD' || rate.unit !== (kind === 'video' ? 'seconds' : 'audios') ||
-            !Number.isFinite(rate.unit_price) || rate.unit_price <= 0 || rate.unit_price > (kind === 'video' ? 0.0525 : 0.10)) throw Error('PROVIDER_PRICE_CHANGED');
+            !Number.isFinite(rate.unit_price) || rate.unit_price <= 0 || rate.unit_price > (kind === 'video' ? duration === 12 ? 0.065 : 0.0525 : 0.10)) throw Error('PROVIDER_PRICE_CHANGED');
       }
-      return {maximumCents: 150};
+      return {maximumCents: duration === 12 ? 100 : 150};
     },
-    async submit(kind, prompt, contextUrl) {
-      const endpoint = kind === 'audio' ? contextUrl ? MODELS.continuation : MODELS.initial : MODELS.video;
+    async submit(kind, prompt, contextUrl, {duration = 12} = {}) {
+      if (![12, 24].includes(duration)) throw Error('PROVIDER_DURATION_INVALID');
+      const endpoint = kind === 'audio' ? contextUrl ? MODELS.continuation : MODELS.initial : duration === 24 ? LEGACY_VIDEO : MODELS.video;
       const input = kind === 'audio' ? {prompt: `Instrumental electronic dance music, steady beat, no speech. ${prompt}`,
         output_format: 'wav', enable_prompt_expansion: false, enable_safety_checker: true,
-        ...(contextUrl ? {audio_url: contextUrl, extend_seconds_before: 0, extend_seconds_after: 24} : {duration: 24})} :
+        ...(contextUrl ? {audio_url: contextUrl, extend_seconds_before: 0, extend_seconds_after: duration} : {duration})} : duration === 24 ?
         {prompt: `Large-screen music visual, smooth continuous movement, no flashing or strobing, no text. ${prompt}`,
           duration: 24, resolution: '480p', aspect_ratio: '16:9', audio: false,
-          enable_prompt_expansion: false, enable_thinking: false, enable_safety_checker: true};
+          enable_prompt_expansion: false, enable_thinking: false, enable_safety_checker: true} :
+        {prompt: `Large-screen music visual, cinematic detail, smooth continuous movement, no flashing or strobing, no text. ${prompt}`,
+          duration, resolution: '480P', aspect_ratio: '16:9', prompt_expansion_mode: 'disabled', enable_safety_checker: true};
       const result = await json('https://queue.fal.run/' + endpoint, 'POST', input);
       const id = result.request_id;
       return {id, endpoint, statusUrl: queueUrl(result.status_url, id), responseUrl: queueUrl(result.response_url, id)};

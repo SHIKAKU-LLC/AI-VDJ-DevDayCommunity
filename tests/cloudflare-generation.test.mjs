@@ -7,7 +7,7 @@ import {createD1RoomRpc} from '../cloud/cloudflare/room-api.mjs';
 import {createGenerationStore} from '../cloud/cloudflare/generation-store.mjs';
 import {createGenerationClass} from '../cloud/cloudflare/generation-runtime.mjs';
 import {generationHttp} from '../cloud/cloudflare/generation-http.mjs';
-import {MODELS, createFalProvider, sha256} from '../cloud/cloudflare/fal-provider.mjs';
+import {MODELS, LEGACY_VIDEO, createFalProvider, sha256} from '../cloud/cloudflare/fal-provider.mjs';
 import {createContinuousPlayer} from '../room-web/judge-player.mjs';
 
 async function fixture() {
@@ -35,7 +35,7 @@ async function fixture() {
   let posted = 0, unknown = false;
   const fetchImpl = async (url, options) => {
     requests.push({url: String(url), method: options?.method ?? 'GET'});
-    if (String(url).includes('/models/pricing')) return Response.json({prices: Object.entries(MODELS).map(([k, endpoint_id]) =>
+    if (String(url).includes('/models/pricing')) return Response.json({prices: [...Object.entries(MODELS), ['video', LEGACY_VIDEO]].map(([k, endpoint_id]) =>
       ({endpoint_id, unit: k === 'video' ? 'seconds' : 'audios', unit_price: k === 'video' ? .05 : .04, currency: 'USD'}))});
     if (String(url).includes('/account/billing')) return Response.json({credits: {currency: 'USD', current_balance: 10}});
     if (options?.method === 'POST') {
@@ -50,8 +50,8 @@ async function fixture() {
   const artifact = async () => ({data: 'AQID', sha256: await sha256(new Uint8Array([1, 2, 3]))});
   const env = {DB: db, MEDIA: media, EVENT_ID: 'judge-test', PUBLIC_ORIGIN: 'https://test.example', GENERATION_ENABLED: 'true', FAL_KEY: 'synthetic-test-value', testFetch: fetchImpl,
     NATIVE_PROCESSOR: {getByName: () => ({fetch: async request => Response.json(request.url.endsWith('audio') ?
-      {audio: await artifact(), context: await artifact(), duration: 24, quality: {passed: true}} :
-      {video: await artifact(), duration: 24, quality: {passed: true}})})}};
+      {audio: await artifact(), context: await artifact(), duration: Number(request.headers.get('x-vdj-duration-seconds')), quality: {passed: true}} :
+      {video: await artifact(), duration: Number(request.headers.get('x-vdj-duration-seconds')), quality: {passed: true}})})}};
   const Class = createGenerationClass(class {}), runtime = new Class({storage}, env);
   env.GENERATION = {getByName: () => runtime};
   return {sqlite, db, room, owner, join, rpc, submit, store, env, runtime, values, requests, posted: () => posted, uncertain: () => { unknown = true; }};
@@ -65,7 +65,7 @@ test('generation reserves at most five sets, is idempotent and enforces global b
     for (const s of submissions.slice(0, 5)) await f.store.enqueue(f.room.roomId, s.submissionId);
     await f.store.enqueue(f.room.roomId, submissions[0].submissionId);
     await assert.rejects(f.store.enqueue(f.room.roomId, submissions[5].submissionId), /JUDGE_BUDGET/);
-    assert.equal(f.sqlite.prepare('select sum(cents) n from vdj_budget_reservations').get().n, 750);
+    assert.equal(f.sqlite.prepare('select sum(cents) n from vdj_budget_reservations').get().n, 500);
     assert.equal((await f.store.records(f.room.roomId)).length, 5);
   } finally { f.sqlite.close(); }
 });
@@ -76,7 +76,7 @@ test('durable generation continues through audio/video, keeps handles private an
     for (let i = 0; i < 4; i++) await f.runtime.alarm();
     assert.equal(f.posted(), 2);
     const [job] = await f.store.records(f.room.roomId); assert.equal(job.state, 'READY');
-    assert.equal(job.assets.video.duration, 24);
+    assert.equal(job.assets.video.duration, 12);
     assert.equal(job.providerReceipts.filter(r => r.kind === 'video').length, 1);
     assert.ok(!JSON.stringify(job).includes('queue.fal.run'));
     const response = await generationHttp(new Request(`https://test.example/api/rooms/${f.room.roomId}/generated-media/${s.submissionId}/audio`,
@@ -156,18 +156,19 @@ test('deployment imports a legacy video receipt and uncertain markers without re
     const a = await f.submit(), b = await f.submit();
     await f.runtime.enqueue(f.room.roomId, [a.submissionId, b.submissionId]);
     const jobs = f.values.get('jobs'), id = crypto.randomUUID();
-    jobs[0] = {...jobs[0], state: 'VIDEO_WAIT', submittedAtMs: Date.now(),
+    jobs[0] = {...jobs[0], duration: undefined, state: 'VIDEO_WAIT', submittedAtMs: Date.now(),
       assets: {audio: {duration: 24}, context: {duration: 16}},
-      videoHandle: {id, endpoint: MODELS.video, statusUrl: `https://queue.fal.run/test/requests/${id}/status`,
+      videoHandle: {id, endpoint: LEGACY_VIDEO, statusUrl: `https://queue.fal.run/test/requests/${id}/status`,
         responseUrl: `https://queue.fal.run/test/requests/${id}`},
-      providerReceipts: [{kind: 'video', endpoint: MODELS.video, requestId: id}]};
+      providerReceipts: [{kind: 'video', endpoint: LEGACY_VIDEO, requestId: id}]};
     jobs[1].state = 'AUDIO_SUBMITTING'; f.values.set('jobs', structuredClone(jobs));
     const restarted = new (createGenerationClass(class {}))(f.runtime.ctx, f.env);
     await restarted.alarm();
     assert.equal(f.posted(), 0);
     const saved = await f.store.records(f.room.roomId);
-    assert.equal(saved[0].state, 'READY'); assert.equal(saved[0].providerReceipts[0].requestId, id);
-    assert.equal(saved[1].state, 'NEEDS_REVIEW');
+    assert.equal(saved.find(j => j.id === a.submissionId).state, 'READY');
+    assert.equal(saved.find(j => j.id === a.submissionId).providerReceipts[0].requestId, id);
+    assert.equal(saved.find(j => j.id === b.submissionId).state, 'NEEDS_REVIEW');
     assert.ok(!JSON.stringify(saved).includes('queue.fal.run'));
   } finally { f.sqlite.close(); }
 });
@@ -230,7 +231,7 @@ test('Wan receives one explicit 24-second video request with bounded output sett
     const id = crypto.randomUUID();
     return Response.json({request_id: id, status_url: `https://queue.fal.run/model/requests/${id}/status`, response_url: `https://queue.fal.run/model/requests/${id}`});
   }});
-  await provider.submit('video', '青い波');
+  await provider.submit('video', '青い波', undefined, {duration: 24});
   assert.equal(submitted.url, 'https://queue.fal.run/alibaba/wan-3.0/text-to-video');
   assert.deepEqual(submitted.input, {prompt: 'Large-screen music visual, smooth continuous movement, no flashing or strobing, no text. 青い波',
     duration: 24, resolution: '480p', aspect_ratio: '16:9', audio: false,
@@ -243,7 +244,22 @@ test('generation-only credentials need no billing access and still enforce live 
     return Response.json({prices: Object.entries(MODELS).map(([kind, endpoint_id]) =>
       ({endpoint_id, unit: kind === 'video' ? 'seconds' : 'audios', unit_price: kind === 'video' ? .05 : .04, currency: 'USD'}))});
   }});
-  assert.deepEqual(await provider.preflight(), {maximumCents: 150});
+  assert.deepEqual(await provider.preflight(), {maximumCents: 100});
+});
+test('H3 Max receives a single 12-second visual request and matching music duration', async () => {
+  const submitted = [];
+  const provider = createFalProvider({key: 'synthetic-only', fetchImpl: async (url, options) => {
+    submitted.push({url, input: JSON.parse(options.body)});
+    const id = crypto.randomUUID();
+    return Response.json({request_id: id, status_url: `https://queue.fal.run/test/requests/${id}/status`, response_url: `https://queue.fal.run/test/requests/${id}`});
+  }});
+  await provider.submit('video', '光の海'); await provider.submit('audio', '光の海');
+  assert.equal(submitted[0].url, 'https://queue.fal.run/minimax/h3-max/text-to-video');
+  assert.equal(submitted[0].input.duration, 12); assert.equal(submitted[0].input.resolution, '480P');
+  assert.equal(submitted[0].input.prompt_expansion_mode, 'disabled');
+  assert.equal(submitted[0].input.enable_safety_checker, true);
+  assert.equal(submitted[1].input.duration, 12);
+  await assert.rejects(provider.submit('video', 'invalid', undefined, {duration: 30}), /PROVIDER_DURATION_INVALID/);
 });
 test('budget schema migration preserves existing reservations and permits the new per-set limit', async () => {
   const f = await fixture();
@@ -251,7 +267,7 @@ test('budget schema migration preserves existing reservations and permits the ne
     f.sqlite.prepare('insert into vdj_budget_reservations values(?,?,?,?,?)').run('judge-test', f.room.roomId, 'prior', 100, Date.now());
     f.sqlite.exec(await readFile(new URL('../cloud/cloudflare/generation-budget-migration.sql', import.meta.url), 'utf8'));
     const submission = await f.submit(); await f.store.enqueue(f.room.roomId, submission.submissionId);
-    assert.equal(f.sqlite.prepare('select sum(cents) n from vdj_budget_reservations').get().n, 250);
+    assert.equal(f.sqlite.prepare('select sum(cents) n from vdj_budget_reservations').get().n, 200);
     assert.equal(f.sqlite.prepare('select cents from vdj_budget_reservations where plan_id=?').get('prior').cents, 100);
     assert.deepEqual(f.sqlite.prepare('pragma foreign_key_check').all(), []);
   } finally { f.sqlite.close(); }
@@ -263,7 +279,7 @@ test('audio schedule has continuous overlap during delayed generation and adopts
     createGain: () => ({connect() {}, disconnect() {}, gain: {setValueAtTime() {}, linearRampToValueAtTime() {}}})};
   const player = createContinuousPlayer({context, setTimer: fn => { tick = fn; }, clearTimer() {}});
   player.add({id: 'first', buffer: {duration: 24}}); await player.start();
-  for (let time = 0; time < 100; time += .1) { context.currentTime = time; if (time > 30) player.add({id: 'second', buffer: {duration: 24}}); tick(); }
+  for (let time = 0; time < 100; time += .1) { context.currentTime = time; if (time > 30) player.add({id: 'second', buffer: {duration: 12}}); tick(); }
   assert.ok(intervals.length >= 5);
   for (let i = 1; i < intervals.length; i++) assert.ok(intervals[i][0] <= intervals[i - 1][1] - 1.49);
   assert.equal(player.read().currentId, 'second'); player.stop(); assert.equal(player.read().running, false);

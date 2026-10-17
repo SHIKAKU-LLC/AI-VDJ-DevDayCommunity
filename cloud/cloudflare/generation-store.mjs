@@ -30,15 +30,16 @@ export function createGenerationStore({db, eventId}) {
       // Reserve before any provider POST. One immutable reservation per submitted
       // prompt; retries, browser reloads and DO eviction cannot buy it twice.
       await query(`insert into vdj_budget_reservations(event_id,room_id,plan_id,cents,created_at_ms)
-        select e.id,r.id,?,150,${clock} from vdj_events e join vdj_rooms r on r.event_id=e.id
+        select e.id,r.id,?,100,${clock} from vdj_events e join vdj_rooms r on r.event_id=e.id
         where e.id=? and r.id=? and e.enabled=1 and e.expires_at_ms>${clock} and r.expires_at_ms>${clock}
-        and coalesce((select sum(cents) from vdj_budget_reservations where event_id=e.id),0)+150<=e.maximum_cents
-        and coalesce((select sum(cents) from vdj_budget_reservations where room_id=r.id),0)+150<=750
+        and coalesce((select sum(cents) from vdj_budget_reservations where event_id=e.id),0)+100<=e.maximum_cents
+        and coalesce((select sum(cents) from vdj_budget_reservations where room_id=r.id),0)+100<=500
+        and (select count(*) from vdj_budget_reservations where room_id=r.id)<5
         on conflict(event_id,plan_id) do nothing`, submissionId, eventId, roomId).run();
       if (!await query('select plan_id from vdj_budget_reservations where event_id=? and room_id=? and plan_id=?', eventId, roomId, submissionId).first()) fail('JUDGE_BUDGET');
       const submission = document.submissions.find(s => s.submissionId === submissionId);
       const job = {id: submissionId, roomId, prompt: submission.prompt, nickname: submission.nickname,
-        state: 'QUEUED', createdAtMs: Date.now(), maximumCents: 150};
+        state: 'QUEUED', duration: 12, createdAtMs: Date.now(), maximumCents: 100};
       await query(`insert into vdj_runtime_records(room_id,kind,record_id,version,document) values(?,'cloud-generation',?,0,?)
         on conflict(room_id,kind,record_id) do nothing`, roomId, submissionId, JSON.stringify(job)).run();
       return (await records(roomId)).find(j => j.id === submissionId);
@@ -46,7 +47,7 @@ export function createGenerationStore({db, eventId}) {
     async save(job) {
       // Provider handles remain in private DO storage. Browser-visible D1 records
       // contain only safe progress, private R2 descriptors and the submitted text.
-      const safe = Object.fromEntries(['id', 'roomId', 'prompt', 'nickname', 'state', 'createdAtMs', 'maximumCents', 'reason', 'assets', 'quality', 'providerReceipts', 'progress', 'timings'].filter(k => job[k] !== undefined).map(k => [k, job[k]]));
+      const safe = Object.fromEntries(['id', 'roomId', 'prompt', 'nickname', 'state', 'duration', 'createdAtMs', 'maximumCents', 'reason', 'assets', 'quality', 'providerReceipts', 'progress', 'timings'].filter(k => job[k] !== undefined).map(k => [k, job[k]]));
       await query("update vdj_runtime_records set document=?,version=version+1 where room_id=? and kind='cloud-generation' and record_id=?", JSON.stringify(safe), job.roomId, job.id).run();
     },
   };

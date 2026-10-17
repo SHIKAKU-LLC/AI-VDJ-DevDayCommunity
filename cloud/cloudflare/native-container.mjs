@@ -43,6 +43,12 @@ export function createNativeContainerClass(Container) {
         });
         // Neither browser headers nor provider credentials cross this boundary.
         const headers = new Headers([['content-type', type], ['x-vdj-runtime-auth', this.#auth]]);
+        if (url.pathname.startsWith('/prepare/')) {
+          const duration = request.headers.get('x-vdj-duration-seconds') ?? '24';
+          const context = request.headers.get('x-vdj-context-seconds') ?? '16';
+          if (!['12', '24'].includes(duration) || !['0', '12', '16'].includes(context)) return fail('INPUT_INVALID', 400);
+          headers.set('x-vdj-duration-seconds', duration); headers.set('x-vdj-context-seconds', context);
+        }
         const outgoing = new Request('http://container.internal' + url.pathname, {method: 'POST', headers,
           body: request.body, signal: request.signal, duplex: 'half'});
         const response = await this.containerFetch(outgoing);

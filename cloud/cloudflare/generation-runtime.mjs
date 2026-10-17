@@ -11,12 +11,15 @@ const safeReason = error => ['PROVIDER_PRICE_CHANGED', 'PROVIDER_BALANCE_REQUIRE
 // Import earlier serial jobs without resubmitting a paid request. Handles and
 // SUBMITTING markers remain private and survive code deployment/object eviction.
 function upgrade(job) {
+  job.duration ??= 24;
+  if (job.parts?.audio) job.parts.audio.contextSeconds ??= job.parts.audio.handle?.endpoint?.includes('outpainting') ? 16 : 0;
   if (job.parts || terminal(job)) return job;
   job.parts = Object.fromEntries(kinds.map(kind => {
     const prefix = kind.toUpperCase();
     const state = job.assets?.[kind] ? 'READY' : job.state === prefix + '_SUBMITTING' ? 'SUBMITTING' :
       job[kind + 'Handle'] ? 'WAIT' : 'QUEUED';
-    return [kind, {state, ...(job[kind + 'Handle'] ? {handle: job[kind + 'Handle'], submittedAtMs: job.submittedAtMs} : {})}];
+    return [kind, {state, ...(job[kind + 'Handle'] ? {handle: job[kind + 'Handle'], submittedAtMs: job.submittedAtMs,
+      contextSeconds: kind === 'audio' && job[kind + 'Handle'].endpoint?.includes('outpainting') ? 16 : 0} : {})}];
   }));
   delete job.audioHandle; delete job.videoHandle;
   return job;
@@ -78,17 +81,18 @@ export function createGenerationClass(Base) {
       const result = await provider.result(part.handle);
       // URLs stay transient. Only vetted bytes and hashes enter R2.
       const bytes = await provider.download(result[kind]?.url);
-      const native = this.env.NATIVE_PROCESSOR.getByName('cloud-media-v3');
+      const native = this.env.NATIVE_PROCESSOR.getByName('cloud-media-v4');
       const response = await native.fetch(new Request('http://native.internal/prepare/' + kind,
-        {method: 'POST', headers: {'content-type': 'application/octet-stream'}, body: bytes, signal: AbortSignal.timeout(150000)}));
+        {method: 'POST', headers: {'content-type': 'application/octet-stream', 'x-vdj-duration-seconds': String(job.duration),
+          'x-vdj-context-seconds': String(part.contextSeconds ?? 0)}, body: bytes, signal: AbortSignal.timeout(150000)}));
       if (response.status === 409 || response.status === 503) { await response.body?.cancel(); return false; }
       if (!response.ok) { await response.body?.cancel(); throw Error('NATIVE_PREPARE_FAILED'); }
       const prepared = JSON.parse(new TextDecoder().decode(await boundedBytes(response, 24 * 1024 * 1024)));
-      if (prepared.duration !== 24 || prepared.quality?.passed !== true) throw Error('NATIVE_RESULT_INVALID');
+      if (prepared.duration !== job.duration || prepared.quality?.passed !== true) throw Error('NATIVE_RESULT_INVALID');
       job.quality ??= {};
       job.quality[kind] = prepared.quality;
-      await this.saveAsset(job, kind, prepared[kind], 24);
-      if (kind === 'audio') await this.saveAsset(job, 'context', prepared.context, 16);
+      await this.saveAsset(job, kind, prepared[kind], job.duration);
+      if (kind === 'audio') await this.saveAsset(job, 'context', prepared.context, Math.min(16, job.duration));
       part.state = 'READY'; part.readyAtMs = Date.now(); delete part.handle;
       return true;
     }
@@ -114,7 +118,7 @@ export function createGenerationClass(Base) {
           else if (retryable(error) && (part.readFailures ?? 0) < 6) part.readFailures = (part.readFailures ?? 0) + 1;
           else { part.state = 'FAILED'; part.reason = safeReason(error); }
         };
-        let provider, preflight;
+        let provider; const preflights = new Map();
         try {
           await this.store().active(active[0].roomId);
           if (this.env.GENERATION_ENABLED !== 'true') throw Error('GENERATION_DISABLED');
@@ -130,7 +134,7 @@ export function createGenerationClass(Base) {
         }
         // A batch shares the most recent completed musical context. Waiting for
         // each new song's context would serialize the entire batch again.
-        const contextPath = jobs.filter(j => j.assets?.context && j.state === 'READY').at(-1)?.assets.context.path;
+        const context = jobs.filter(j => j.assets?.context && j.state === 'READY').at(-1)?.assets.context;
         const advance = async (job, kind) => {
           const part = job.parts[kind];
           if (terminal(part)) return;
@@ -140,14 +144,16 @@ export function createGenerationClass(Base) {
             } else if (part.state === 'QUEUED') {
               if (kinds.some(k => ['FAILED', 'NEEDS_REVIEW'].includes(job.parts[k].state))) { part.state = 'CANCELLED'; }
               else {
-                await (preflight ??= provider.preflight());
+                if (!preflights.has(job.duration)) preflights.set(job.duration, provider.preflight({duration: job.duration}));
+                await preflights.get(job.duration);
                 let contextUrl;
-                if (kind === 'audio' && contextPath) contextUrl = (await createProviderDelivery({db: this.env.DB,
+                if (kind === 'audio' && context) contextUrl = (await createProviderDelivery({db: this.env.DB,
                   bucket: this.env.MEDIA, eventId: this.env.EVENT_ID, origin: this.env.PUBLIC_ORIGIN})
-                  .issue({roomId: job.roomId, path: contextPath, expiresIn: 3600})).url;
+                  .issue({roomId: job.roomId, path: context.path, expiresIn: 3600})).url;
+                part.contextSeconds = contextUrl ? context.duration : 0;
                 part.state = 'SUBMITTING'; await persist(job);
                 // Never automatically retry this POST: a lost receipt is held.
-                part.handle = await provider.submit(kind, job.prompt, contextUrl);
+                part.handle = await provider.submit(kind, job.prompt, contextUrl, {duration: job.duration});
                 part.state = 'WAIT'; part.submittedAtMs = Date.now();
                 job.providerReceipts ??= [];
                 job.providerReceipts.push({kind, endpoint: part.handle.endpoint, requestId: part.handle.id});

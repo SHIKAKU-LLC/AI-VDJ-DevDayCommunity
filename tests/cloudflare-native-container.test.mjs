@@ -89,6 +89,17 @@ test('native binding admits one measurement at a time and removes container erro
   assert.equal(result.status, 422);
   assert.deepEqual(await result.json(), {error: 'NATIVE_MEASUREMENT_FAILED'});
 });
+test('native binding forwards only validated duration metadata for twelve-second preparation', async () => {
+  const native = new (createNativeContainerClass(FakeContainer))(context(), {});
+  const makeRequest = duration => new Request('http://native.internal/prepare/audio', {method: 'POST',
+    headers: {'content-type': 'application/octet-stream', 'x-vdj-duration-seconds': duration,
+      'x-vdj-context-seconds': '16', 'x-discard': 'private'}, body: new Uint8Array([1])});
+  assert.equal((await native.fetch(makeRequest('12'))).status, 200);
+  assert.equal(native.forwarded.headers.get('x-vdj-duration-seconds'), '12');
+  assert.equal(native.forwarded.headers.get('x-vdj-context-seconds'), '16');
+  assert.equal(native.forwarded.headers.has('x-discard'), false);
+  assert.equal((await native.fetch(makeRequest('120'))).status, 400);
+});
 
 test('native binding recovers after a failed start without exposing underlying error text', async () => {
   class Failed extends FakeContainer {

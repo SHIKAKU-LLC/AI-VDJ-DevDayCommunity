@@ -80,11 +80,14 @@ export function createNativeService({authorize, createRuntime} = {}) {
             if (size > 48 * 1024 * 1024) failure('BODY_TOO_LARGE');
             parts.push(Buffer.from(part));
           }
-          const prepared = await prepareMedia(Buffer.concat(parts, size), prepare[1]);
+          const seconds = Number(request.headers.get('x-vdj-duration-seconds') ?? 24);
+          const contextSeconds = Number(request.headers.get('x-vdj-context-seconds') ?? 16);
+          if (![12, 24].includes(seconds) || ![0, 12, 16].includes(contextSeconds)) failure('INPUT_INVALID');
+          const prepared = await prepareMedia(Buffer.concat(parts, size), prepare[1], {seconds, contextSeconds});
           if (prepare[1] === 'audio') {
             runtime ??= await createRuntime();
             const profile = await runtime.inspectBootstrap(Buffer.from(prepared.audio.data, 'base64'));
-            if (profile.frameCount !== 24 * 44100 || profile.sampleRate !== 44100 || profile.channels !== 2 ||
+            if (profile.frameCount !== seconds * 44100 || profile.sampleRate !== 44100 || profile.channels !== 2 ||
                 profile.nonfiniteSamples !== 0 || !Number.isFinite(profile.loudness?.truePeakDbtp) || profile.loudness.truePeakDbtp > -.3 ||
                 profile.clippedFraction > .001 || profile.activity?.effectiveSilence !== false) failure('RESULT_INVALID');
             prepared.quality = {passed: true, truePeakDbtp: profile.loudness.truePeakDbtp, nonfiniteSamples: profile.nonfiniteSamples};
@@ -93,7 +96,7 @@ export function createNativeService({authorize, createRuntime} = {}) {
             const bytes = Buffer.from(prepared.video.data, 'base64');
             const measured = await runtime.native.inspectVideo({bytes, inputDigest: digest(bytes)});
             if (!measured.fullyDecoded || measured.hasAudioTrack || measured.width !== 854 || measured.height !== 480 ||
-                Math.abs(measured.durationSeconds - 24) > .05 || measured.decodedFrames !== 576 ||
+                Math.abs(measured.durationSeconds - seconds) > .05 || measured.decodedFrames !== seconds * 24 ||
                 !assessTechnicalVisual(measured).passed) failure('RESULT_INVALID');
             prepared.quality = {passed: true, decodedFrames: measured.decodedFrames};
           }

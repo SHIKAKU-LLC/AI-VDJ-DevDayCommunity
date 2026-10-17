@@ -61,7 +61,8 @@ function render() {
     state.textContent = job ? labels[job.state] ?? '処理中' : jobs.length >= 5 ? '生成枠の上限に達しました' : '受付済み';
     li.append(name, prompt, state); return li;
   }));
-  $('budget').textContent = `生成枠 ${jobs.length} / 5 セット。運営負担は1セット上限 $1.50、ルーム合計上限 $7.50。`;
+  const maximum = Math.max(100, ...jobs.map(job => job.maximumCents ?? 100)) / 100;
+  $('budget').textContent = `生成枠 ${jobs.length} / 5 セット。運営負担は1セット上限 $${maximum.toFixed(2)}、ルーム合計上限 $${(maximum * 5).toFixed(2)}。`;
 }
 async function queuePending() {
   if (!session.owner || !autoGenerate || !capabilities.generation || jobs.length >= 5 || Date.now() < generationRetryAfterMs) return;
@@ -109,7 +110,9 @@ async function load(job) {
     await ensurePlayer();
     const [audioBytes, videoBytes] = await Promise.all([fetchAsset(job, 'audio'), fetchAsset(job, 'video')]);
     const buffer = await context.decodeAudioData(audioBytes);
-    if (Math.abs(buffer.duration - 24) > 0.05 || buffer.numberOfChannels !== 2) throw Error('MEDIA_INVALID');
+    const duration = job.assets.audio.duration;
+    if (![12, 24].includes(duration) || job.assets.video.duration !== duration ||
+        Math.abs(buffer.duration - duration) > 0.05 || buffer.numberOfChannels !== 2) throw Error('MEDIA_INVALID');
     const video = document.createElement('video'); video.muted = true; video.loop = true; video.playsInline = true; video.preload = 'auto';
     const blobUrl = URL.createObjectURL(new Blob([videoBytes], {type: 'video/mp4'}));
     video.src = blobUrl; $('videos').append(video);
@@ -118,7 +121,7 @@ async function load(job) {
       video.addEventListener('loadeddata', () => { clearTimeout(timeout); resolve(); }, {once: true});
       video.addEventListener('error', () => { clearTimeout(timeout); reject(Error('VIDEO_INVALID')); }, {once: true});
     });
-    if (Math.abs(video.duration - 24) > .1 || video.videoWidth !== 854 || video.videoHeight !== 480) throw Error('VIDEO_INVALID');
+    if (Math.abs(video.duration - duration) > .1 || video.videoWidth !== 854 || video.videoHeight !== 480) throw Error('VIDEO_INVALID');
     videos.set(job.id, video); loaded.set(job.id, {...job, buffer, blobUrl});
     // Publish to the audio scheduler in submission order even if a later fetch
     // finishes first. Each audio/video pair must be decoded before adoption.

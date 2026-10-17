@@ -42,3 +42,24 @@ test('native preparation produces a playable stereo tail, context and silent 480
     await assert.rejects(prepareMedia(new Uint8Array(0), 'audio'), /MEDIA_INPUT_INVALID/);
   } finally { await service.close(); await rm(dir, {recursive: true, force: true}); }
 });
+test('twelve-second H3 media and music with legacy context pass real native inspection', {skip: !process.env.VDJ_QC_PYTHON}, async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'vdj-twelve-test-'));
+  const service = createNativeService({authorize: async () => true,
+    createRuntime: () => createPortableNativeRuntime({python: process.env.VDJ_QC_PYTHON})});
+  const headers = {'content-type': 'application/octet-stream', 'x-vdj-duration-seconds': '12', 'x-vdj-context-seconds': '16'};
+  try {
+    const audio = join(dir, 'source.wav'), video = join(dir, 'source.mp4');
+    await exec('ffmpeg', ['-nostdin', '-v', 'error', '-f', 'lavfi', '-i', 'sine=frequency=220:sample_rate=48000:duration=28', '-ac', '2', '-c:a', 'pcm_f32le', audio]);
+    const a = await service.fetch(new Request('http://native.internal/prepare/audio', {method: 'POST', headers, body: await readFile(audio)}));
+    assert.equal(a.status, 200); const prepared = await a.json();
+    assert.equal(prepared.duration, 12); assert.equal(prepared.quality.passed, true);
+    const path = join(dir, 'context.wav'); await writeFile(path, Buffer.from(prepared.context.data, 'base64'));
+    const meta = JSON.parse((await exec('ffprobe', ['-v', 'error', '-show_format', '-of', 'json', path])).stdout);
+    assert.equal(Number(meta.format.duration), 12);
+    await exec('ffmpeg', ['-nostdin', '-v', 'error', '-f', 'lavfi', '-i', 'testsrc2=size=320x180:rate=24:duration=12.6', '-c:v', 'libx264', '-threads', '1', video]);
+    const v = await service.fetch(new Request('http://native.internal/prepare/video', {method: 'POST', headers, body: await readFile(video)}));
+    assert.equal(v.status, 200); const rendered = await v.json();
+    assert.equal(rendered.duration, 12); assert.equal(rendered.quality.decodedFrames, 288);
+    await assert.rejects(prepareMedia(await readFile(video), 'video', {seconds: 24}), /MEDIA_INPUT_INVALID/);
+  } finally { await service.close(); await rm(dir, {recursive: true, force: true}); }
+});
