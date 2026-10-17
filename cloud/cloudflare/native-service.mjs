@@ -82,7 +82,7 @@ export function createNativeService({authorize, createRuntime} = {}) {
           }
           const seconds = Number(request.headers.get('x-vdj-duration-seconds') ?? 24);
           const contextSeconds = Number(request.headers.get('x-vdj-context-seconds') ?? 16);
-          if (![12, 24].includes(seconds) || ![0, 12, 16].includes(contextSeconds)) failure('INPUT_INVALID');
+          if (!(prepare[1] === 'audio' ? [12, 24, 60] : [12, 24]).includes(seconds) || ![0, 12, 16].includes(contextSeconds)) failure('INPUT_INVALID');
           const prepared = await prepareMedia(Buffer.concat(parts, size), prepare[1], {seconds, contextSeconds});
           if (prepare[1] === 'audio') {
             runtime ??= await createRuntime();

@@ -54,8 +54,8 @@ export function createFalProvider({key, fetchImpl = fetch} = {}) {
     return url.href;
   }
   return {
-    async preflight({duration = 12} = {}) {
-      if (duration !== 12) throw Error('PROVIDER_DURATION_INVALID');
+    async preflight({duration = 60} = {}) {
+      if (![12, 60].includes(duration)) throw Error('PROVIDER_DURATION_INVALID');
       const models = MODELS;
       // The runtime uses a generation-only key. Billing is verified by the
       // operator; D1 reserves the event and room ceilings before paid requests.
@@ -67,10 +67,10 @@ export function createFalProvider({key, fetchImpl = fetch} = {}) {
       }
       return {maximumCents: 100};
     },
-    async submit(kind, prompt, contextUrl, {duration = 12} = {}) {
-      if (duration !== 12) throw Error('PROVIDER_DURATION_INVALID');
+    async submit(kind, prompt, contextUrl, {duration = kind === 'audio' ? 60 : 12} = {}) {
+      if (!(kind === 'audio' ? [12, 60] : [12]).includes(duration)) throw Error('PROVIDER_DURATION_INVALID');
       const endpoint = kind === 'audio' ? contextUrl ? MODELS.continuation : MODELS.initial : MODELS.video;
-      const input = kind === 'audio' ? {prompt: musicPrompt(prompt), negative_prompt: MUSIC_NEGATIVE_PROMPT,
+      const input = kind === 'audio' ? {prompt: musicPrompt(prompt, {duration}), negative_prompt: MUSIC_NEGATIVE_PROMPT,
         output_format: 'wav', enable_prompt_expansion: false, enable_safety_checker: true,
         ...(contextUrl ? {audio_url: contextUrl, extend_seconds_before: 0, extend_seconds_after: duration} : {duration})} :
         {prompt: visualPrompt(prompt),

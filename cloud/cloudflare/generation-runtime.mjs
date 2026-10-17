@@ -12,6 +12,7 @@ const safeReason = error => ['PROVIDER_PRICE_CHANGED', 'PROVIDER_BALANCE_REQUIRE
 // SUBMITTING markers remain private and survive code deployment/object eviction.
 function upgrade(job) {
   job.duration ??= 24;
+  job.videoDuration ??= job.duration;
   if (job.parts?.audio) job.parts.audio.contextSeconds ??= job.parts.audio.handle?.endpoint?.includes('outpainting') ? 16 : 0;
   if (job.parts || terminal(job)) return job;
   job.parts = Object.fromEntries(kinds.map(kind => {
@@ -84,7 +85,7 @@ export function createGenerationClass(Base) {
     }
     async saveAsset(job, name, artifact, duration) {
       await this.store().active(job.roomId);
-      const limit = name === 'video' ? 16 : 5;
+      const limit = name === 'video' ? 16 : name === 'audio' ? 12 : 3;
       const decoded = decodeArtifact(artifact, limit * 1024 * 1024), hash = await sha256(decoded);
       if (hash !== artifact.sha256) throw Error('NATIVE_RESULT_INVALID');
       const path = 'rooms/' + await sha256(JSON.stringify(job.roomId)) + '/assets/' + hash + '.media';
@@ -117,17 +118,18 @@ export function createGenerationClass(Base) {
       const result = await provider.result(part.handle);
       // URLs stay transient. Only vetted bytes and hashes enter R2.
       const bytes = await provider.download(result[kind]?.url);
-      const native = this.env.NATIVE_PROCESSOR.getByName('cloud-media-v4');
+      const duration = kind === 'audio' ? job.duration : job.videoDuration;
+      const native = this.env.NATIVE_PROCESSOR.getByName('cloud-media-v5');
       const response = await native.fetch(new Request('http://native.internal/prepare/' + kind,
-        {method: 'POST', headers: {'content-type': 'application/octet-stream', 'x-vdj-duration-seconds': String(job.duration),
+        {method: 'POST', headers: {'content-type': 'application/octet-stream', 'x-vdj-duration-seconds': String(duration),
           'x-vdj-context-seconds': String(part.contextSeconds ?? 0)}, body: bytes, signal: AbortSignal.timeout(150000)}));
       if (response.status === 409 || response.status === 503) { await response.body?.cancel(); return false; }
       if (!response.ok) { await response.body?.cancel(); throw Error('NATIVE_PREPARE_FAILED'); }
       const prepared = JSON.parse(new TextDecoder().decode(await boundedBytes(response, 24 * 1024 * 1024)));
-      if (prepared.duration !== job.duration || prepared.quality?.passed !== true) throw Error('NATIVE_RESULT_INVALID');
+      if (prepared.duration !== duration || prepared.quality?.passed !== true) throw Error('NATIVE_RESULT_INVALID');
       job.quality ??= {};
       job.quality[kind] = prepared.quality;
-      await this.saveAsset(job, kind, prepared[kind], job.duration);
+      await this.saveAsset(job, kind, prepared[kind], duration);
       if (kind === 'audio') await this.saveAsset(job, 'context', prepared.context, Math.min(16, job.duration));
       part.state = 'READY'; part.readyAtMs = Date.now(); delete part.handle;
       return true;
@@ -191,7 +193,7 @@ export function createGenerationClass(Base) {
                 part.contextSeconds = contextUrl ? context.duration : 0;
                 part.state = 'SUBMITTING'; await persist(job);
                 // Never automatically retry this POST: a lost receipt is held.
-                part.handle = await provider.submit(kind, job.prompt, contextUrl, {duration: job.duration});
+                part.handle = await provider.submit(kind, job.prompt, contextUrl, {duration: kind === 'audio' ? job.duration : job.videoDuration});
                 part.state = 'WAIT'; part.submittedAtMs = Date.now();
                 job.providerReceipts ??= [];
                 job.providerReceipts.push({kind, endpoint: part.handle.endpoint, requestId: part.handle.id});

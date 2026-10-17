@@ -111,7 +111,8 @@ async function load(job) {
     const [audioBytes, videoBytes] = await Promise.all([fetchAsset(job, 'audio'), fetchAsset(job, 'video')]);
     const buffer = await context.decodeAudioData(audioBytes);
     const duration = job.assets.audio.duration;
-    if (![12, 24].includes(duration) || job.assets.video.duration !== duration ||
+    const videoDuration = job.assets.video.duration;
+    if (![12, 24, 60].includes(duration) || videoDuration !== (duration === 60 ? 12 : duration) ||
         Math.abs(buffer.duration - duration) > 0.05 || buffer.numberOfChannels !== 2) throw Error('MEDIA_INVALID');
     const video = document.createElement('video'); video.muted = true; video.loop = true; video.playsInline = true; video.preload = 'auto';
     const blobUrl = URL.createObjectURL(new Blob([videoBytes], {type: 'video/mp4'}));
@@ -121,7 +122,7 @@ async function load(job) {
       video.addEventListener('loadeddata', () => { clearTimeout(timeout); resolve(); }, {once: true});
       video.addEventListener('error', () => { clearTimeout(timeout); reject(Error('VIDEO_INVALID')); }, {once: true});
     });
-    if (Math.abs(video.duration - duration) > .1 || video.videoWidth !== 854 || video.videoHeight !== 480) throw Error('VIDEO_INVALID');
+    if (Math.abs(video.duration - videoDuration) > .1 || video.videoWidth !== 854 || video.videoHeight !== 480) throw Error('VIDEO_INVALID');
     videos.set(job.id, video); loaded.set(job.id, {...job, buffer, blobUrl});
     // Publish to the audio scheduler in submission order even if a later fetch
     // finishes first. Each audio/video pair must be decoded before adoption.

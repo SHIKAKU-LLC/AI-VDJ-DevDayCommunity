@@ -20,7 +20,7 @@ function run(command, args) {
 // Only bounded bytes cross the private Container boundary. ffmpeg never receives
 // a provider URL, arbitrary command, path, filter or argument from a caller.
 export async function prepareMedia(bytes, kind, {ffmpeg = 'ffmpeg', ffprobe = 'ffprobe', seconds = 24, contextSeconds = 16} = {}) {
-  if (!['audio', 'video'].includes(kind) || ![12, 24].includes(seconds) || ![0, 12, 16].includes(contextSeconds) ||
+  if (!['audio', 'video'].includes(kind) || !(kind === 'audio' ? [12, 24, 60] : [12, 24]).includes(seconds) || ![0, 12, 16].includes(contextSeconds) ||
       !bytes.length || bytes.length > 48 * 1024 * 1024) throw Error('MEDIA_INPUT_INVALID');
   const dir = await mkdtemp(join(tmpdir(), 'vdj-prepare-'));
   try {
@@ -43,7 +43,7 @@ export async function prepareMedia(bytes, kind, {ffmpeg = 'ffmpeg', ffprobe = 'f
       const tailSeconds = Math.min(16, seconds);
       await run(ffmpeg, ['-nostdin', '-v', 'error', '-i', output, '-ss', String(seconds - tailSeconds), '-t', String(tailSeconds), '-c:a', 'pcm_s16le', '-map_metadata', '-1', '-y', context]);
       const audio = await readFile(output), tail = await readFile(context);
-      if (audio.length > 5 * 1024 * 1024 || tail.length > 3 * 1024 * 1024) throw Error('MEDIA_RESULT_INVALID');
+      if (audio.length > 12 * 1024 * 1024 || tail.length > 3 * 1024 * 1024) throw Error('MEDIA_RESULT_INVALID');
       return {audio: artifact(audio), context: artifact(tail), duration: seconds, sampleRate: 44100, channels: 2};
     }
     if (duration < seconds - .1 || duration > seconds + 1 || stream.width > 2048 || stream.height > 2048 || stream.width * stream.height > 2200000) throw Error('MEDIA_INPUT_INVALID');

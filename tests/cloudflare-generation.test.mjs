@@ -86,6 +86,7 @@ test('durable generation continues through audio/video, keeps handles private an
     for (let i = 0; i < 4; i++) await f.runtime.alarm();
     assert.equal(f.posted(), 2);
     const [job] = await f.store.records(f.room.roomId); assert.equal(job.state, 'READY');
+    assert.equal(job.assets.audio.duration, 60);
     assert.equal(job.assets.video.duration, 12);
     assert.equal(job.providerReceipts.filter(r => r.kind === 'video').length, 1);
     assert.ok(!JSON.stringify(job).includes('queue.fal.run'));
@@ -166,7 +167,7 @@ test('deployment imports a legacy video receipt and uncertain markers without re
     const a = await f.submit(), b = await f.submit();
     await f.runtime.enqueue(f.room.roomId, [a.submissionId, b.submissionId]);
     const jobs = f.values.get('jobs'), id = crypto.randomUUID();
-    jobs[0] = {...jobs[0], duration: undefined, state: 'VIDEO_WAIT', submittedAtMs: Date.now(),
+    jobs[0] = {...jobs[0], duration: undefined, videoDuration: undefined, state: 'VIDEO_WAIT', submittedAtMs: Date.now(),
       assets: {audio: {duration: 24}, context: {duration: 16}},
       videoHandle: {id, endpoint: 'retired/video-model', statusUrl: `https://queue.fal.run/test/requests/${id}/status`,
         responseUrl: `https://queue.fal.run/test/requests/${id}`},
@@ -249,7 +250,7 @@ test('generation-only credentials need no billing access and still enforce live 
   }});
   assert.deepEqual(await provider.preflight(), {maximumCents: 100});
 });
-test('H3 Max receives a single 12-second visual request and matching music duration', async () => {
+test('H3 Max receives twelve seconds while the music keeps sixty seconds for a full build and peak', async () => {
   const submitted = [];
   const provider = createFalProvider({key: 'synthetic-only', fetchImpl: async (url, options) => {
     submitted.push({url, input: JSON.parse(options.body)});
@@ -261,7 +262,8 @@ test('H3 Max receives a single 12-second visual request and matching music durat
   assert.equal(submitted[0].input.duration, 12); assert.equal(submitted[0].input.resolution, '480P');
   assert.equal(submitted[0].input.prompt_expansion_mode, 'disabled');
   assert.equal(submitted[0].input.enable_safety_checker, true);
-  assert.equal(submitted[1].input.duration, 12);
+  assert.equal(submitted[1].input.duration, 60);
+  assert.ok(submitted[1].input.prompt.includes('sustain its full energy through seconds 36-60'));
   await assert.rejects(provider.submit('video', 'invalid', undefined, {duration: 30}), /PROVIDER_DURATION_INVALID/);
 });
 test('every audio and video request includes the fixed DJ brief and treats audience text as theme data', async () => {
@@ -353,4 +355,22 @@ test('audio schedule has continuous overlap during delayed generation and adopts
   assert.ok(intervals.length >= 5);
   for (let i = 1; i < intervals.length; i++) assert.ok(intervals[i][0] <= intervals[i - 1][1] - 1.49);
   assert.equal(player.read().currentId, 'second'); player.stop(); assert.equal(player.read().running, false);
+});
+
+test('a sixty-second song is not interrupted at twelve-second video loop boundaries', async () => {
+  let tick;
+  const context = {currentTime: 0, state: 'running', destination: {}, async resume() {},
+    createBufferSource: () => ({connect() {}, disconnect() {}, start() {}, stop() {}}),
+    createGain: () => ({connect() {}, disconnect() {}, gain: {setValueAtTime() {}, linearRampToValueAtTime() {}}})};
+  const player = createContinuousPlayer({context, setTimer: fn => { tick = fn; }, clearTimer() {}});
+  player.add({id: 'build-and-peak', buffer: {duration: 60}});
+  player.add({id: 'next', buffer: {duration: 60}});
+  await player.start();
+  for (let time = .1; time < 58.5; time += .1) {
+    context.currentTime = time; tick(); assert.equal(player.read().currentId, 'build-and-peak');
+  }
+  context.currentTime = 59; tick();
+  assert.equal(player.read().currentId, 'next');
+  assert.equal(player.read().scheduled[1].start, 58.6);
+  player.stop();
 });

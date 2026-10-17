@@ -89,7 +89,7 @@ test('native binding admits one measurement at a time and removes container erro
   assert.equal(result.status, 422);
   assert.deepEqual(await result.json(), {error: 'NATIVE_MEASUREMENT_FAILED'});
 });
-test('native binding forwards only validated duration metadata for twelve-second preparation', async () => {
+test('native binding accepts longer music without allowing sixty-second video requests', async () => {
   const native = new (createNativeContainerClass(FakeContainer))(context(), {});
   const makeRequest = duration => new Request('http://native.internal/prepare/audio', {method: 'POST',
     headers: {'content-type': 'application/octet-stream', 'x-vdj-duration-seconds': duration,
@@ -98,6 +98,11 @@ test('native binding forwards only validated duration metadata for twelve-second
   assert.equal(native.forwarded.headers.get('x-vdj-duration-seconds'), '12');
   assert.equal(native.forwarded.headers.get('x-vdj-context-seconds'), '16');
   assert.equal(native.forwarded.headers.has('x-discard'), false);
+  assert.equal((await native.fetch(makeRequest('60'))).status, 200);
+  assert.equal(native.forwarded.headers.get('x-vdj-duration-seconds'), '60');
+  assert.equal((await native.fetch(new Request('http://native.internal/prepare/video', {method: 'POST',
+    headers: {'content-type': 'application/octet-stream', 'x-vdj-duration-seconds': '60'},
+    body: new Uint8Array([1])}))).status, 400);
   assert.equal((await native.fetch(makeRequest('120'))).status, 400);
 });
 

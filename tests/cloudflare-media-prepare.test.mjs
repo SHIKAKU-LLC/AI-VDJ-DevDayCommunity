@@ -63,3 +63,25 @@ test('twelve-second H3 media and music with legacy context pass real native insp
     await assert.rejects(prepareMedia(await readFile(video), 'video', {seconds: 24}), /MEDIA_INPUT_INVALID/);
   } finally { await service.close(); await rm(dir, {recursive: true, force: true}); }
 });
+
+test('sixty-second music retains the full passage and a sixteen-second continuation context', {skip: !process.env.VDJ_QC_PYTHON}, async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'vdj-long-music-test-'));
+  const service = createNativeService({authorize: async () => true,
+    createRuntime: () => createPortableNativeRuntime({python: process.env.VDJ_QC_PYTHON})});
+  try {
+    const input = join(dir, 'source.wav');
+    await exec('ffmpeg', ['-nostdin', '-v', 'error', '-f', 'lavfi', '-i', 'sine=frequency=220:sample_rate=48000:duration=76', '-ac', '2', '-c:a', 'pcm_f32le', input]);
+    const response = await service.fetch(new Request('http://native.internal/prepare/audio', {method: 'POST',
+      headers: {'content-type': 'application/octet-stream', 'x-vdj-duration-seconds': '60', 'x-vdj-context-seconds': '16'},
+      body: await readFile(input)}));
+    assert.equal(response.status, 200);
+    const prepared = await response.json();
+    assert.equal(prepared.duration, 60); assert.equal(prepared.quality.passed, true);
+    for (const kind of ['audio', 'context']) {
+      const path = join(dir, kind + '.wav'); await writeFile(path, Buffer.from(prepared[kind].data, 'base64'));
+      const meta = JSON.parse((await exec('ffprobe', ['-v', 'error', '-show_streams', '-show_format', '-of', 'json', path])).stdout);
+      assert.equal(Number(meta.format.duration), kind === 'audio' ? 60 : 16);
+      assert.equal(meta.streams[0].channels, 2); assert.equal(Number(meta.streams[0].sample_rate), 44100);
+    }
+  } finally { await service.close(); await rm(dir, {recursive: true, force: true}); }
+});
