@@ -38,6 +38,8 @@ ContainersのDockerfileもWorkers Builds内で組み立てる。Containersは独
 ### PRのビルド検証
 
 本番Workerの`Builds → Previews Base`では、既定の`wrangler preview`を使用しない。
+既に作成済みのPR用環境は共通設定を引き継ぎ直さないため、対象のPreviewを選び、
+その`Settings → Builds`にも同じ設定を保存する。
 このリポジトリは`cloudflare.config.ts`を使うため、次の設定でPRのビルドと配備前検査を行う。
 
 - ビルド: `npm ci --prefix cloud/cloudflare --no-audit --no-fund && npm run build --prefix cloud/cloudflare`
@@ -46,7 +48,7 @@ ContainersのDockerfileもWorkers Builds内で組み立てる。Containersは独
 
 ここでは検証だけを行い、Workerの切替、D1の更新、有料生成は行わない。
 実際に操作できる検証環境は、別Workerの`staging`モードを使う。
-Cloudflareで設定を変えた後は、古いビルドの再実行ではなく、新しいコミットのビルドで適用を確認する。
+設定を保存したら、対象PRの最新コミットでビルドコマンドと検証結果を確認する。
 
 `Dockerfile` と `native-service.mjs` は、既存のPython・ffmpeg検査をContainersから呼ぶための準備。
 通信はサーバー間の認証を必須とし、入力ファイルの上限とハッシュを確認する。同時処理は1件。
