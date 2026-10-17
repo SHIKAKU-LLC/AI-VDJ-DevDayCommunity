@@ -4,10 +4,13 @@ import {createContinuousPlayer} from './judge-player.mjs';
 const $ = id => document.getElementById(id);
 const token = () => Array.from(crypto.getRandomValues(new Uint8Array(32)), b => b.toString(16).padStart(2, '0')).join('');
 const labels = {QUEUED: '順番待ち', AUDIO_SUBMITTING: '音楽を依頼中', AUDIO_WAIT: '音楽を生成中', AUDIO_READY: '音楽が完成',
-  VIDEO_SUBMITTING: '映像を依頼中', VIDEO_WAIT: '映像を生成中', READY: '再生準備完了', FAILED: '生成を完了できませんでした', NEEDS_REVIEW: '生成結果の確認が必要です'};
+  VIDEO_A_SUBMITTING: '映像の前半を依頼中', VIDEO_A_WAIT: '映像の前半を生成中', VIDEO_A_READY: '映像の前半が完成',
+  VIDEO_B_SUBMITTING: '映像の後半を依頼中', VIDEO_B_WAIT: '映像の後半を生成中', JOINING: '24秒の映像を仕上げ中',
+  READY: '再生準備完了', FAILED: '生成を完了できませんでした', NEEDS_REVIEW: '生成結果の確認が必要です'};
 const messages = {JUDGE_CLOSED: '現在はルームの受付期間外です。', JUDGE_CAPACITY: 'ルーム数の上限に達しました。',
   JUDGE_BUDGET: 'このルームまたはイベントの生成上限に達しました。', GENERATION_DISABLED: '生成サービスを準備しています。',
   PROVIDER_BALANCE_REQUIRED: '運営側の生成残高を確認しています。', ACTOR_DENIED: '接続情報を確認できません。ページを開き直してください。',
+  PROVIDER_PERMISSION_REQUIRED: '運営側で生成サービスの接続権限を確認する必要があります。',
   ROOM_NOT_FOUND: 'このルームは終了したか、利用期限を過ぎています。', ACCEPTANCE_OFF: '現在は新しいアイデアの受付を閉じています。',
   RATE_LIMITED: '少し時間をおいてから送信してください。'};
 let session, snapshot, jobs = [], capabilities, context, player, autoGenerate = true, polling = false, pendingSubmit, submitBusy = false;
@@ -56,7 +59,7 @@ function render() {
     state.textContent = job ? labels[job.state] ?? '処理中' : jobs.length >= 5 ? '生成枠の上限に達しました' : '受付済み';
     li.append(name, prompt, state); return li;
   }));
-  $('budget').textContent = `生成枠 ${jobs.length} / 5 セット。運営負担は1セット上限 $0.50、ルーム合計上限 $2.50。`;
+  $('budget').textContent = `生成枠 ${jobs.length} / 5 セット。運営負担は1セット上限 $1.00、ルーム合計上限 $5.00。`;
 }
 async function queuePending() {
   if (!session.owner || !autoGenerate || !capabilities.generation || jobs.length >= 5) return;
@@ -112,6 +115,7 @@ async function load(job) {
       video.addEventListener('loadeddata', () => { clearTimeout(timeout); resolve(); }, {once: true});
       video.addEventListener('error', () => { clearTimeout(timeout); reject(Error('VIDEO_INVALID')); }, {once: true});
     });
+    if (Math.abs(video.duration - 24) > .1 || video.videoWidth !== 854 || video.videoHeight !== 480) throw Error('VIDEO_INVALID');
     videos.set(job.id, video); loaded.set(job.id, {...job, buffer, blobUrl});
     // Publish to the audio scheduler in submission order even if a later fetch
     // finishes first. Each audio/video pair must be decoded before adoption.

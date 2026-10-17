@@ -49,7 +49,8 @@ async function fixture() {
   const artifact = async () => ({data: 'AQID', sha256: await sha256(new Uint8Array([1, 2, 3]))});
   const env = {DB: db, MEDIA: media, EVENT_ID: 'judge-test', PUBLIC_ORIGIN: 'https://test.example', GENERATION_ENABLED: 'true', FAL_KEY: 'synthetic-test-value', testFetch: fetchImpl,
     NATIVE_PROCESSOR: {getByName: () => ({fetch: async request => Response.json(request.url.endsWith('audio') ?
-      {audio: await artifact(), context: await artifact(), duration: 24} : {video: await artifact(), duration: 5})})}};
+      {audio: await artifact(), context: await artifact(), duration: 24} :
+      {video: await artifact(), frame: await artifact(), duration: request.url.endsWith('inspect') ? 24 : 12, quality: {passed: true}})})}};
   const Class = createGenerationClass(class {}), runtime = new Class({storage}, env);
   env.GENERATION = {getByName: () => runtime};
   return {sqlite, db, room, owner, join, rpc, submit, store, env, runtime, values, requests, posted: () => posted, uncertain: () => { unknown = true; }};
@@ -63,7 +64,7 @@ test('generation reserves at most five sets, is idempotent and enforces global b
     for (const s of submissions.slice(0, 5)) await f.store.enqueue(f.room.roomId, s.submissionId);
     await f.store.enqueue(f.room.roomId, submissions[0].submissionId);
     await assert.rejects(f.store.enqueue(f.room.roomId, submissions[5].submissionId), /JUDGE_BUDGET/);
-    assert.equal(f.sqlite.prepare('select sum(cents) n from vdj_budget_reservations').get().n, 250);
+    assert.equal(f.sqlite.prepare('select sum(cents) n from vdj_budget_reservations').get().n, 500);
     assert.equal((await f.store.records(f.room.roomId)).length, 5);
   } finally { f.sqlite.close(); }
 });
@@ -71,9 +72,11 @@ test('durable generation continues through audio/video, keeps handles private an
   const f = await fixture();
   try {
     const s = await f.submit(); await f.runtime.enqueue(f.room.roomId, [s.submissionId]);
-    for (let i = 0; i < 4; i++) await f.runtime.alarm();
-    assert.equal(f.posted(), 2);
+    for (let i = 0; i < 7; i++) await f.runtime.alarm();
+    assert.equal(f.posted(), 3);
     const [job] = await f.store.records(f.room.roomId); assert.equal(job.state, 'READY');
+    assert.equal(job.assets.video.duration, 24);
+    assert.equal(job.providerReceipts.filter(r => r.kind.startsWith('video')).length, 2);
     assert.ok(!JSON.stringify(job).includes('queue.fal.run'));
     const response = await generationHttp(new Request(`https://test.example/api/rooms/${f.room.roomId}/generated-media/${s.submissionId}/audio`,
       {headers: {'x-room-owner': f.owner}}), f.env);
@@ -81,7 +84,7 @@ test('durable generation continues through audio/video, keeps handles private an
     const denied = await generationHttp(new Request(`https://test.example/api/rooms/${f.room.roomId}/generation`,
       {headers: {'x-room-owner': 'c'.repeat(64)}}), f.env);
     assert.equal(denied.status, 403);
-    await f.runtime.enqueue(f.room.roomId, [s.submissionId]); await f.runtime.alarm(); assert.equal(f.posted(), 2);
+    await f.runtime.enqueue(f.room.roomId, [s.submissionId]); await f.runtime.alarm(); assert.equal(f.posted(), 3);
   } finally { f.sqlite.close(); }
 });
 test('an unknown paid submission is never retried after object recreation', async () => {
@@ -91,6 +94,20 @@ test('an unknown paid submission is never retried after object recreation', asyn
     const Class = createGenerationClass(class {});
     const restarted = new Class(f.runtime.ctx, f.env); await restarted.alarm();
     assert.equal(f.posted(), 1); assert.equal((await f.store.records(f.room.roomId))[0].state, 'NEEDS_REVIEW');
+  } finally { f.sqlite.close(); }
+});
+test('preflight permission failure reserves no budget and submits no paid request', async () => {
+  const f = await fixture();
+  try {
+    const s = await f.submit();
+    f.env.testFetch = async () => new Response(null, {status: 403});
+    const response = await generationHttp(new Request(`https://test.example/api/rooms/${f.room.roomId}/generation`, {
+      method: 'POST', headers: {origin: f.env.PUBLIC_ORIGIN, 'content-type': 'application/json', 'x-room-owner': f.owner},
+      body: JSON.stringify({submissionIds: [s.submissionId]}),
+    }), f.env);
+    assert.equal(response.status, 503); assert.equal((await response.json()).error, 'PROVIDER_PERMISSION_REQUIRED');
+    assert.equal(f.sqlite.prepare('select count(*) n from vdj_budget_reservations').get().n, 0);
+    assert.equal(f.posted(), 0);
   } finally { f.sqlite.close(); }
 });
 test('disabled or expired events cannot trigger generation and participants see only their own jobs', async () => {

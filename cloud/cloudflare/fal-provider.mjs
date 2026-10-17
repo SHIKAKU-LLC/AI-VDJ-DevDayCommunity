@@ -21,6 +21,11 @@ export function decodeArtifact(value, limit) {
   if (!bytes.length || bytes.length > limit) deny();
   return bytes;
 }
+export function encodeBytes(bytes) {
+  const parts = [];
+  for (let offset = 0; offset < bytes.length; offset += 32768) parts.push(String.fromCharCode(...bytes.subarray(offset, offset + 32768)));
+  return btoa(parts.join(''));
+}
 export function createFalProvider({key, fetchImpl = fetch} = {}) {
   if (typeof key !== 'string' || !key.trim() || /[\r\n]/.test(key)) throw Error('PROVIDER_NOT_CONNECTED');
   async function json(url, method = 'GET', input) {
@@ -48,10 +53,10 @@ export function createFalProvider({key, fetchImpl = fetch} = {}) {
       for (const [kind, endpoint] of Object.entries(MODELS)) {
         const rate = price.prices?.find(p => p.endpoint_id === endpoint);
         if (!rate || rate.currency !== 'USD' || rate.unit !== (kind === 'video' ? 'seconds' : 'audios') ||
-            !Number.isFinite(rate.unit_price) || rate.unit_price <= 0 || rate.unit_price > (kind === 'video' ? 0.065 : 0.10)) throw Error('PROVIDER_PRICE_CHANGED');
+            !Number.isFinite(rate.unit_price) || rate.unit_price <= 0 || rate.unit_price > (kind === 'video' ? 0.0345 : 0.10)) throw Error('PROVIDER_PRICE_CHANGED');
       }
-      if (bill.credits?.currency !== 'USD' || !Number.isFinite(bill.credits.current_balance) || bill.credits.current_balance < 0.50) throw Error('PROVIDER_BALANCE_REQUIRED');
-      return {balanceUsd: bill.credits.current_balance, maximumCents: 50};
+      if (bill.credits?.currency !== 'USD' || !Number.isFinite(bill.credits.current_balance) || bill.credits.current_balance < 1) throw Error('PROVIDER_BALANCE_REQUIRED');
+      return {balanceUsd: bill.credits.current_balance, maximumCents: 100};
     },
     async submit(kind, prompt, contextUrl) {
       const endpoint = kind === 'audio' ? contextUrl ? MODELS.continuation : MODELS.initial : MODELS.video;
@@ -59,7 +64,8 @@ export function createFalProvider({key, fetchImpl = fetch} = {}) {
         output_format: 'wav', enable_prompt_expansion: false, enable_safety_checker: true,
         ...(contextUrl ? {audio_url: contextUrl, extend_seconds_before: 0, extend_seconds_after: 24} : {duration: 24})} :
         {prompt: `Large-screen music visual, smooth continuous movement, no flashing or strobing, no text. ${prompt}`,
-          duration: 5, resolution: '480P', prompt_expansion_mode: 'disabled', enable_safety_checker: true};
+          duration: 12, resolution: '480P', prompt_expansion_mode: 'disabled', enable_safety_checker: true,
+          ...(contextUrl ? {image_url: contextUrl} : {})};
       const result = await json('https://queue.fal.run/' + endpoint, 'POST', input);
       const id = result.request_id;
       return {id, endpoint, statusUrl: queueUrl(result.status_url, id), responseUrl: queueUrl(result.response_url, id)};

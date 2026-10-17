@@ -1,5 +1,5 @@
 import {createGenerationStore} from './generation-store.mjs';
-import {boundedBytes, sha256} from './fal-provider.mjs';
+import {boundedBytes, sha256, createFalProvider} from './fal-provider.mjs';
 const answer = (value, status = 200) => Response.json(value, {status, headers: {'cache-control': 'no-store'}});
 export async function generationHttp(request, env) {
   const url = new URL(request.url), match = /^\/api\/rooms\/([a-f0-9-]{36})\/(generation|generated-media)(?:\/([a-f0-9-]{36})\/(audio|video))?$/.exec(url.pathname);
@@ -28,6 +28,10 @@ export async function generationHttp(request, env) {
       const input = JSON.parse(new TextDecoder().decode(await boundedBytes(new Response(request.body), 1024)));
       if (!Array.isArray(input.submissionIds) || Object.keys(input).join() !== 'submissionIds' || input.submissionIds.length < 1 || input.submissionIds.length > 5 ||
           input.submissionIds.some(v => !/^[a-f0-9-]{36}$/.test(v))) return answer({error: 'INPUT_INVALID'}, 400);
+      if (env.GENERATION_ENABLED !== 'true') throw Error('GENERATION_DISABLED');
+      // Configuration/price/balance errors must not consume one of the five
+      // reservations. Recheck inside the durable job immediately before POST.
+      await createFalProvider({key: env.FAL_KEY, fetchImpl: env.testFetch ?? fetch}).preflight();
       const result = await env.GENERATION.getByName(roomId).enqueue(roomId, input.submissionIds);
       return answer(result, 202);
     }
@@ -41,7 +45,8 @@ export async function generationHttp(request, env) {
     }
     return answer({error: 'METHOD_NOT_ALLOWED'}, 405);
   } catch (error) {
-    const code = ['ACTOR_DENIED', 'ROOM_NOT_FOUND', 'JUDGE_BUDGET', 'GENERATION_DISABLED', 'SUBMISSION_NOT_FOUND'].includes(error.message) ? error.message : 'GENERATION_UNAVAILABLE';
+    const code = ['ACTOR_DENIED', 'ROOM_NOT_FOUND', 'JUDGE_BUDGET', 'GENERATION_DISABLED', 'SUBMISSION_NOT_FOUND',
+      'PROVIDER_NOT_CONNECTED', 'PROVIDER_PERMISSION_REQUIRED', 'PROVIDER_BALANCE_REQUIRED', 'PROVIDER_PRICE_CHANGED'].includes(error.message) ? error.message : 'GENERATION_UNAVAILABLE';
     return answer({error: code}, code === 'ACTOR_DENIED' ? 403 : code === 'JUDGE_BUDGET' ? 429 : 503);
   }
 }
