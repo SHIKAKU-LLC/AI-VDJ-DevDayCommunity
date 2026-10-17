@@ -19,6 +19,7 @@ class CloudflareAssetsTests(unittest.TestCase):
             files = {str(path.relative_to(destination)) for path in destination.rglob('*') if path.is_file()}
             self.assertIn('judge-room.mjs', files)
             self.assertIn('judge-meter.mjs', files)
+            self.assertIn('judge-vj.mjs', files)
             self.assertIn('LICENSE.qr.txt', files)
             self.assertNotIn('mac-owner-bridge.mjs', files)
             self.assertNotIn('owner-return.html', files)

@@ -1,5 +1,6 @@
 import qrcode from './qr-encoder.mjs';
 import {createContinuousPlayer} from './judge-player.mjs';
+import {createAudioReactiveVj} from './judge-vj.mjs';
 
 const $ = id => document.getElementById(id);
 const token = () => Array.from(crypto.getRandomValues(new Uint8Array(32)), b => b.toString(16).padStart(2, '0')).join('');
@@ -16,7 +17,7 @@ const messages = {JUDGE_CLOSED: '現在はルームの受付期間外です。',
   RATE_LIMITED: '少し時間をおいてから送信してください。'};
 let session, snapshot, jobs = [], capabilities, context, player, autoGenerate = true, polling = false, pendingSubmit, submitBusy = false;
 const loaded = new Map(), loadPending = new Set(), videos = new Map();
-let decodeFailures = 0, meter = {}, meterNode, playerInit;
+let decodeFailures = 0, meter = {}, meterNode, playerInit, vj;
 let generationRetryAfterMs = 0;
 const route = /^\/join\/([a-f0-9-]{36})$/.exec(location.pathname);
 let invitation = new URLSearchParams(location.search).get('code');
@@ -78,7 +79,9 @@ function ensurePlayer() {
   await context.audioWorklet.addModule('/judge-meter.mjs');
   meterNode = new AudioWorkletNode(context, 'vdj-continuity-meter', {outputChannelCount: [2]});
   meterNode.connect(context.destination); meterNode.port.onmessage = event => { meter = event.data; };
+  vj = createAudioReactiveVj({context, input: meterNode, canvas: $('vj-overlay'), videoLayer: $('videos')});
   player = createContinuousPlayer({context, destination: meterNode, onTrack(track) {
+    vj.setTrack(track.id);
     const video = videos.get(track.id);
     if (video) {
       video.currentTime = 0;
@@ -89,7 +92,7 @@ function ensurePlayer() {
     }
     $('play-status').textContent = '再生中 · ' + track.prompt;
   }});
-  window.__vdjPlayback = () => ({...player.read(), decodeFailures, meter: {...meter},
+  window.__vdjPlayback = () => ({...player.read(), decodeFailures, meter: {...meter}, visualizer: vj?.read(),
     video: [...videos.values()].filter(v => v.classList.contains('active')).map(v => ({paused: v.paused, readyState: v.readyState, currentTime: v.currentTime, duration: v.duration, width: v.videoWidth, height: v.videoHeight}))});
   })();
   return playerInit;
@@ -181,10 +184,10 @@ $('accept').onclick = async () => {
 };
 $('copy').onclick = () => navigator.clipboard.writeText(session.joinUrl).then(() => { $('copy').textContent = 'コピーしました'; }).catch(error);
 $('play').onclick = async () => {
-  try { await ensurePlayer(); meterNode.port.postMessage('start'); await player.start(); $('stop').disabled = false; $('play').disabled = true; } catch (e) { error(e); }
+  try { await ensurePlayer(); meterNode.port.postMessage('start'); await player.start(); vj?.start(); $('stop').disabled = false; $('play').disabled = true; } catch (e) { error(e); }
 };
 $('stop').onclick = () => {
-  player?.stop(); meterNode?.port.postMessage('stop'); for (const node of videos.values()) node.pause();
+  player?.stop(); vj?.stop(); meterNode?.port.postMessage('stop'); for (const node of videos.values()) node.pause();
   $('play').disabled = false; $('stop').disabled = true; $('play-status').textContent = '再生を停止しました。';
 };
 $('fullscreen').onclick = () => $('stage').requestFullscreen().catch(error);
@@ -204,3 +207,6 @@ window.addEventListener('pagehide', () => {
   player?.stop();
   for (const track of loaded.values()) URL.revokeObjectURL(track.blobUrl);
 });
+
+window.addEventListener('pagehide', event => { if (event.persisted) vj?.stop(); else vj?.dispose(); });
+window.addEventListener('pageshow', event => { if (event.persisted && player?.read().running) vj?.start(); });

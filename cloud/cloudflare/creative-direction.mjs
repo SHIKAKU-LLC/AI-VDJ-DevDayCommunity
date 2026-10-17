@@ -20,9 +20,10 @@ export function musicPrompt(theme, {duration = DJ_DIRECTION.audioSeconds} = {}) 
 
 export function visualPrompt(theme) {
   return 'Create abstract psychedelic VJ visuals for a dark dance floor, never a nature film or literal scenery. ' +
-    'Fill the frame with evolving fractal tunnels, twisting impossible geometry, kaleidoscopic symmetry, liquid chrome and electric neon magenta, cyan and acid green. ' +
-    `Over ${DJ_DIRECTION.videoSeconds} seconds, spiral through layered near and far shapes as mandala rings unfold, ribbons morph and luminous edges flow in continuous rhythmic waves. ` +
-    `Use dense intricate detail, deep parallax and vivid colour contrast. Suggest the energy of a ${DJ_DIRECTION.bpm} BPM trance set with local glowing pulses and rhythmic deformation. ` +
+    'Design a bold concert-stage graphic with one dominant motif chosen from the audience theme: angular laser lattice, a rushing geometric portal, fractured rotating monoliths, liquid-chrome ribbons, or a faceted neon kaleidoscope. ' +
+    'Use a strong focal point, readable large shapes, dark negative space, sharp luminous edges and electric neon colour. Avoid an unchanged centred mandala or slow screensaver drift. ' +
+    `Over ${DJ_DIRECTION.videoSeconds} seconds, create purposeful rhythmic accents: a forceful forward push, a contrasting radial fold, then a fluid return into the loop. Separate a foreground graphic from a moving deep background. ` +
+    `Suggest the energy of a ${DJ_DIRECTION.bpm} BPM trance set through elastic shape expansion and contraction, deep parallax and a few clear directional changes. Use restrained detail around the focal shape, not uniform visual noise. ` +
     'Keep the overall frame luminance stable: no full-screen white/black flashes, no strobe, no abrupt exposure changes. ' +
     'Make the ending visually continuous and loop-friendly. No text, logos, people, realistic seas, forests, mountains, sunsets or scenic footage. ' +
     'Translate any audience mention of a place into abstract colours, materials and geometric motifs; never render that place literally. ' +

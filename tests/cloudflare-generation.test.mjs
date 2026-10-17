@@ -289,7 +289,8 @@ test('every audio and video request includes the fixed DJ brief and treats audie
   const visual = submitted[2].input.prompt;
   assert.ok(visual.startsWith('Create abstract psychedelic VJ visuals'));
   assert.ok(visual.includes('never a nature film or literal scenery'));
-  assert.ok(visual.includes('fractal tunnels'));
+  assert.ok(visual.includes('angular laser lattice'));
+  assert.ok(visual.includes('Avoid an unchanged centred mandala or slow screensaver drift'));
   assert.ok(visual.includes('no full-screen white/black flashes'));
 });
 test('purging a server-revoked room removes media and durable jobs while preserving spent budget', async () => {
