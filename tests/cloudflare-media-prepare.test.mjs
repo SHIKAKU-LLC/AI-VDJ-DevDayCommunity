@@ -29,6 +29,12 @@ test('flow profile preserves compatible H264 frames and fully inspects 1088-line
     const output = join(dir, 'output.mp4'); await writeFile(output, Buffer.from(result.video.data, 'base64'));
     const frameHash = async file => (await exec('ffmpeg', ['-v', 'error', '-i', file, '-map', '0:v:0', '-f', 'hash', '-hash', 'sha256', '-'])).stdout;
     assert.equal(await frameHash(path), await frameHash(output));
+    const padding = Buffer.alloc(16 * 1024 * 1024);
+    padding.writeUInt32BE(padding.length, 0); padding.write('free', 4);
+    const large = await prepareMedia(Buffer.concat([await readFile(path), padding]), 'video', {seconds: 12, mediaProfile: 'club-flow-v1'});
+    assert.equal(large.copiedVideo, false);
+    assert.equal(large.height, 1080);
+    assert.ok(Buffer.from(large.video.data, 'base64').length < 16 * 1024 * 1024);
   } finally { await service.close(); await rm(dir, {recursive: true, force: true}); }
 });
 

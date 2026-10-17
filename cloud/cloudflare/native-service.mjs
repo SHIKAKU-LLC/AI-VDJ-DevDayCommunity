@@ -131,7 +131,7 @@ export function createNativeService({authorize, createRuntime} = {}) {
       } catch (error) {
         const status = {JSON_REQUIRED: 415, INPUT_INVALID: 400, BODY_TOO_LARGE: 413}[error.message];
         const known = ['AUDIO_FORMAT_INVALID', 'AUDIO_QC_HOLD', 'VIDEO_FORMAT_INVALID', 'MEDIA_INPUT_INVALID',
-          'MEDIA_RESULT_INVALID', 'MEDIA_PROCESS_FAILED', 'BOOTSTRAP_MEASUREMENT_FAILED'];
+          'MEDIA_RESULT_INVALID', 'MEDIA_PROCESS_FAILED', 'MEDIA_PROCESS_TIMEOUT', 'MEDIA_PROCESS_RESOURCES', 'MEDIA_DECODE_FAILED', 'BOOTSTRAP_MEASUREMENT_FAILED'];
         return output({error: status || known.includes(error.message) ? error.message : 'NATIVE_MEASUREMENT_FAILED'}, status ?? 422);
       } finally { active = false; }
     },

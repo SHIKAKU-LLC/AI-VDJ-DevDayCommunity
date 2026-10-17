@@ -8,12 +8,20 @@ const hash = bytes => createHash('sha256').update(bytes).digest('hex');
 const artifact = bytes => ({data: bytes.toString('base64'), sha256: hash(bytes)});
 function run(command, args) {
   return new Promise((resolve, reject) => {
-    const child = spawn(command, args, {stdio: ['ignore', 'pipe', 'ignore']});
-    let output = '', failed = false;
-    const timer = setTimeout(() => { failed = true; child.kill('SIGKILL'); }, 90000);
+    const child = spawn(command, args, {stdio: ['ignore', 'pipe', 'pipe']});
+    let output = '', diagnostic = '', failed = false, failure = 'MEDIA_PROCESS_FAILED';
+    const timer = setTimeout(() => { failed = true; failure = 'MEDIA_PROCESS_TIMEOUT'; child.kill('SIGKILL'); }, 90000);
+    child.stderr.on('data', bytes => { if (diagnostic.length < 8192) diagnostic += bytes.toString().slice(0, 8192 - diagnostic.length); });
     child.stdout.on('data', bytes => { output += bytes; if (output.length > 65536) { failed = true; child.kill('SIGKILL'); } });
     child.on('error', () => { clearTimeout(timer); reject(Error('MEDIA_PROCESS_FAILED')); });
-    child.on('close', code => { clearTimeout(timer); code === 0 && !failed ? resolve(output) : reject(Error('MEDIA_PROCESS_FAILED')); });
+    child.on('close', code => {
+      clearTimeout(timer);
+      if (code === 0 && !failed) return resolve(output);
+      if (/Resource temporarily unavailable|pthread_create/i.test(diagnostic)) failure = 'MEDIA_PROCESS_RESOURCES';
+      else if (/Invalid data found|Invalid argument/i.test(diagnostic)) failure = 'MEDIA_DECODE_FAILED';
+      // Return only a fixed code, never stderr, input metadata or file paths.
+      reject(Error(failure));
+    });
   });
 }
 
@@ -32,7 +40,7 @@ export async function prepareMedia(bytes, kind, {ffmpeg = 'ffmpeg', ffprobe = 'f
     const meta = JSON.parse(await run(ffprobe, ['-v', 'error', '-protocol_whitelist', 'file,pipe', '-show_streams', '-show_format', '-of', 'json', input]));
     const stream = meta.streams?.find(s => s.codec_type === kind), duration = Number(meta.format?.duration);
     if (!stream || !Number.isFinite(duration)) throw Error('MEDIA_INPUT_INVALID');
-    const common = ['-nostdin', '-v', 'error', '-protocol_whitelist', 'file,pipe', '-threads', '1', '-i', input];
+    const common = ['-nostdin', '-v', 'error', '-protocol_whitelist', 'file,pipe', '-threads', '1', '-filter_threads', '1', '-filter_complex_threads', '1', '-i', input];
     if (kind === 'audio') {
       if (duration < seconds - .1 || duration > seconds + contextSeconds + 1 || stream.channels > 2 || ![44100, 48000].includes(Number(stream.sample_rate))) throw Error('MEDIA_INPUT_INVALID');
       // Outpainting may include the submitted context before the new tail.
@@ -51,7 +59,7 @@ export async function prepareMedia(bytes, kind, {ffmpeg = 'ffmpeg', ffprobe = 'f
     }
     if (duration < seconds - .1 || duration > seconds + 1 || stream.width > 2048 || stream.height > 2048 || stream.width * stream.height > 2200000) throw Error('MEDIA_INPUT_INVALID');
     const rate = String(stream.avg_frame_rate).split('/').map(Number);
-    const copyVideo = mediaProfile === 'club-flow-v1' && stream.codec_name === 'h264' && stream.width === 1920 && [1080, 1088].includes(stream.height) && Math.abs(rate[0] / rate[1] - 24) < .001;
+    const copyVideo = mediaProfile === 'club-flow-v1' && bytes.length <= 16 * 1024 * 1024 && stream.codec_name === 'h264' && stream.width === 1920 && [1080, 1088].includes(stream.height) && Math.abs(rate[0] / rate[1] - 24) < .001;
     if (copyVideo) {
       await run(ffmpeg, [...common, '-map', '0:v:0', '-an', '-frames:v', String(seconds * 24), '-c:v', 'copy', '-movflags', '+faststart', '-map_metadata', '-1', '-y', output]);
     } else await run(ffmpeg, [...common, '-t', String(seconds), '-an', '-vf', `scale=${width}:${height}:force_original_aspect_ratio=decrease,pad=${width}:${height}:(ow-iw)/2:(oh-ih)/2,setsar=1,fps=24,tpad=stop_mode=clone:stop_duration=1,trim=duration=${seconds},setpts=PTS-STARTPTS`,

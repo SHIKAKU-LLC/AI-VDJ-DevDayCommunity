@@ -7,7 +7,7 @@ import {createD1RoomRpc} from '../cloud/cloudflare/room-api.mjs';
 import {createGenerationStore} from '../cloud/cloudflare/generation-store.mjs';
 import {createGenerationClass} from '../cloud/cloudflare/generation-runtime.mjs';
 import {generationHttp, sceneLibraryHttp} from '../cloud/cloudflare/generation-http.mjs';
-import {MODELS, createFalProvider, sha256} from '../cloud/cloudflare/fal-provider.mjs';
+import {MODELS, createFalProvider, decodeArtifact, sha256} from '../cloud/cloudflare/fal-provider.mjs';
 import {createContinuousPlayer} from '../room-web/judge-player.mjs';
 import {MUSIC_NEGATIVE_PROMPT} from '../cloud/cloudflare/creative-direction.mjs';
 
@@ -138,6 +138,35 @@ test('fallback library exposes only approved source rooms to authenticated owner
     f.sqlite.prepare('update vdj_stock_sources set event_id=?').run('other-event');
     assert.deepEqual(await (await sceneLibraryHttp(request(), f.env)).json(), {scenes: []});
   } finally { f.sqlite.close(); }
+});
+test('retrying an existing audio result restores unsent scenes without purchasing duplicate results', async () => {
+  const f = await fixture({flow: true});
+  try {
+    const ids = []; for (let i = 0; i < 5; i++) ids.push((await f.submit()).submissionId);
+    await f.runtime.enqueue(f.room.roomId, ids);
+    const native = f.env.NATIVE_PROCESSOR.getByName(); let failed = false;
+    f.env.NATIVE_PROCESSOR.getByName = () => ({async fetch(request) {
+      if (!failed && request.url.endsWith('audio')) { failed = true; return Response.json({error:'NATIVE_MEASUREMENT_FAILED'},{status:422}); }
+      return native.fetch(request);
+    }});
+    for (let i = 0; i < 25; i++) await f.runtime.alarm();
+    const before = f.values.get('jobs')[0];
+    assert.equal(before.parts.audio.state, 'FAILED');
+    assert.ok(Object.values(before.parts).some(p => p.state === 'CANCELLED'));
+    const receipt = before.parts.audio.handle.id;
+    await f.runtime.retryPreparation(f.room.roomId, [ids[0]]);
+    for (let i = 0; i < 25; i++) await f.runtime.alarm();
+    assert.ok(Object.values(f.values.get('jobs')[0].parts).every(p => p.state === 'READY'));
+    assert.equal(f.posted(), 35);
+    assert.equal(f.values.get('jobs')[0].providerReceipts.filter(p => p.requestId === receipt).length, 1);
+  } finally { f.sqlite.close(); }
+});
+test('large media artifacts decode in bounded chunks and preserve every byte', async () => {
+  const bytes = Uint8Array.from({length: 12 * 1024 * 1024}, (_, i) => i % 251);
+  const encoded = {data: Buffer.from(bytes).toString('base64'), sha256: await sha256(bytes)};
+  const result = decodeArtifact(encoded, bytes.length);
+  assert.equal(result.length, bytes.length); assert.equal(await sha256(result), encoded.sha256);
+  assert.throws(() => decodeArtifact(encoded, bytes.length - 1), /PROVIDER_RESPONSE_INVALID/);
 });
 test('durable generation continues through audio/video, keeps handles private and serves only owner media', async () => {
   const f = await fixture();

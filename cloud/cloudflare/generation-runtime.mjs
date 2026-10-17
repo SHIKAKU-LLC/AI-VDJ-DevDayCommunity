@@ -6,9 +6,10 @@ import {partKeys, sceneKeys, mediaKind} from './generation-parts.mjs';
 const terminal = part => ['READY', 'FAILED', 'NEEDS_REVIEW', 'CANCELLED'].includes(part.state);
 const retryable = error => ['PROVIDER_UNAVAILABLE', 'PROVIDER_NETWORK_FAILED', 'PROVIDER_TIMEOUT', 'PROVIDER_RATE_LIMITED'].includes(error?.message);
 const safeReason = error => ['PROVIDER_PRICE_CHANGED', 'PROVIDER_BALANCE_REQUIRED', 'PROVIDER_PERMISSION_REQUIRED',
+  'PROVIDER_RESPONSE_INVALID', 'NATIVE_RESULT_INVALID', 'NATIVE_MEASUREMENT_FAILED',
   'AUDIO_FORMAT_INVALID', 'AUDIO_QC_HOLD', 'VIDEO_FORMAT_INVALID', 'VIDEO_QC_HOLD',
   'UNIFORM_BLACK_OR_WHITE_VIDEO', 'STATIC_VIDEO_HOLD', 'RAPID_LUMA_TRANSITIONS_HOLD',
-  'MEDIA_INPUT_INVALID', 'MEDIA_RESULT_INVALID', 'MEDIA_PROCESS_FAILED', 'BOOTSTRAP_MEASUREMENT_FAILED',
+  'MEDIA_INPUT_INVALID', 'MEDIA_RESULT_INVALID', 'MEDIA_PROCESS_FAILED', 'MEDIA_PROCESS_TIMEOUT', 'MEDIA_PROCESS_RESOURCES', 'MEDIA_DECODE_FAILED', 'BOOTSTRAP_MEASUREMENT_FAILED',
   'ROOM_NOT_FOUND', 'PROVIDER_NOT_CONNECTED', 'GENERATION_DISABLED'].includes(error?.message) ? error.message : 'GENERATION_FAILED';
 
 // Import earlier serial jobs without resubmitting a paid request. Handles and
@@ -36,6 +37,8 @@ function summarize(job) {
   job.timings = Object.fromEntries(keys.map(key => [key, Object.fromEntries(
     ['submittedAtMs', 'completedAtMs', 'readyAtMs'].filter(k => job.parts[key][k] !== undefined)
       .map(k => [k, job.parts[key][k]]))]));
+  job.failures = Object.fromEntries(keys.filter(key => ['FAILED', 'NEEDS_REVIEW'].includes(job.parts[key].state))
+    .map(key => [key, {reason: job.parts[key].reason, stage: job.parts[key].stage}]));
   const videos = sceneKeys(job).map(key => job.parts[key]);
   if (job.parts.audio.state === 'READY' && videos.some(p => p.state === 'READY')) {
     job.state = 'READY'; delete job.reason;
@@ -125,10 +128,17 @@ export function createGenerationClass(Base) {
         const jobs = await this.ctx.storage.get('jobs') ?? [];
         let resumed = 0;
         for (const job of jobs.filter(j => ids.includes(j.id))) {
+          let resumedAudio = false;
           for (const part of Object.values(job.parts ?? {})) {
             if (part.state !== 'FAILED' || !part.handle || !part.completedAtMs || (part.preparationRetries ?? 0) >= 2) continue;
             part.state = 'PREPARING'; part.preparationRetries = (part.preparationRetries ?? 0) + 1;
             delete part.reason; resumed++;
+            if (part === job.parts.audio) resumedAudio = true;
+          }
+          // These scenes were never submitted or charged. Restore them only
+          // when the owner explicitly retries the existing audio receipt.
+          if (resumedAudio) for (const key of sceneKeys(job)) {
+            if (job.parts[key].state === 'CANCELLED') job.parts[key].state = 'QUEUED';
           }
           delete job.reason; summarize(job); await this.store().save(job);
         }
@@ -139,21 +149,26 @@ export function createGenerationClass(Base) {
     }
     async prepare(job, key, provider) {
       const kind = mediaKind(key), part = job.parts[key];
+      part.stage = 'result';
       const result = await provider.result(part.handle);
       // URLs stay transient. Only vetted bytes and hashes enter R2.
+      part.stage = 'download';
       const bytes = await provider.download(result[kind]?.url);
       const duration = kind === 'audio' ? job.duration : job.videoDuration;
       const native = this.env.NATIVE_PROCESSOR.getByName('cloud-media-v8');
+      part.stage = 'native';
       const response = await native.fetch(new Request('http://native.internal/prepare/' + kind,
         {method: 'POST', headers: {'content-type': 'application/octet-stream', 'x-vdj-duration-seconds': String(duration),
           'x-vdj-context-seconds': String(part.contextSeconds ?? 0), 'x-vdj-media-profile': job.mediaProfile ?? 'legacy'}, body: bytes, signal: AbortSignal.timeout(150000)}));
       if (response.status === 409 || response.status === 503) { await response.body?.cancel(); return false; }
       if (!response.ok) { const problem = await response.json().catch(() => ({})); throw Error(safeReason({message: problem.error})); }
+      part.stage = 'validate';
       const prepared = JSON.parse(new TextDecoder().decode(await boundedBytes(response, 24 * 1024 * 1024)));
       if (prepared.duration !== duration || prepared.quality?.passed !== true) throw Error('NATIVE_RESULT_INVALID');
       if (kind === 'video' && ![[854, 480], [1920, 1080], [1920, 1088]].some(([w, h]) => (prepared.width ?? 854) === w && (prepared.height ?? 480) === h)) throw Error('NATIVE_RESULT_INVALID');
       job.quality ??= {};
       job.quality[key] = prepared.quality;
+      part.stage = 'store';
       await this.saveAsset(job, key, prepared[kind], duration, {width: prepared.width ?? 854, height: prepared.height ?? 480});
       if (kind === 'audio') await this.saveAsset(job, 'context', prepared.context, Math.min(16, job.duration));
       part.state = 'READY'; part.readyAtMs = Date.now(); delete part.handle;

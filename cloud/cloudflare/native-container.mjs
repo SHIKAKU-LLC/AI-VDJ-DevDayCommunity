@@ -58,7 +58,7 @@ export function createNativeContainerClass(Container) {
           const data = await response.json().catch(() => ({}));
           const known = ['AUDIO_FORMAT_INVALID', 'AUDIO_QC_HOLD', 'VIDEO_FORMAT_INVALID', 'VIDEO_QC_HOLD',
             'UNIFORM_BLACK_OR_WHITE_VIDEO', 'STATIC_VIDEO_HOLD', 'RAPID_LUMA_TRANSITIONS_HOLD',
-            'MEDIA_INPUT_INVALID', 'MEDIA_RESULT_INVALID', 'MEDIA_PROCESS_FAILED', 'BOOTSTRAP_MEASUREMENT_FAILED'];
+            'MEDIA_INPUT_INVALID', 'MEDIA_RESULT_INVALID', 'MEDIA_PROCESS_FAILED', 'MEDIA_PROCESS_TIMEOUT', 'MEDIA_PROCESS_RESOURCES', 'MEDIA_DECODE_FAILED', 'BOOTSTRAP_MEASUREMENT_FAILED'];
           return fail(known.includes(data.error) ? data.error : 'NATIVE_MEASUREMENT_FAILED',
             [400, 413, 415, 422, 409].includes(response.status) ? response.status : 502);
         }

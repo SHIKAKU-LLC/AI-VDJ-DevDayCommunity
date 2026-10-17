@@ -19,8 +19,17 @@ export async function boundedBytes(response, limit) {
 }
 export function decodeArtifact(value, limit) {
   if (!value || typeof value.data !== 'string' || value.data.length > Math.ceil(limit / 3) * 4 || !/^[a-f0-9]{64}$/.test(value.sha256)) deny();
-  const bytes = Uint8Array.from(atob(value.data), c => c.charCodeAt(0));
-  if (!bytes.length || bytes.length > limit) deny();
+  if (value.data.length % 4) deny();
+  const size = value.data.length / 4 * 3 - (value.data.endsWith('==') ? 2 : value.data.endsWith('=') ? 1 : 0);
+  if (!size || size > limit) deny();
+  // Uint8Array.from(string, mapper) creates a large intermediate array.
+  // Decode bounded chunks so a one-minute WAV fits a Worker's memory budget.
+  const bytes = new Uint8Array(size); let position = 0;
+  for (let offset = 0; offset < value.data.length; offset += 65536) {
+    const chunk = atob(value.data.slice(offset, offset + 65536));
+    for (let i = 0; i < chunk.length; i++) bytes[position++] = chunk.charCodeAt(i);
+  }
+  if (position !== size) deny();
   return bytes;
 }
 export function encodeBytes(bytes) {
