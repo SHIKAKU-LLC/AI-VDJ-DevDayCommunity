@@ -17,7 +17,7 @@ test('Worker serves room entry without passing invitation data or credentials to
     assert.ok(!response.headers.get('content-security-policy').includes('127.0.0.1'));
   }
   for (const request of requests) {
-    assert.equal(new URL(request.url).pathname, '/room-entry.html');
+    assert.equal(new URL(request.url).pathname, '/judge-room.html');
     assert.equal(new URL(request.url).search, '');
     assert.equal(request.headers.get('x-room-owner'), null);
   }

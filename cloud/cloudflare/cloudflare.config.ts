@@ -26,7 +26,8 @@ export default defineConfig(({mode}) => {
       // Cloudflare validates this against UTC; 18 October in Japan is still 17 October UTC.
       compatibilityDate: '2026-10-17',
       entrypoint: local ? './worker.mjs' : './worker-with-containers.mjs',
-      ...(!local ? {exports: {NativeProcessor: exports.durableObject({storage: 'sqlite', container: native})}} : {}),
+      ...(!local ? {exports: {NativeProcessor: exports.durableObject({storage: 'sqlite', container: native}),
+        GenerationRoom: exports.durableObject({storage: 'sqlite'})}} : {}),
       assets: {runWorkerFirst: true, htmlHandling: 'none', notFoundHandling: 'none'},
       env: {
         ASSETS: bindings.assets(),
@@ -36,9 +37,11 @@ export default defineConfig(({mode}) => {
         EVENT_ID: bindings.text(eventId!),
         ...(mode === 'staging' ? {STAGING_NATIVE_CHECK: bindings.text('enabled')} : {}),
         ...(!local ? {NATIVE_PROCESSOR: bindings.durableObject({worker: name, exportName: 'NativeProcessor'})} : {}),
+        ...(!local ? {GENERATION: bindings.durableObject({worker: name, exportName: 'GenerationRoom'})} : {}),
+        GENERATION_ENABLED: bindings.text(process.env.VDJ_GENERATION_ENABLED === 'true' ? 'true' : 'false'),
       },
       observability: {enabled: false},
-      limits: {cpuMs: 50},
+      limits: {cpuMs: 1000},
     },
   };
 });

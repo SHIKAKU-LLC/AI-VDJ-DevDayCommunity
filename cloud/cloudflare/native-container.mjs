@@ -29,8 +29,9 @@ export function createNativeContainerClass(Container) {
 
     async fetch(request) {
       const url = new URL(request.url);
-      if (url.origin !== 'http://native.internal' || !['/inspect', '/self-check'].includes(url.pathname) || url.search || request.method !== 'POST') return fail('NOT_FOUND', 404);
-      if (request.headers.get('content-type') !== 'application/json') return fail('JSON_REQUIRED', 415);
+      if (url.origin !== 'http://native.internal' || !['/inspect', '/self-check', '/prepare/audio', '/prepare/video'].includes(url.pathname) || url.search || request.method !== 'POST') return fail('NOT_FOUND', 404);
+      const type = url.pathname.startsWith('/prepare/') ? 'application/octet-stream' : 'application/json';
+      if (request.headers.get('content-type') !== type) return fail('JSON_REQUIRED', 415);
       if (this.#busy) return fail('BUSY', 409);
       this.#busy = true;
       try {
@@ -41,7 +42,7 @@ export function createNativeContainerClass(Container) {
           cancellationOptions: {portReadyTimeoutMS: 30000, abort: request.signal},
         });
         // Neither browser headers nor provider credentials cross this boundary.
-        const headers = new Headers([['content-type', 'application/json'], ['x-vdj-runtime-auth', this.#auth]]);
+        const headers = new Headers([['content-type', type], ['x-vdj-runtime-auth', this.#auth]]);
         const outgoing = new Request('http://container.internal' + url.pathname, {method: 'POST', headers,
           body: request.body, signal: request.signal, duplex: 'half'});
         const response = await this.containerFetch(outgoing);

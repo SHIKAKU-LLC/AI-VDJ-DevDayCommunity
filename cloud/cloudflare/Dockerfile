@@ -7,6 +7,7 @@ COPY qa-tools/runtime-requirements.txt /tmp/runtime-requirements.txt
 RUN /opt/venv/bin/pip install --no-cache-dir -r /tmp/runtime-requirements.txt && rm /tmp/runtime-requirements.txt
 WORKDIR /app
 COPY cloud/cloudflare/native-service.mjs ./cloud/cloudflare/native-service.mjs
+COPY cloud/cloudflare/media-prepare.mjs ./cloud/cloudflare/media-prepare.mjs
 COPY cloud/worker/native-runtime.mjs cloud/worker/reference-inspector.mjs ./cloud/worker/
 COPY integration ./integration
 COPY snapshot/app ./snapshot/app

@@ -3,6 +3,8 @@ import {createServer} from 'node:http';
 import {Readable} from 'node:stream';
 import {pathToFileURL} from 'node:url';
 import {createPortableNativeRuntime} from '../worker/native-runtime.mjs';
+import {prepareMedia} from './media-prepare.mjs';
+import {assessTechnicalVisual} from '../../integration/qc/visual-policy.mjs';
 
 const bodyLimit = 28 * 1024 * 1024, fileLimit = 8 * 1024 * 1024;
 const shapes = {bootstrap: ['bytes'], reference: ['bytes'], audio: ['bytes', 'sourceBytes', 'contextBytes'], video: ['bytes'], join: ['bytes', 'sourceBytes']};
@@ -64,11 +66,38 @@ export function createNativeService({authorize, createRuntime} = {}) {
       const path = new URL(request.url).pathname;
       if (path === '/health' && request.method === 'GET') return output({service: 'ai-vdj-native', alive: true, processorInitialized: runtime !== undefined, busy: active});
       const selfCheck = path === '/self-check';
-      if ((!selfCheck && path !== '/inspect') || request.method !== 'POST') return output({error: 'NOT_FOUND'}, 404);
+      const prepare = /^\/prepare\/(audio|video)$/.exec(path);
+      if ((!selfCheck && !prepare && path !== '/inspect') || request.method !== 'POST') return output({error: 'NOT_FOUND'}, 404);
       if (!await authorize(request)) return output({error: 'DENIED'}, 403);
       if (active) return output({error: 'BUSY'}, 409);
       active = true;
       try {
+        if (prepare) {
+          if (request.headers.get('content-type') !== 'application/octet-stream') return output({error: 'INPUT_INVALID'}, 415);
+          let size = 0; const parts = [];
+          for await (const part of request.body ?? []) {
+            size += part.length;
+            if (size > 20 * 1024 * 1024) failure('BODY_TOO_LARGE');
+            parts.push(Buffer.from(part));
+          }
+          const prepared = await prepareMedia(Buffer.concat(parts, size), prepare[1]);
+          if (prepare[1] === 'audio') {
+            runtime ??= await createRuntime();
+            const profile = await runtime.inspectBootstrap(Buffer.from(prepared.audio.data, 'base64'));
+            if (profile.frameCount !== 24 * 44100 || profile.sampleRate !== 44100 || profile.channels !== 2 ||
+                profile.nonfiniteSamples !== 0 || !Number.isFinite(profile.loudness?.truePeakDbtp) || profile.loudness.truePeakDbtp > -.3 ||
+                profile.clippedFraction > .001 || profile.activity?.effectiveSilence !== false) failure('RESULT_INVALID');
+            prepared.quality = {passed: true, truePeakDbtp: profile.loudness.truePeakDbtp, nonfiniteSamples: profile.nonfiniteSamples};
+          } else {
+            runtime ??= await createRuntime();
+            const bytes = Buffer.from(prepared.video.data, 'base64');
+            const measured = await runtime.native.inspectVideo({bytes, inputDigest: digest(bytes)});
+            if (!measured.fullyDecoded || measured.hasAudioTrack || measured.width !== 854 || measured.height !== 480 ||
+                !assessTechnicalVisual(measured).passed) failure('RESULT_INVALID');
+            prepared.quality = {passed: true, decodedFrames: measured.decodedFrames};
+          }
+          return output(prepared);
+        }
         if (selfCheck) {
           runtime ??= await createRuntime();
           const bytes = syntheticWave(), result = await runtime.inspectBootstrap(bytes);
