@@ -1,3 +1,5 @@
+import {musicPrompt, visualPrompt, MUSIC_NEGATIVE_PROMPT} from './creative-direction.mjs';
+
 export const MODELS = Object.freeze({initial: 'fal-ai/stable-audio-3/medium/text-to-audio',
   continuation: 'fal-ai/stable-audio-3/medium/audio-outpainting', video: 'minimax/h3-max/text-to-video'});
 const deny = () => { throw Error('PROVIDER_RESPONSE_INVALID'); };
@@ -68,10 +70,10 @@ export function createFalProvider({key, fetchImpl = fetch} = {}) {
     async submit(kind, prompt, contextUrl, {duration = 12} = {}) {
       if (duration !== 12) throw Error('PROVIDER_DURATION_INVALID');
       const endpoint = kind === 'audio' ? contextUrl ? MODELS.continuation : MODELS.initial : MODELS.video;
-      const input = kind === 'audio' ? {prompt: `Instrumental electronic dance music, steady beat, no speech. ${prompt}`,
+      const input = kind === 'audio' ? {prompt: musicPrompt(prompt), negative_prompt: MUSIC_NEGATIVE_PROMPT,
         output_format: 'wav', enable_prompt_expansion: false, enable_safety_checker: true,
         ...(contextUrl ? {audio_url: contextUrl, extend_seconds_before: 0, extend_seconds_after: duration} : {duration})} :
-        {prompt: `Large-screen music visual, cinematic detail, smooth continuous movement, no flashing or strobing, no text. ${prompt}`,
+        {prompt: visualPrompt(prompt),
           duration, resolution: '480P', aspect_ratio: '16:9', prompt_expansion_mode: 'disabled', enable_safety_checker: true};
       const result = await json('https://queue.fal.run/' + endpoint, 'POST', input);
       const id = result.request_id;
