@@ -3,7 +3,7 @@ import {createContinuousPlayer} from './judge-player.mjs';
 
 const $ = id => document.getElementById(id);
 const token = () => Array.from(crypto.getRandomValues(new Uint8Array(32)), b => b.toString(16).padStart(2, '0')).join('');
-const labels = {QUEUED: '順番待ち', AUDIO_SUBMITTING: '音楽を依頼中', AUDIO_WAIT: '音楽を生成中', AUDIO_READY: '音楽が完成',
+const labels = {QUEUED: '生成の準備中', GENERATING: '音楽・映像を並行生成中', AUDIO_SUBMITTING: '音楽を依頼中', AUDIO_WAIT: '音楽を生成中', AUDIO_READY: '音楽が完成',
   VIDEO_SUBMITTING: '映像を依頼中', VIDEO_WAIT: '24秒の映像を生成中',
   READY: '再生準備完了', FAILED: '生成を完了できませんでした', NEEDS_REVIEW: '生成結果の確認が必要です'};
 const messages = {JUDGE_CLOSED: '現在はルームの受付期間外です。', JUDGE_CAPACITY: 'ルーム数の上限に達しました。',

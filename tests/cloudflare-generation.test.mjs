@@ -27,7 +27,8 @@ async function fixture() {
   const store = createGenerationStore({db, eventId: 'judge-test'});
   const values = new Map(), objects = new Map(), requests = [];
   const storage = {async get(k) { return structuredClone(values.get(k)); }, async put(k, v) { values.set(k, structuredClone(v)); },
-    async setAlarm(t) { values.set('alarm', t); }, async getAlarm() { return values.get('alarm') ?? null; }};
+    async setAlarm(t) { values.set('alarm', t); }, async getAlarm() { return values.get('alarm') ?? null; },
+    async deleteAlarm() { values.delete('alarm'); }};
   const media = {async head(k) { return objects.get(k); }, async put(k, bytes, options) {
     objects.set(k, {size: bytes.length, etag: 'test-etag', bytes, httpMetadata: options.httpMetadata, customMetadata: options.customMetadata});
   }, async get(k) { const o = objects.get(k); return o ? {...o, body: new Blob([o.bytes]).stream()} : null; }};
@@ -93,7 +94,95 @@ test('an unknown paid submission is never retried after object recreation', asyn
     const s = await f.submit(); f.uncertain(); await f.runtime.enqueue(f.room.roomId, [s.submissionId]); await f.runtime.alarm();
     const Class = createGenerationClass(class {});
     const restarted = new Class(f.runtime.ctx, f.env); await restarted.alarm();
-    assert.equal(f.posted(), 1); assert.equal((await f.store.records(f.room.roomId))[0].state, 'NEEDS_REVIEW');
+    assert.equal(f.posted(), 2); assert.equal((await f.store.records(f.room.roomId))[0].state, 'NEEDS_REVIEW');
+  } finally { f.sqlite.close(); }
+});
+test('five sets start all ten independent requests before any provider response, with durable markers', async () => {
+  const f = await fixture();
+  let release;
+  const barrier = new Promise(resolve => { release = resolve; });
+  const base = f.env.testFetch;
+  let inFlight = 0, peak = 0;
+  try {
+    const submissions = [];
+    for (let i = 0; i < 5; i++) submissions.push(await f.submit());
+    await f.runtime.enqueue(f.room.roomId, submissions.map(s => s.submissionId));
+    f.env.testFetch = async (url, options) => {
+      if (options?.method !== 'POST') return base(url, options);
+      inFlight++; peak = Math.max(peak, inFlight);
+      const saved = f.values.get('jobs');
+      assert.equal(saved.flatMap(j => Object.values(j.parts)).filter(p => p.state === 'SUBMITTING').length, 10);
+      if (inFlight === 10) release();
+      await barrier;
+      const result = await base(url, options); inFlight--; return result;
+    };
+    await f.runtime.alarm();
+    assert.equal(peak, 10); assert.equal(f.posted(), 10);
+    assert.ok((await f.store.records(f.room.roomId)).every(j => j.state === 'GENERATING'));
+    assert.ok(f.values.get('jobs').every(j => Object.values(j.parts).every(p => p.state === 'WAIT' && p.handle.id)));
+    const restarted = new (createGenerationClass(class {}))(f.runtime.ctx, f.env);
+    for (let i = 0; i < 6; i++) await restarted.alarm();
+    assert.ok((await f.store.records(f.room.roomId)).every(j => j.state === 'READY'));
+    assert.equal(f.posted(), 10); // recreation/result reads never repurchase
+    assert.equal(f.values.get('alarm'), undefined);
+  } finally { release(); f.sqlite.close(); }
+});
+test('a slow first set does not block later sets and heavy preparation stays serialized', async () => {
+  const f = await fixture();
+  try {
+    const a = await f.submit(), b = await f.submit();
+    await f.runtime.enqueue(f.room.roomId, [a.submissionId, b.submissionId]);
+    await f.runtime.alarm();
+    const slow = Object.values(f.values.get('jobs')[0].parts).map(p => p.handle.id);
+    const base = f.env.testFetch;
+    f.env.testFetch = (url, options) => String(url).endsWith('/status') && slow.some(id => String(url).includes(id)) ?
+      Promise.resolve(Response.json({status: 'IN_PROGRESS'})) : base(url, options);
+    const native = f.env.NATIVE_PROCESSOR.getByName(); let active = 0, peak = 0;
+    f.env.NATIVE_PROCESSOR.getByName = () => ({async fetch(request) {
+      active++; peak = Math.max(peak, active);
+      await new Promise(resolve => setImmediate(resolve));
+      const result = await native.fetch(request); active--; return result;
+    }});
+    await f.runtime.alarm();
+    const jobs = await f.store.records(f.room.roomId);
+    assert.equal(jobs.find(j => j.id === a.submissionId).state, 'GENERATING');
+    assert.equal(jobs.find(j => j.id === b.submissionId).state, 'READY');
+    assert.equal(peak, 1); assert.equal(f.posted(), 4);
+  } finally { f.sqlite.close(); }
+});
+test('deployment imports a legacy video receipt and uncertain markers without resubmission', async () => {
+  const f = await fixture();
+  try {
+    const a = await f.submit(), b = await f.submit();
+    await f.runtime.enqueue(f.room.roomId, [a.submissionId, b.submissionId]);
+    const jobs = f.values.get('jobs'), id = crypto.randomUUID();
+    jobs[0] = {...jobs[0], state: 'VIDEO_WAIT', submittedAtMs: Date.now(),
+      assets: {audio: {duration: 24}, context: {duration: 16}},
+      videoHandle: {id, endpoint: MODELS.video, statusUrl: `https://queue.fal.run/test/requests/${id}/status`,
+        responseUrl: `https://queue.fal.run/test/requests/${id}`},
+      providerReceipts: [{kind: 'video', endpoint: MODELS.video, requestId: id}]};
+    jobs[1].state = 'AUDIO_SUBMITTING'; f.values.set('jobs', structuredClone(jobs));
+    const restarted = new (createGenerationClass(class {}))(f.runtime.ctx, f.env);
+    await restarted.alarm();
+    assert.equal(f.posted(), 0);
+    const saved = await f.store.records(f.room.roomId);
+    assert.equal(saved[0].state, 'READY'); assert.equal(saved[0].providerReceipts[0].requestId, id);
+    assert.equal(saved[1].state, 'NEEDS_REVIEW');
+    assert.ok(!JSON.stringify(saved).includes('queue.fal.run'));
+  } finally { f.sqlite.close(); }
+});
+test('temporary native contention reuses completed results without resubmitting generation', async () => {
+  const f = await fixture();
+  try {
+    const s = await f.submit(); await f.runtime.enqueue(f.room.roomId, [s.submissionId]);
+    await f.runtime.alarm();
+    const native = f.env.NATIVE_PROCESSOR.getByName();
+    f.env.NATIVE_PROCESSOR.getByName = () => ({fetch: async () => new Response(null, {status: 409})});
+    await f.runtime.alarm();
+    assert.ok(Object.values(f.values.get('jobs')[0].parts).every(p => p.state === 'PREPARING'));
+    f.env.NATIVE_PROCESSOR.getByName = () => native;
+    await new (createGenerationClass(class {}))(f.runtime.ctx, f.env).alarm();
+    assert.equal((await f.store.records(f.room.roomId))[0].state, 'READY'); assert.equal(f.posted(), 2);
   } finally { f.sqlite.close(); }
 });
 test('preflight authentication, permission and rate failures reserve no budget or paid request', async () => {

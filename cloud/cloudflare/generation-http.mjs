@@ -20,7 +20,7 @@ export async function generationHttp(request, env) {
         const own = new Set(document.submissions.filter(s => s.participantId === actor?.id).map(s => s.submissionId));
         jobs = jobs.filter(j => own.has(j.id));
       }
-      return answer({jobs: jobs.map(({id, prompt, nickname, state, reason, maximumCents, assets}) => ({id, prompt, nickname, state, reason, maximumCents,
+      return answer({jobs: jobs.map(({id, prompt, nickname, state, reason, maximumCents, assets, progress}) => ({id, prompt, nickname, state, reason, maximumCents, progress,
         ...(state === 'READY' ? {assets: Object.fromEntries(['audio', 'video'].map(k => [k, {sha256: assets[k].sha256, duration: assets[k].duration,
           byteLength: assets[k].byteLength, contentType: assets[k].contentType}]))} : {})}))});
     }

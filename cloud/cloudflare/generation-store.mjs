@@ -46,7 +46,7 @@ export function createGenerationStore({db, eventId}) {
     async save(job) {
       // Provider handles remain in private DO storage. Browser-visible D1 records
       // contain only safe progress, private R2 descriptors and the submitted text.
-      const safe = Object.fromEntries(['id', 'roomId', 'prompt', 'nickname', 'state', 'createdAtMs', 'maximumCents', 'reason', 'assets', 'quality', 'providerReceipts'].filter(k => job[k] !== undefined).map(k => [k, job[k]]));
+      const safe = Object.fromEntries(['id', 'roomId', 'prompt', 'nickname', 'state', 'createdAtMs', 'maximumCents', 'reason', 'assets', 'quality', 'providerReceipts', 'progress', 'timings'].filter(k => job[k] !== undefined).map(k => [k, job[k]]));
       await query("update vdj_runtime_records set document=?,version=version+1 where room_id=? and kind='cloud-generation' and record_id=?", JSON.stringify(safe), job.roomId, job.id).run();
     },
   };
