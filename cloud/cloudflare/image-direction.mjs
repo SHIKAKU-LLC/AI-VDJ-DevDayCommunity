@@ -53,6 +53,16 @@ export function parseImageDirection(result) {
   // become an accepted structured result.
   if (value && typeof value === 'object' && !Array.isArray(value)) {
     value = {...value};
+    // Some vision responses use a comma-separated palette or keyed colour
+    // descriptions rather than the requested list. This is display metadata,
+    // never an instruction or a resource locator. Validate the full strings
+    // before bounding their length, including content beyond the retained part.
+    let palette = value.palette;
+    if (typeof palette === 'string') palette = palette.split(/[,;\n、]/).map(item=>item.trim()).filter(Boolean);
+    else if (palette && typeof palette === 'object' && !Array.isArray(palette)) palette = Object.values(palette);
+    if (Array.isArray(palette) && palette.length && palette.every(item=>text(item,512))) {
+      value.palette = palette.map(item=>Array.from(item.trim()).slice(0,40).join('')).slice(0,5);
+    }
     for (const [key, count, length] of [['palette',5,40],['features',6,80]]) {
       if (Array.isArray(value[key]) && value[key].every(item => text(item,length))) value[key] = value[key].slice(0,count);
     }
@@ -63,7 +73,13 @@ export function parseImageDirection(result) {
       !kinds.includes(value.kind) ? 'KIND' : !text(value.subject,180) ? 'SUBJECT' :
       !text(value.summary,180) ? 'SUMMARY' : !Array.isArray(value.features) || value.features.length < 1 ||
       value.features.length > 6 || !value.features.every(v => text(v,80)) ? 'FEATURES' : 'PALETTE';
-    throw invalid(diagnostic);
+    const error = invalid(diagnostic);
+    if (diagnostic === 'PALETTE') error.responseShape.palette = {
+      type: Array.isArray(value?.palette) ? 'array' : typeof value?.palette,
+      count: Array.isArray(value?.palette) ? value.palette.length : 0,
+      maximumLength: Array.isArray(value?.palette) ? Math.max(0,...value.palette.map(item=>typeof item==='string'?item.length:0)) : 0,
+    };
+    throw error;
   }
 }
 
