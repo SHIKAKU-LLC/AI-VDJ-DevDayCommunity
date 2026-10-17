@@ -11,7 +11,11 @@ R2の単一素材を生成サービスへ渡す期間限定の取得処理は実
 Air、Macの常駐プログラム、利用者のDockerには依存しない。利用者・審査員・オーナーはブラウザだけで接続する。
 以下のローカル起動は開発時の任意の確認方法であり、本番の動作条件ではない。
 
-Workers Buildsの設定案（未接続・未配備）:
+2026-10-18に検証用Worker `ai-vdj-devdaycommunity-staging` を作成し、既存のGitHub連携とビルド用権限を接続した。
+検証用の対象ブランチは `codex/cloudflare-runtime`。初回に自動開始された `main` のビルドは停止した。
+この設定の保存は、Containerのイメージ作成や実行の成功を示すものではない。
+
+Workers Buildsの設定（検証用は保存済み、本番用は案）:
 
 | 項目 | 設定案 |
 | --- | --- |
@@ -22,7 +26,7 @@ Workers Buildsの設定案（未接続・未配備）:
 | 検証用配備 | `cd cloud/cloudflare && npx cf deploy --prebuilt --mode staging` |
 | 本番用ビルド | `npm ci --prefix cloud/cloudflare && npm run build --prefix cloud/cloudflare` |
 | 本番用配備 | `cd cloud/cloudflare && npx cf deploy --prebuilt --mode production` |
-| 検証ブランチ | `codex/cloudflare-runtime`。接続開始・配備は別途承認後 |
+| 検証ブランチ | `codex/cloudflare-runtime`。検証環境の作成・配備は承認済み |
 | 本番ブランチ | `main`。PRのマージと公開は別途承認後 |
 
 ContainersのDockerfileもWorkers Builds内で組み立てる。Containersは独立した検証用Workerで動作確認してから本番へ接続する。
