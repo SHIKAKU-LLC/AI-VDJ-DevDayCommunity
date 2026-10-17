@@ -70,6 +70,11 @@ Containerは音楽を44.1kHz・ステレオPCM16へ変換し、指定された12
 処理待ちを止め、非公開R2の当該ルーム素材、D1の生成・取得用記録、Durable Objectの保存状態を消去する。
 一般の投稿やオーナー操作から削除対象の印を付けることはできない。
 fal側にも元ファイルの削除を要求し、権限不足や失敗は削除成功と扱わず、未完の生成IDだけを残す。
+運営者が削除権限を持つ一時Secret `FAL_CLEANUP_KEY`を登録した場合だけ、未完分を再試行できる。
+このキーは生成には使用しない。削除後は実行環境から外す。
+
+2026-10-18の旧Wan検証ルームは閉鎖済み。R2の10ファイルとD1の素材・生成記録を削除し、処理待ちも消去した。
+fal側の原本8件は生成専用キーの権限不足により未削除。サービスへの再取込み経路は停止している。
 
 公式仕様: [MiniMax H3 Max](https://fal.ai/models/minimax/h3-max/text-to-video/api)、
 [Stable Audio 3](https://fal.ai/models/fal-ai/stable-audio-3/medium/text-to-audio/api)、

@@ -296,6 +296,12 @@ test('provider deletion permission failures do not retain playable local media o
     assert.equal((await f.env.MEDIA.list({prefix: 'rooms/'})).objects.length, 0);
     assert.equal(f.values.size, 0);
     assert.ok(!JSON.stringify(result).includes('https://'));
+    f.env.FAL_CLEANUP_KEY = 'synthetic-cleanup-only';
+    f.env.testFetch = base;
+    const retried = await f.runtime.purgeClosedRoom(f.room.roomId);
+    assert.equal(retried.providerPurge.deleted, 2);
+    assert.deepEqual(retried.providerPurge.pending, []);
+    assert.equal(f.posted(), 2);
   } finally { f.sqlite.close(); }
 });
 test('budget schema migration preserves existing reservations and permits the new per-set limit', async () => {

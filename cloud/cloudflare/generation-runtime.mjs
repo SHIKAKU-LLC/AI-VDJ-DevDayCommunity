@@ -53,14 +53,16 @@ export function createGenerationClass(Base) {
         if (!requested) throw Error('ACTOR_DENIED');
         const prior = await this.ctx.storage.get('room');
         if (prior && prior !== roomId) throw Error('ACTOR_DENIED');
-        if (requested.purged) {
+        const previousPurge = requested.providerPurge ? JSON.parse(requested.providerPurge) : null;
+        if (requested.purged && (!previousPurge?.pending.length || !this.env.FAL_CLEANUP_KEY)) {
           await this.ctx.storage.deleteAll();
-          return {purged: true, providerPurge: JSON.parse(requested.providerPurge)};
+          return {purged: true, providerPurge: previousPurge};
         }
         const jobs = await this.store().records(roomId);
-        const receipts = [...new Set(jobs.flatMap(j => j.providerReceipts ?? []).map(r => r.requestId))];
-        const providerPurge = {deleted: 0, pending: []};
-        const provider = createFalProvider({key: this.env.FAL_KEY, fetchImpl: this.env.testFetch ?? fetch});
+        const receipts = requested.purged ? previousPurge.pending.map(item => item.id) :
+          [...new Set(jobs.flatMap(j => j.providerReceipts ?? []).map(r => r.requestId))];
+        const providerPurge = {deleted: previousPurge?.deleted ?? 0, pending: []};
+        const provider = createFalProvider({key: this.env.FAL_CLEANUP_KEY ?? this.env.FAL_KEY, fetchImpl: this.env.testFetch ?? fetch});
         for (const id of receipts) {
           try {
             const result = await provider.deleteOutputs(id);
