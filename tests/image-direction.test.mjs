@@ -57,6 +57,14 @@ test('normalises the provider response envelope and keeps public direction in Ja
   assert.equal(imageDirectionSummary(observed),observed.summary);
   assert.match(imageDirectionSummary({...observed,summary:'Curly hair and round glasses'}),/特徴を残し/);
 });
+test('reuses extra valid colour and feature observations within bounded prompt limits', () => {
+  const rich={...observed,palette:['black','brown','ivory','pink','cyan','silver'],
+    features:['curly hair','round glasses','smile','black shirt','raised arm','standing pose','figurine base']};
+  const result=parseImageDirection({result:{answer:JSON.stringify(rich)}});
+  assert.deepEqual(result.palette,rich.palette.slice(0,5));
+  assert.deepEqual(result.features,rich.features.slice(0,6));
+  assert.throws(()=>parseImageDirection({answer:JSON.stringify({...rich,palette:[...rich.palette,'https://example.invalid']})}),/IMAGE_DIRECTION_INVALID/);
+});
 test('each image scene keeps common VJ direction and recognisable source traits', () => {
   const prompts = Array.from({length: 6}, (_, sceneIndex) => visualPrompt('ネオンの猫', {sceneIndex, reference: observed}));
   assert.equal(new Set(prompts).size, 6);
