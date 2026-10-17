@@ -94,14 +94,14 @@ test('five songs produce thirty independent scenes and publish early playable as
     await f.runtime.alarm(); assert.equal(f.posted(), 8);
     await f.runtime.alarm(); assert.equal(f.posted(), 16);
     await f.runtime.alarm(); await f.runtime.alarm();
-    const partial = (await f.store.records(f.room.roomId))[0];
+    const partial = (await f.store.records(f.room.roomId)).find(job => job.id === submissions[0]);
     assert.ok(partial.assets.audio); assert.ok(partial.assets.video);
     assert.equal(partial.state, 'READY');
     assert.ok(Object.values(partial.progress).some(state => state !== 'READY'));
     const response = await generationHttp(new Request(`https://test.example/api/rooms/${f.room.roomId}/generation`,
       {headers: {'x-room-owner': f.owner}}), f.env);
     const publicJobs = await response.json();
-    assert.ok(publicJobs.jobs[0].assets.scenes.length >= 1);
+    assert.ok(publicJobs.jobs.find(job => job.id === submissions[0]).assets.scenes.length >= 1);
     assert.ok(!JSON.stringify(publicJobs).includes('rooms/'));
     assert.ok(!JSON.stringify(publicJobs).includes('queue.fal.run'));
     for (let n = 0; n < 24; n++) await f.runtime.alarm();
