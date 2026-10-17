@@ -24,7 +24,7 @@ create table vdj_budget_reservations (
  event_id text not null references vdj_events(id),
  room_id text not null references vdj_rooms(id),
  plan_id text not null,
- cents integer not null check(cents in (50,100,250)),
+ cents integer not null check(cents in (50,100,150,250)),
  created_at_ms integer not null,
  primary key(event_id,plan_id)
 );

@@ -1,5 +1,5 @@
 export const MODELS = Object.freeze({initial: 'fal-ai/stable-audio-3/medium/text-to-audio',
-  continuation: 'fal-ai/stable-audio-3/medium/audio-outpainting', video: 'minimax/h3-max/image-to-video'});
+  continuation: 'fal-ai/stable-audio-3/medium/audio-outpainting', video: 'alibaba/wan-3.0/text-to-video'});
 const deny = () => { throw Error('PROVIDER_RESPONSE_INVALID'); };
 export const sha256 = async value => Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',
   typeof value === 'string' ? new TextEncoder().encode(value) : value)), v => v.toString(16).padStart(2, '0')).join('');
@@ -53,10 +53,10 @@ export function createFalProvider({key, fetchImpl = fetch} = {}) {
       for (const [kind, endpoint] of Object.entries(MODELS)) {
         const rate = price.prices?.find(p => p.endpoint_id === endpoint);
         if (!rate || rate.currency !== 'USD' || rate.unit !== (kind === 'video' ? 'seconds' : 'audios') ||
-            !Number.isFinite(rate.unit_price) || rate.unit_price <= 0 || rate.unit_price > (kind === 'video' ? 0.0345 : 0.10)) throw Error('PROVIDER_PRICE_CHANGED');
+            !Number.isFinite(rate.unit_price) || rate.unit_price <= 0 || rate.unit_price > (kind === 'video' ? 0.0525 : 0.10)) throw Error('PROVIDER_PRICE_CHANGED');
       }
-      if (bill.credits?.currency !== 'USD' || !Number.isFinite(bill.credits.current_balance) || bill.credits.current_balance < 1) throw Error('PROVIDER_BALANCE_REQUIRED');
-      return {balanceUsd: bill.credits.current_balance, maximumCents: 100};
+      if (bill.credits?.currency !== 'USD' || !Number.isFinite(bill.credits.current_balance) || bill.credits.current_balance < 1.5) throw Error('PROVIDER_BALANCE_REQUIRED');
+      return {balanceUsd: bill.credits.current_balance, maximumCents: 150};
     },
     async submit(kind, prompt, contextUrl) {
       const endpoint = kind === 'audio' ? contextUrl ? MODELS.continuation : MODELS.initial : MODELS.video;
@@ -64,8 +64,8 @@ export function createFalProvider({key, fetchImpl = fetch} = {}) {
         output_format: 'wav', enable_prompt_expansion: false, enable_safety_checker: true,
         ...(contextUrl ? {audio_url: contextUrl, extend_seconds_before: 0, extend_seconds_after: 24} : {duration: 24})} :
         {prompt: `Large-screen music visual, smooth continuous movement, no flashing or strobing, no text. ${prompt}`,
-          duration: 12, resolution: '480P', prompt_expansion_mode: 'disabled', enable_safety_checker: true,
-          ...(contextUrl ? {image_url: contextUrl} : {})};
+          duration: 24, resolution: '480p', aspect_ratio: '16:9', audio: false,
+          enable_prompt_expansion: false, enable_thinking: false, enable_safety_checker: true};
       const result = await json('https://queue.fal.run/' + endpoint, 'POST', input);
       const id = result.request_id;
       return {id, endpoint, statusUrl: queueUrl(result.status_url, id), responseUrl: queueUrl(result.response_url, id)};
@@ -83,7 +83,7 @@ export function createFalProvider({key, fetchImpl = fetch} = {}) {
           const target = response.headers.get('location'); await response.body?.cancel();
           if (!target) deny(); url = new URL(target, url); continue;
         }
-        return boundedBytes(response, 20 * 1024 * 1024);
+        return boundedBytes(response, 48 * 1024 * 1024);
       }
       deny();
     },

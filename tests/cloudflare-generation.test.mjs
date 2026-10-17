@@ -35,7 +35,7 @@ async function fixture() {
   const fetchImpl = async (url, options) => {
     requests.push({url: String(url), method: options?.method ?? 'GET'});
     if (String(url).includes('/models/pricing')) return Response.json({prices: Object.entries(MODELS).map(([k, endpoint_id]) =>
-      ({endpoint_id, unit: k === 'video' ? 'seconds' : 'audios', unit_price: k === 'video' ? .0325 : .04, currency: 'USD'}))});
+      ({endpoint_id, unit: k === 'video' ? 'seconds' : 'audios', unit_price: k === 'video' ? .05 : .04, currency: 'USD'}))});
     if (String(url).includes('/account/billing')) return Response.json({credits: {currency: 'USD', current_balance: 10}});
     if (options?.method === 'POST') {
       posted++; if (unknown) throw Error('lost receipt');
@@ -49,8 +49,8 @@ async function fixture() {
   const artifact = async () => ({data: 'AQID', sha256: await sha256(new Uint8Array([1, 2, 3]))});
   const env = {DB: db, MEDIA: media, EVENT_ID: 'judge-test', PUBLIC_ORIGIN: 'https://test.example', GENERATION_ENABLED: 'true', FAL_KEY: 'synthetic-test-value', testFetch: fetchImpl,
     NATIVE_PROCESSOR: {getByName: () => ({fetch: async request => Response.json(request.url.endsWith('audio') ?
-      {audio: await artifact(), context: await artifact(), duration: 24} :
-      {video: await artifact(), frame: await artifact(), duration: request.url.endsWith('inspect') ? 24 : 12, quality: {passed: true}})})}};
+      {audio: await artifact(), context: await artifact(), duration: 24, quality: {passed: true}} :
+      {video: await artifact(), duration: 24, quality: {passed: true}})})}};
   const Class = createGenerationClass(class {}), runtime = new Class({storage}, env);
   env.GENERATION = {getByName: () => runtime};
   return {sqlite, db, room, owner, join, rpc, submit, store, env, runtime, values, requests, posted: () => posted, uncertain: () => { unknown = true; }};
@@ -64,7 +64,7 @@ test('generation reserves at most five sets, is idempotent and enforces global b
     for (const s of submissions.slice(0, 5)) await f.store.enqueue(f.room.roomId, s.submissionId);
     await f.store.enqueue(f.room.roomId, submissions[0].submissionId);
     await assert.rejects(f.store.enqueue(f.room.roomId, submissions[5].submissionId), /JUDGE_BUDGET/);
-    assert.equal(f.sqlite.prepare('select sum(cents) n from vdj_budget_reservations').get().n, 500);
+    assert.equal(f.sqlite.prepare('select sum(cents) n from vdj_budget_reservations').get().n, 750);
     assert.equal((await f.store.records(f.room.roomId)).length, 5);
   } finally { f.sqlite.close(); }
 });
@@ -72,11 +72,11 @@ test('durable generation continues through audio/video, keeps handles private an
   const f = await fixture();
   try {
     const s = await f.submit(); await f.runtime.enqueue(f.room.roomId, [s.submissionId]);
-    for (let i = 0; i < 7; i++) await f.runtime.alarm();
-    assert.equal(f.posted(), 3);
+    for (let i = 0; i < 4; i++) await f.runtime.alarm();
+    assert.equal(f.posted(), 2);
     const [job] = await f.store.records(f.room.roomId); assert.equal(job.state, 'READY');
     assert.equal(job.assets.video.duration, 24);
-    assert.equal(job.providerReceipts.filter(r => r.kind.startsWith('video')).length, 2);
+    assert.equal(job.providerReceipts.filter(r => r.kind === 'video').length, 1);
     assert.ok(!JSON.stringify(job).includes('queue.fal.run'));
     const response = await generationHttp(new Request(`https://test.example/api/rooms/${f.room.roomId}/generated-media/${s.submissionId}/audio`,
       {headers: {'x-room-owner': f.owner}}), f.env);
@@ -84,7 +84,7 @@ test('durable generation continues through audio/video, keeps handles private an
     const denied = await generationHttp(new Request(`https://test.example/api/rooms/${f.room.roomId}/generation`,
       {headers: {'x-room-owner': 'c'.repeat(64)}}), f.env);
     assert.equal(denied.status, 403);
-    await f.runtime.enqueue(f.room.roomId, [s.submissionId]); await f.runtime.alarm(); assert.equal(f.posted(), 3);
+    await f.runtime.enqueue(f.room.roomId, [s.submissionId]); await f.runtime.alarm(); assert.equal(f.posted(), 2);
   } finally { f.sqlite.close(); }
 });
 test('an unknown paid submission is never retried after object recreation', async () => {
@@ -127,6 +127,30 @@ test('provider rejects price changes and private-network media without making a 
   const provider = createFalProvider({key: 'test-only', fetchImpl: async () => { requests++; return Response.json({prices: []}); }});
   await assert.rejects(provider.download('http://127.0.0.1/secret'), /PROVIDER_RESPONSE_INVALID/);
   assert.equal(requests, 0); await assert.rejects(provider.preflight(), /PROVIDER_PRICE_CHANGED/);
+});
+test('Wan receives one explicit 24-second video request with bounded output settings', async () => {
+  let submitted;
+  const provider = createFalProvider({key: 'synthetic-only', fetchImpl: async (url, options) => {
+    submitted = {url, input: JSON.parse(options.body)};
+    const id = crypto.randomUUID();
+    return Response.json({request_id: id, status_url: `https://queue.fal.run/model/requests/${id}/status`, response_url: `https://queue.fal.run/model/requests/${id}`});
+  }});
+  await provider.submit('video', '青い波');
+  assert.equal(submitted.url, 'https://queue.fal.run/alibaba/wan-3.0/text-to-video');
+  assert.deepEqual(submitted.input, {prompt: 'Large-screen music visual, smooth continuous movement, no flashing or strobing, no text. 青い波',
+    duration: 24, resolution: '480p', aspect_ratio: '16:9', audio: false,
+    enable_prompt_expansion: false, enable_thinking: false, enable_safety_checker: true});
+});
+test('budget schema migration preserves existing reservations and permits the new per-set limit', async () => {
+  const f = await fixture();
+  try {
+    f.sqlite.prepare('insert into vdj_budget_reservations values(?,?,?,?,?)').run('judge-test', f.room.roomId, 'prior', 100, Date.now());
+    f.sqlite.exec(await readFile(new URL('../cloud/cloudflare/generation-budget-migration.sql', import.meta.url), 'utf8'));
+    const submission = await f.submit(); await f.store.enqueue(f.room.roomId, submission.submissionId);
+    assert.equal(f.sqlite.prepare('select sum(cents) n from vdj_budget_reservations').get().n, 250);
+    assert.equal(f.sqlite.prepare('select cents from vdj_budget_reservations where plan_id=?').get('prior').cents, 100);
+    assert.deepEqual(f.sqlite.prepare('pragma foreign_key_check').all(), []);
+  } finally { f.sqlite.close(); }
 });
 test('audio schedule has continuous overlap during delayed generation and adopts a ready next track', async () => {
   const intervals = []; let tick;

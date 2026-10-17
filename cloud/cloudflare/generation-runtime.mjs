@@ -1,9 +1,9 @@
-import {createFalProvider, boundedBytes, decodeArtifact, encodeBytes, sha256} from './fal-provider.mjs';
+import {createFalProvider, boundedBytes, decodeArtifact, sha256} from './fal-provider.mjs';
 import {createGenerationStore} from './generation-store.mjs';
 import {createProviderDelivery} from './provider-delivery.mjs';
 
 const terminal = job => ['READY', 'FAILED', 'NEEDS_REVIEW'].includes(job.state);
-const stages = {audio: 'AUDIO', videoA: 'VIDEO_A', videoB: 'VIDEO_B'};
+const stages = {audio: 'AUDIO', video: 'VIDEO'};
 const safeReason = error => ['PROVIDER_PRICE_CHANGED', 'PROVIDER_BALANCE_REQUIRED', 'PROVIDER_PERMISSION_REQUIRED',
   'ROOM_NOT_FOUND', 'PROVIDER_NOT_CONNECTED', 'GENERATION_DISABLED'].includes(error?.message) ? error.message : 'GENERATION_FAILED';
 
@@ -56,8 +56,8 @@ export function createGenerationClass(Base) {
           const provider = createFalProvider({key: this.env.FAL_KEY, fetchImpl: this.env.testFetch ?? fetch});
           if (job.state.endsWith('_SUBMITTING')) {
             job.state = 'NEEDS_REVIEW'; job.reason = 'PROVIDER_SUBMISSION_UNCERTAIN';
-          } else if (['QUEUED', 'AUDIO_READY', 'VIDEO_A_READY'].includes(job.state)) {
-            const kind = job.state === 'QUEUED' ? 'audio' : job.state === 'AUDIO_READY' ? 'videoA' : 'videoB';
+          } else if (['QUEUED', 'AUDIO_READY'].includes(job.state)) {
+            const kind = job.state === 'QUEUED' ? 'audio' : 'video';
             await provider.preflight();
             let contextUrl;
             let sourcePath;
@@ -65,7 +65,6 @@ export function createGenerationClass(Base) {
               const previous = jobs.filter(j => j.state === 'READY').at(-1);
               if (previous) sourcePath = previous.assets.context.path;
             }
-            if (kind === 'videoB') sourcePath = job.assets.frame.path;
             if (sourcePath) contextUrl = (await createProviderDelivery({db: this.env.DB, bucket: this.env.MEDIA,
               eventId: this.env.EVENT_ID, origin: this.env.PUBLIC_ORIGIN}).issue({roomId: job.roomId, path: sourcePath, expiresIn: 3600})).url;
             job.state = stages[kind] + '_SUBMITTING';
@@ -83,7 +82,7 @@ export function createGenerationClass(Base) {
               const result = await provider.result(job[kind + 'Handle']);
               // URLs stay transient. Only vetted bytes and hashes enter R2.
               const bytes = await provider.download(result[kind === 'audio' ? 'audio' : 'video']?.url);
-              const native = this.env.NATIVE_PROCESSOR.getByName('cloud-media-v2');
+              const native = this.env.NATIVE_PROCESSOR.getByName('cloud-media-v3');
               const response = await native.fetch(new Request('http://native.internal/prepare/' + (kind === 'audio' ? 'audio' : 'video'),
                 {method: 'POST', headers: {'content-type': 'application/octet-stream'}, body: bytes, signal: AbortSignal.timeout(150000)}));
               if (response.status === 409 || response.status === 503) {
@@ -91,35 +90,19 @@ export function createGenerationClass(Base) {
                 await this.ctx.storage.setAlarm(Date.now() + 10000); return;
               }
               if (!response.ok) { await response.body?.cancel(); throw Error('NATIVE_PREPARE_FAILED'); }
-              const prepared = JSON.parse(new TextDecoder().decode(await boundedBytes(response, 16 * 1024 * 1024)));
+              const prepared = JSON.parse(new TextDecoder().decode(await boundedBytes(response, 24 * 1024 * 1024)));
+              if (prepared.duration !== 24 || prepared.quality?.passed !== true) throw Error('NATIVE_RESULT_INVALID');
+              job.quality ??= {};
+              job.quality[kind] = prepared.quality;
               if (kind === 'audio') {
                 await this.saveAsset(job, 'audio', prepared.audio, 24);
                 await this.saveAsset(job, 'context', prepared.context, 16);
               } else {
-                await this.saveAsset(job, kind, prepared.video, 12);
-                if (kind === 'videoA') await this.saveAsset(job, 'frame', prepared.frame, 0);
+                await this.saveAsset(job, 'video', prepared.video, 24);
               }
               delete job[kind + 'Handle'];
-              job.state = kind === 'audio' ? 'AUDIO_READY' : kind === 'videoA' ? 'VIDEO_A_READY' : 'JOINING';
+              job.state = kind === 'audio' ? 'AUDIO_READY' : 'READY';
             } else if (!['IN_QUEUE', 'IN_PROGRESS'].includes(status.status)) throw Error('GENERATION_FAILED');
-          } else if (job.state === 'JOINING') {
-            const files = {};
-            for (const [name, asset] of [['first', job.assets.videoA], ['second', job.assets.videoB]]) {
-              const object = await this.env.MEDIA.get(asset.path);
-              if (!object?.body) throw Error('MEDIA_MISSING');
-              const bytes = await boundedBytes(new Response(object.body), 8 * 1024 * 1024);
-              if (await sha256(bytes) !== asset.sha256) throw Error('MEDIA_CHANGED');
-              files[name] = {data: encodeBytes(bytes), sha256: asset.sha256};
-            }
-            const response = await this.env.NATIVE_PROCESSOR.getByName('cloud-media-v2').fetch(new Request('http://native.internal/inspect', {
-              method: 'POST', headers: {'content-type': 'application/json'},
-              body: JSON.stringify({requestId: job.id, action: 'sequence', input: {}, files}), signal: AbortSignal.timeout(150000)}));
-            if (response.status === 409 || response.status === 503) { await response.body?.cancel(); await this.ctx.storage.setAlarm(Date.now() + 10000); return; }
-            if (!response.ok) { await response.body?.cancel(); throw Error('NATIVE_JOIN_FAILED'); }
-            const prepared = JSON.parse(new TextDecoder().decode(await boundedBytes(response, 24 * 1024 * 1024)));
-            if (prepared.duration !== 24 || prepared.quality?.passed !== true) throw Error('NATIVE_RESULT_INVALID');
-            await this.saveAsset(job, 'video', prepared.video, 24);
-            job.state = 'READY';
           }
         } catch (error) {
           if (job.state.endsWith('_SUBMITTING')) { job.state = 'NEEDS_REVIEW'; job.reason = 'PROVIDER_SUBMISSION_UNCERTAIN'; }

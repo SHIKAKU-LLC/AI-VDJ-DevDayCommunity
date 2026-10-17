@@ -3,11 +3,11 @@ import {createServer} from 'node:http';
 import {Readable} from 'node:stream';
 import {pathToFileURL} from 'node:url';
 import {createPortableNativeRuntime} from '../worker/native-runtime.mjs';
-import {prepareMedia, joinVideoParts} from './media-prepare.mjs';
+import {prepareMedia} from './media-prepare.mjs';
 import {assessTechnicalVisual} from '../../integration/qc/visual-policy.mjs';
 
 const bodyLimit = 28 * 1024 * 1024, fileLimit = 8 * 1024 * 1024;
-const shapes = {bootstrap: ['bytes'], reference: ['bytes'], audio: ['bytes', 'sourceBytes', 'contextBytes'], video: ['bytes'], join: ['bytes', 'sourceBytes'], sequence: ['first', 'second']};
+const shapes = {bootstrap: ['bytes'], reference: ['bytes'], audio: ['bytes', 'sourceBytes', 'contextBytes'], video: ['bytes'], join: ['bytes', 'sourceBytes']};
 const digest = bytes => createHash('sha256').update(bytes).digest('hex');
 const output = (value, status = 200) => Response.json(value, {status, headers: {'cache-control': 'no-store'}});
 const failure = code => { throw Error(code); };
@@ -77,7 +77,7 @@ export function createNativeService({authorize, createRuntime} = {}) {
           let size = 0; const parts = [];
           for await (const part of request.body ?? []) {
             size += part.length;
-            if (size > 20 * 1024 * 1024) failure('BODY_TOO_LARGE');
+            if (size > 48 * 1024 * 1024) failure('BODY_TOO_LARGE');
             parts.push(Buffer.from(part));
           }
           const prepared = await prepareMedia(Buffer.concat(parts, size), prepare[1]);
@@ -93,6 +93,7 @@ export function createNativeService({authorize, createRuntime} = {}) {
             const bytes = Buffer.from(prepared.video.data, 'base64');
             const measured = await runtime.native.inspectVideo({bytes, inputDigest: digest(bytes)});
             if (!measured.fullyDecoded || measured.hasAudioTrack || measured.width !== 854 || measured.height !== 480 ||
+                Math.abs(measured.durationSeconds - 24) > .05 || measured.decodedFrames !== 576 ||
                 !assessTechnicalVisual(measured).passed) failure('RESULT_INVALID');
             prepared.quality = {passed: true, decodedFrames: measured.decodedFrames};
           }
@@ -108,15 +109,6 @@ export function createNativeService({authorize, createRuntime} = {}) {
         }
         const {action, input, files, requestId} = await decode(request);
         runtime ??= await createRuntime();
-        if (action === 'sequence') {
-          const prepared = await joinVideoParts(files.first, files.second);
-          const video = Buffer.from(prepared.video.data, 'base64');
-          const measured = await runtime.native.inspectVideo({bytes: video, inputDigest: digest(video)});
-          if (!measured.fullyDecoded || measured.hasAudioTrack || Math.abs(measured.durationSeconds - 24) > .05 ||
-              measured.decodedFrames !== 576 || !assessTechnicalVisual(measured).passed) failure('RESULT_INVALID');
-          prepared.quality = {passed: true, decodedFrames: measured.decodedFrames};
-          return output(prepared);
-        }
         const data = {...input, ...files};
         const result = action === 'bootstrap' ? await runtime.inspectBootstrap(files.bytes) :
           action === 'reference' ? await runtime.inspectReference(files.bytes) :

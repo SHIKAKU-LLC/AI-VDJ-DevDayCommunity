@@ -20,7 +20,7 @@ function run(command, args) {
 // Only bounded bytes cross the private Container boundary. ffmpeg never receives
 // a provider URL, arbitrary command, path, filter or argument from a caller.
 export async function prepareMedia(bytes, kind, {ffmpeg = 'ffmpeg', ffprobe = 'ffprobe'} = {}) {
-  if (!['audio', 'video'].includes(kind) || !bytes.length || bytes.length > 20 * 1024 * 1024) throw Error('MEDIA_INPUT_INVALID');
+  if (!['audio', 'video'].includes(kind) || !bytes.length || bytes.length > 48 * 1024 * 1024) throw Error('MEDIA_INPUT_INVALID');
   const dir = await mkdtemp(join(tmpdir(), 'vdj-prepare-'));
   try {
     const input = join(dir, 'input'), output = join(dir, kind === 'audio' ? 'audio.wav' : 'video.mp4');
@@ -44,32 +44,9 @@ export async function prepareMedia(bytes, kind, {ffmpeg = 'ffmpeg', ffprobe = 'f
       if (audio.length > 5 * 1024 * 1024 || tail.length > 3 * 1024 * 1024) throw Error('MEDIA_RESULT_INVALID');
       return {audio: artifact(audio), context: artifact(tail), duration: 24, sampleRate: 44100, channels: 2};
     }
-    if (duration < 11.9 || duration > 13 || stream.width > 2048 || stream.height > 2048 || stream.width * stream.height > 2200000) throw Error('MEDIA_INPUT_INVALID');
-    await run(ffmpeg, [...common, '-t', '12', '-an', '-vf', 'scale=854:480:force_original_aspect_ratio=decrease,pad=854:480:(ow-iw)/2:(oh-ih)/2,setsar=1,fps=24,tpad=stop_mode=clone:stop_duration=1,trim=duration=12,setpts=PTS-STARTPTS',
+    if (duration < 23.9 || duration > 25 || stream.width > 2048 || stream.height > 2048 || stream.width * stream.height > 2200000) throw Error('MEDIA_INPUT_INVALID');
+    await run(ffmpeg, [...common, '-t', '24', '-an', '-vf', 'scale=854:480:force_original_aspect_ratio=decrease,pad=854:480:(ow-iw)/2:(oh-ih)/2,setsar=1,fps=24,tpad=stop_mode=clone:stop_duration=1,trim=duration=24,setpts=PTS-STARTPTS',
       '-c:v', 'libx264', '-threads', '1', '-preset', 'veryfast', '-crf', '22', '-pix_fmt', 'yuv420p', '-movflags', '+faststart', '-map_metadata', '-1', '-y', output]);
-    const video = await readFile(output);
-    if (video.length > 8 * 1024 * 1024) throw Error('MEDIA_RESULT_INVALID');
-    const frame = join(dir, 'last.jpg');
-    await run(ffmpeg, ['-nostdin', '-v', 'error', '-ss', String(287 / 24), '-i', output, '-frames:v', '1', '-q:v', '2', '-y', frame]);
-    return {video: artifact(video), frame: artifact(await readFile(frame)), duration: 12, width: 854, height: 480};
-  } finally { await rm(dir, {recursive: true, force: true}); }
-}
-
-export async function joinVideoParts(first, second, {ffmpeg = 'ffmpeg', ffprobe = 'ffprobe'} = {}) {
-  if (![first, second].every(b => b.length > 0 && b.length <= 8 * 1024 * 1024)) throw Error('MEDIA_INPUT_INVALID');
-  const dir = await mkdtemp(join(tmpdir(), 'vdj-video-join-'));
-  try {
-    await writeFile(join(dir, 'first.mp4'), first); await writeFile(join(dir, 'second.mp4'), second);
-    for (const name of ['first.mp4', 'second.mp4']) {
-      const meta = JSON.parse(await run(ffprobe, ['-v', 'error', '-show_streams', '-show_format', '-of', 'json', join(dir, name)]));
-      const s = meta.streams?.[0];
-      if (meta.streams?.length !== 1 || s.codec_name !== 'h264' || s.width !== 854 || s.height !== 480 ||
-          Math.abs(Number(meta.format.duration) - 12) > .01 || s.avg_frame_rate !== '24/1') throw Error('MEDIA_INPUT_INVALID');
-    }
-    const output = join(dir, 'joined.mp4');
-    await run(ffmpeg, ['-nostdin', '-v', 'error', '-i', join(dir, 'first.mp4'), '-i', join(dir, 'second.mp4'),
-      '-filter_complex', '[0:v]setpts=PTS-STARTPTS[a];[1:v]setpts=PTS-STARTPTS[b];[a][b]concat=n=2:v=1:a=0[v]',
-      '-map', '[v]', '-an', '-c:v', 'libx264', '-threads', '1', '-preset', 'veryfast', '-crf', '22', '-pix_fmt', 'yuv420p', '-movflags', '+faststart', '-map_metadata', '-1', '-y', output]);
     const video = await readFile(output);
     if (video.length > 16 * 1024 * 1024) throw Error('MEDIA_RESULT_INVALID');
     return {video: artifact(video), duration: 24, width: 854, height: 480};

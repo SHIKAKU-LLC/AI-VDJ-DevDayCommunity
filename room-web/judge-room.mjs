@@ -4,8 +4,7 @@ import {createContinuousPlayer} from './judge-player.mjs';
 const $ = id => document.getElementById(id);
 const token = () => Array.from(crypto.getRandomValues(new Uint8Array(32)), b => b.toString(16).padStart(2, '0')).join('');
 const labels = {QUEUED: '順番待ち', AUDIO_SUBMITTING: '音楽を依頼中', AUDIO_WAIT: '音楽を生成中', AUDIO_READY: '音楽が完成',
-  VIDEO_A_SUBMITTING: '映像の前半を依頼中', VIDEO_A_WAIT: '映像の前半を生成中', VIDEO_A_READY: '映像の前半が完成',
-  VIDEO_B_SUBMITTING: '映像の後半を依頼中', VIDEO_B_WAIT: '映像の後半を生成中', JOINING: '24秒の映像を仕上げ中',
+  VIDEO_SUBMITTING: '映像を依頼中', VIDEO_WAIT: '24秒の映像を生成中',
   READY: '再生準備完了', FAILED: '生成を完了できませんでした', NEEDS_REVIEW: '生成結果の確認が必要です'};
 const messages = {JUDGE_CLOSED: '現在はルームの受付期間外です。', JUDGE_CAPACITY: 'ルーム数の上限に達しました。',
   JUDGE_BUDGET: 'このルームまたはイベントの生成上限に達しました。', GENERATION_DISABLED: '生成サービスを準備しています。',
@@ -59,7 +58,7 @@ function render() {
     state.textContent = job ? labels[job.state] ?? '処理中' : jobs.length >= 5 ? '生成枠の上限に達しました' : '受付済み';
     li.append(name, prompt, state); return li;
   }));
-  $('budget').textContent = `生成枠 ${jobs.length} / 5 セット。運営負担は1セット上限 $1.00、ルーム合計上限 $5.00。`;
+  $('budget').textContent = `生成枠 ${jobs.length} / 5 セット。運営負担は1セット上限 $1.50、ルーム合計上限 $7.50。`;
 }
 async function queuePending() {
   if (!session.owner || !autoGenerate || !capabilities.generation || jobs.length >= 5) return;
@@ -86,7 +85,7 @@ function ensurePlayer() {
     $('play-status').textContent = '再生中 · ' + track.prompt;
   }});
   window.__vdjPlayback = () => ({...player.read(), decodeFailures, meter: {...meter},
-    video: [...videos.values()].filter(v => v.classList.contains('active')).map(v => ({paused: v.paused, readyState: v.readyState, currentTime: v.currentTime, width: v.videoWidth, height: v.videoHeight}))});
+    video: [...videos.values()].filter(v => v.classList.contains('active')).map(v => ({paused: v.paused, readyState: v.readyState, currentTime: v.currentTime, duration: v.duration, width: v.videoWidth, height: v.videoHeight}))});
   })();
   return playerInit;
 }
@@ -190,6 +189,8 @@ try {
   else if (route) { $('welcome').hidden = true; $('join-card').hidden = false; }
 } catch (e) { error(e); }
 setInterval(() => void poll(), 4000);
+// Read-only playback evidence contains no capabilities, media URLs or samples.
+setInterval(() => { if (player) $('stage').dataset.playback = JSON.stringify(window.__vdjPlayback()); }, 1000);
 window.addEventListener('pagehide', () => {
   player?.stop();
   for (const track of loaded.values()) URL.revokeObjectURL(track.blobUrl);

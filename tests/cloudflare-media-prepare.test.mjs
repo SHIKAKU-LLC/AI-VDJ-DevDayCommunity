@@ -29,21 +29,16 @@ test('native preparation produces a playable stereo tail, context and silent 480
       assert.equal(result.streams[0].codec_name, 'pcm_s16le'); assert.equal(result.streams[0].channels, 2);
       assert.equal(Number(result.streams[0].sample_rate), 44100); assert.equal(Number(result.format.duration), kind === 'audio' ? 24 : 16);
     }
-    await exec('ffmpeg', ['-nostdin', '-v', 'error', '-f', 'lavfi', '-i', 'testsrc2=size=320x180:rate=24:duration=12', '-c:v', 'libx264', '-threads', '1', video]);
+    await exec('ffmpeg', ['-nostdin', '-v', 'error', '-f', 'lavfi', '-i', 'testsrc2=size=320x180:rate=24:duration=24', '-c:v', 'libx264', '-threads', '1', video]);
     const videoResponse = await service.fetch(new Request('http://native.internal/prepare/video', {method: 'POST',
       headers: {'content-type': 'application/octet-stream'}, body: await readFile(video)}));
     assert.equal(videoResponse.status, 200);
     const rendered = await videoResponse.json(); assert.equal(rendered.quality.passed, true);
-    assert.equal(rendered.duration, 12); assert.ok(rendered.frame.data.length > 0);
+    assert.equal(rendered.duration, 24); assert.equal(rendered.quality.decodedFrames, 576);
     const path = join(dir, 'ready.mp4'); await writeFile(path, Buffer.from(rendered.video.data, 'base64'));
     const result = JSON.parse((await exec('ffprobe', ['-v', 'error', '-show_streams', '-of', 'json', path])).stdout);
     assert.equal(result.streams.length, 1); assert.equal(result.streams[0].codec_name, 'h264');
     assert.equal(result.streams[0].width, 854); assert.equal(result.streams[0].height, 480);
-    const combinedResponse = await service.fetch(new Request('http://native.internal/inspect', {method: 'POST',
-      headers: {'content-type': 'application/json'}, body: JSON.stringify({requestId: 'test-sequence', action: 'sequence', input: {},
-        files: {first: rendered.video, second: rendered.video}})}));
-    assert.equal(combinedResponse.status, 200);
-    const combined = await combinedResponse.json(); assert.equal(combined.duration, 24); assert.equal(combined.quality.decodedFrames, 576);
     await assert.rejects(prepareMedia(new Uint8Array(0), 'audio'), /MEDIA_INPUT_INVALID/);
   } finally { await service.close(); await rm(dir, {recursive: true, force: true}); }
 });
