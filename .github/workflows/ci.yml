@@ -8,6 +8,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: checks-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   check:
     runs-on: ubuntu-24.04
@@ -45,11 +49,14 @@ jobs:
       - name: Install pinned portable SDK dependencies for synthetic header checks
         run: npm ci --prefix snapshot --ignore-scripts --no-audit --no-fund
       - name: Verify portable runtime, public UI, and durable collect contract
-        run: node --test tests/*.test.mjs snapshot/app/runtime/*.test.mjs integration/mac-host/*.test.mjs
+        run: node --test --test-concurrency=2 tests/*.test.mjs snapshot/app/runtime/*.test.mjs integration/mac-host/*.test.mjs
 
   runtime-analysis:
     runs-on: ubuntu-24.04
     timeout-minutes: 10
+    env:
+      OPENBLAS_NUM_THREADS: 1
+      OMP_NUM_THREADS: 1
     steps:
       - uses: actions/checkout@v4
         with:
@@ -72,17 +79,16 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends ffmpeg
-      - name: Check synthetic DSP and independent evidence
-        env:
-          NUMBA_CACHE_DIR: /tmp/ai-vdj-numba
-          OPENBLAS_NUM_THREADS: 1
-          OMP_NUM_THREADS: 1
+      - name: Check synthetic DSP
+        run: python snapshot/app/runtime/dj-transition-dsp.test.py
+      - name: Check synthetic musical features
+        run: python snapshot/app/runtime/musical-features.test.py
+      - name: Check independent evidence
+        run: python snapshot/app/independent-evidence.test.py
+      - name: Check native integration in two isolated processes
         run: |
-          python snapshot/app/runtime/dj-transition-dsp.test.py
-          python snapshot/app/runtime/musical-features.test.py
-          python snapshot/app/independent-evidence.test.py
           VDJ_QC_PYTHON=python VDJ_QC_DSP=snapshot/app/runtime/dj-transition-dsp.py \
-            node --test --test-concurrency=1 \
+            node --test --test-concurrency=2 \
             tests/portable-qc-native.test.mjs \
             tests/prototype-native-pipeline.test.mjs \
             tests/cloud-worker-native.test.mjs \
