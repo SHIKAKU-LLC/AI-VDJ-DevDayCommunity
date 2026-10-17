@@ -3,7 +3,7 @@ import {createGenerationStore} from './generation-store.mjs';
 import {createProviderDelivery} from './provider-delivery.mjs';
 
 import {partKeys, sceneKeys, mediaKind} from './generation-parts.mjs';
-import {observeImage} from './image-direction.mjs';
+import {observeImage, parseImageDirection} from './image-direction.mjs';
 const terminal = part => ['READY', 'FAILED', 'NEEDS_REVIEW', 'CANCELLED'].includes(part.state);
 const retryable = error => ['PROVIDER_UNAVAILABLE', 'PROVIDER_NETWORK_FAILED', 'PROVIDER_TIMEOUT', 'PROVIDER_RATE_LIMITED'].includes(error?.message);
 const safeReason = error => ['PROVIDER_PRICE_CHANGED', 'PROVIDER_BALANCE_REQUIRED', 'PROVIDER_PERMISSION_REQUIRED',
@@ -135,6 +135,14 @@ export function createGenerationClass(Base) {
         const jobs = await this.ctx.storage.get('jobs') ?? [];
         let resumed = 0;
         for (const job of jobs.filter(j => ids.includes(j.id))) {
+          if (job.direction?.state === 'FAILED' && job.direction.reason === 'IMAGE_DIRECTION_INVALID' &&
+              (job.imageResponse || (job.direction.attempts ?? 1) < 3) && !job.providerReceipts?.length &&
+              Object.values(job.parts ?? {}).every(part => part.state === 'CANCELLED')) {
+            job.direction = {state: 'QUEUED', attempts: job.direction.attempts ?? 1};
+            for (const part of Object.values(job.parts)) part.state = 'QUEUED';
+            delete job.reason; summarize(job); await this.store().save(job); resumed++;
+            continue;
+          }
           let resumedAudio = false;
           for (const part of Object.values(job.parts ?? {})) {
             if (part.state !== 'FAILED' || !part.handle || !part.completedAtMs || (part.preparationRetries ?? 0) >= 2) continue;
@@ -188,19 +196,23 @@ export function createGenerationClass(Base) {
         // A lost response may already have been charged. Never buy it again.
         job.direction = {state: 'NEEDS_REVIEW', reason: 'IMAGE_DIRECTION_UNCERTAIN'};
       } else if (job.direction.state === 'QUEUED') {
+        const attempts = (job.direction.attempts ?? 0) + (job.imageResponse ? 0 : 1);
         try {
           if (this.env.IMAGE_DIRECTION_ENABLED !== 'true' || !this.env.AI?.run) throw Error('IMAGE_DIRECTION_DISABLED');
           const object = await this.env.MEDIA.get(job.reference.path);
           if (!object?.body || object.size !== job.reference.byteLength || object.customMetadata?.sha256 !== job.reference.sha256) throw Error('IMAGE_REFERENCE_INVALID');
           const bytes = await boundedBytes(new Response(object.body), 2 * 1024 * 1024);
           if (await sha256(bytes) !== job.reference.sha256) throw Error('IMAGE_REFERENCE_INVALID');
-          job.direction.state = 'ANALYZING'; await persist(job);
-          const plan = await observeImage(this.env.AI, bytes);
-          job.direction = {state: 'READY', plan};
+          job.direction = {state: 'ANALYZING', attempts}; await persist(job);
+          const plan = job.imageResponse ? parseImageDirection(job.imageResponse) : await observeImage(this.env.AI, bytes,
+            async result => {job.imageResponse=result; await persist(job);});
+          job.direction = {state: 'READY', plan, attempts};
+          delete job.imageResponse;
         } catch (error) {
           const uncertain = job.direction.state === 'ANALYZING' && error.message !== 'IMAGE_DIRECTION_INVALID';
           job.direction = {state: uncertain ? 'NEEDS_REVIEW' : 'FAILED',
-            reason: uncertain ? 'IMAGE_DIRECTION_UNCERTAIN' : safeReason(error)};
+            reason: uncertain ? 'IMAGE_DIRECTION_UNCERTAIN' : safeReason(error), attempts,
+            ...(['ANSWER_TYPE','JSON_SYNTAX','OBJECT','FIELDS','KIND','SUBJECT','SUMMARY','FEATURES','PALETTE'].includes(error.diagnostic) ? {diagnostic:error.diagnostic,responseShape:error.responseShape} : {})};
         }
       }
       if (job.direction.state !== 'READY') {

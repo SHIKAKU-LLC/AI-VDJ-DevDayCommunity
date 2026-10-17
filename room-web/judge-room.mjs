@@ -78,7 +78,8 @@ function render() {
       li.append(direction);
     }
     if (session.owner && (job?.state === 'FAILED' || Object.values(job?.progress ?? {}).includes('FAILED'))) {
-      const retry = document.createElement('button'); retry.textContent = '生成済み素材の検査を再試行';
+      const retry = document.createElement('button'); retry.textContent = job.reason === 'IMAGE_DIRECTION_INVALID' ?
+        '画像の演出作成を再試行' : '生成済み素材の検査を再試行';
       retry.onclick = async () => {
         retry.disabled = true;
         try { await request(roomPath('generation'), {retryPreparation: [job.id]}); await poll(); }

@@ -1,6 +1,7 @@
 import {publicAssets, sceneKeys} from './generation-parts.mjs';
 import {createGenerationStore} from './generation-store.mjs';
 import {boundedBytes, sha256, createFalProvider} from './fal-provider.mjs';
+import {imageDirectionSummary} from './image-direction.mjs';
 const answer = (value, status = 200) => Response.json(value, {status, headers: {'cache-control': 'no-store'}});
 export async function generationHttp(request, env) {
   const url = new URL(request.url), match = /^\/api\/rooms\/([a-f0-9-]{36})\/(generation|generated-media)(?:\/([a-f0-9-]{36})\/(audio|video(?:-[1-5])?))?$/.exec(url.pathname);
@@ -32,7 +33,8 @@ export async function generationHttp(request, env) {
       return answer({jobs: jobs.map(job => {
         const {id, prompt, nickname, state, reason, maximumCents, progress, sceneCount = 1} = job;
         return {id, prompt, nickname, state, reason, maximumCents, progress, sceneCount, assets: publicAssets(job),
-          ...(job.direction ? {direction: {state: job.direction.state, summary: job.direction.plan?.summary}} : {})};
+          ...(job.direction ? {direction: {state: job.direction.state,
+            ...(job.direction.plan ? {summary: imageDirectionSummary(job.direction.plan)} : {})}} : {})};
       })});
     }
     if (route === 'generation' && request.method === 'POST' && !jobId) {

@@ -138,6 +138,43 @@ test('short text alone does not call vision; attached image is interpreted once 
   } finally { f.sqlite.close(); }
 });
 
+test('owner can reparse the private cached image answer without another paid inference', async () => {
+  const f = await fixture({flow:true}); let observations=0;
+  try {
+    f.env.IMAGE_DIRECTION_ENABLED='true';
+    f.env.AI={async run(){ observations++; return {answer:observations===1?'not json':JSON.stringify(imagePlan)}; }};
+    await attach(f);
+    const receipt=await f.rpc({op:'submit',room_id:f.room.roomId,capability:f.owner,
+      payload:{nonce:'d'.repeat(64),prompt:'ネオンの猫',nickname:'合成テスト'}});
+    await f.runtime.enqueue(f.room.roomId,[receipt.submissionId]); await f.runtime.alarm();
+    assert.equal(f.posted(),0); assert.equal(f.values.get('jobs')[0].direction.diagnostic,'JSON_SYNTAX');
+    assert.ok(f.values.get('jobs')[0].imageResponse);
+    assert.ok(!JSON.stringify(await f.store.records(f.room.roomId)).includes('imageResponse'));
+    const saved=f.values.get('jobs'); saved[0].imageResponse={answer:JSON.stringify(imagePlan)}; f.values.set('jobs',saved);
+    assert.deepEqual(await f.runtime.retryPreparation(f.room.roomId,[receipt.submissionId]),{resumed:1});
+    await f.runtime.alarm(); await f.runtime.alarm();
+    assert.equal(observations,1); assert.equal(f.posted(),7);
+    assert.ok(!JSON.stringify(await f.store.records(f.room.roomId)).includes('imageResponse'));
+    assert.equal(f.sqlite.prepare('select count(*) n from vdj_budget_reservations').get().n,1);
+    assert.deepEqual(await f.runtime.retryPreparation(f.room.roomId,[receipt.submissionId]),{resumed:0});
+  } finally { f.sqlite.close(); }
+});
+test('invalid cached answers never trigger another paid inference and legacy retries are bounded', async () => {
+  const f=await fixture({flow:true}); let observations=0;
+  try {
+    f.env.IMAGE_DIRECTION_ENABLED='true'; f.env.AI={async run(){observations++;return {answer:'not json'};}};
+    await attach(f);
+    const receipt=await f.rpc({op:'submit',room_id:f.room.roomId,capability:f.owner,
+      payload:{nonce:'d'.repeat(64),prompt:'ネオンの猫',nickname:'合成テスト'}});
+    await f.runtime.enqueue(f.room.roomId,[receipt.submissionId]); await f.runtime.alarm();
+    await f.runtime.retryPreparation(f.room.roomId,[receipt.submissionId]); await f.runtime.alarm();
+    assert.deepEqual(await f.runtime.retryPreparation(f.room.roomId,[receipt.submissionId]),{resumed:1});
+    await f.runtime.alarm();
+    assert.equal(observations,1); assert.equal(f.posted(),0);
+    const saved=f.values.get('jobs'); delete saved[0].imageResponse; saved[0].direction.attempts=3; f.values.set('jobs',saved);
+    assert.deepEqual(await f.runtime.retryPreparation(f.room.roomId,[receipt.submissionId]),{resumed:0});
+  } finally {f.sqlite.close();}
+});
 test('lost image-analysis result is held without another AI call or any paid video request', async () => {
   const f = await fixture({flow: true}); let observations = 0;
   try {
