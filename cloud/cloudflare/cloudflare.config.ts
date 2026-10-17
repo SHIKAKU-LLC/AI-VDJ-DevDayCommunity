@@ -41,7 +41,8 @@ export default defineConfig(({mode}) => {
         GENERATION_ENABLED: bindings.text(process.env.VDJ_GENERATION_ENABLED === 'true' ? 'true' : 'false'),
       },
       observability: {enabled: false},
-      limits: {cpuMs: 1000},
+      // Large validated media responses require more than a tiny API budget.
+      limits: {cpuMs: 30000},
     },
   };
 });
