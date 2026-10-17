@@ -47,7 +47,7 @@ export function createNativeContainerClass(Container) {
           const duration = request.headers.get('x-vdj-duration-seconds') ?? '24';
           const context = request.headers.get('x-vdj-context-seconds') ?? '16';
           const profile = request.headers.get('x-vdj-media-profile') ?? 'legacy';
-          if (!['legacy', 'club-hd-v1'].includes(profile)) return fail('INPUT_INVALID', 400);
+          if (!['legacy', 'club-hd-v1', 'club-flow-v1'].includes(profile)) return fail('INPUT_INVALID', 400);
           if (!(url.pathname === '/prepare/audio' ? ['12', '24', '60'] : ['12', '24']).includes(duration) || !['0', '12', '16'].includes(context)) return fail('INPUT_INVALID', 400);
           headers.set('x-vdj-duration-seconds', duration); headers.set('x-vdj-context-seconds', context); headers.set('x-vdj-media-profile', profile);
         }

@@ -1,5 +1,5 @@
 """Offline trusted decoder. Reads staged copies only; never fetches or generates media."""
-import argparse, hashlib, importlib.util, json, math, os, re, struct, subprocess
+import argparse, hashlib, importlib.util, json, math, os, re, struct, subprocess, threading
 from pathlib import Path
 import numpy as np
 import soundfile as sf
@@ -135,28 +135,44 @@ def join(args,request):
 
 def video(args,request):
     file=Path(args.directory)/'input.mp4'
-    # Decode every frame; metadata-only probing cannot establish media integrity.
-    proc=subprocess.run([args.ffmpeg,'-nostdin','-v','error','-xerror','-protocol_whitelist','file,pipe','-f','mov','-i',str(file),'-map','0:v:0','-an','-vf','format=yuv420p,signalstats,metadata=mode=print:file=-','-f','null','-'],capture_output=True,timeout=90)
-    if proc.returncode: raise ValueError('FULL_VIDEO_DECODE_FAILED')
-    probe=subprocess.run([args.ffprobe,'-v','error','-protocol_whitelist','file,pipe','-f','mov','-count_frames','-show_streams','-show_format','-of','json',str(file)],capture_output=True,check=True,timeout=30)
+    probe=subprocess.run([args.ffprobe,'-v','error','-protocol_whitelist','file,pipe','-f','mov','-show_streams','-show_format','-of','json',str(file)],capture_output=True,check=True,timeout=30)
     info=json.loads(probe.stdout);streams=[s for s in info['streams'] if s['codec_type']=='video']
     if len(streams)!=1: raise ValueError('ONE_VIDEO_STREAM_REQUIRED')
-    s=streams[0];count=int(s.get('nb_read_frames',0));duration=float(s.get('duration',info.get('format',{}).get('duration',0)))
-    if count<1 or not math.isfinite(duration) or duration<=0: raise ValueError('VIDEO_FRAMES_REQUIRED')
-    text=proc.stdout.decode('utf8',errors='strict')
-    averages=[float(x)/255 for x in re.findall(r'lavfi.signalstats.YAVG=([0-9.eE+-]+)',text)]
-    differences=[float(x)/255 for x in re.findall(r'lavfi.signalstats.YDIF=([0-9.eE+-]+)',text)]
-    times=[float(x) for x in re.findall(r'pts_time:([0-9.eE+-]+)',text)]
-    if len(averages)!=count or len(differences)!=count or len(times)!=count: raise ValueError('FULL_FRAME_STATS_REQUIRED')
+    s=streams[0];width=int(s['width']);height=int(s['height']);size=width*height
+    duration=float(s.get('duration',info.get('format',{}).get('duration',0)))
+    if not 0<size<=4096*4096 or not math.isfinite(duration) or duration<=0: raise ValueError('VIDEO_FRAMES_REQUIRED')
+    averages=[];differences=[];previous=None
+    # Decode every luma pixel once. signalstats also computes chroma percentiles
+    # we never use; this bounded stream retains the same full-frame metrics.
+    log=Path(args.directory)/'decode.log'
+    with log.open('wb') as diagnostics:
+        proc=subprocess.Popen([args.ffmpeg,'-nostdin','-v','info','-xerror','-threads','1','-protocol_whitelist','file,pipe','-f','mov','-i',str(file),'-map','0:v:0','-an','-vf','format=yuv420p,extractplanes=y,showinfo=checksum=0','-f','rawvideo','-pix_fmt','gray','-'],stdout=subprocess.PIPE,stderr=diagnostics)
+        timer=threading.Timer(90,proc.kill);timer.start()
+        try:
+            while True:
+                raw=proc.stdout.read(size)
+                if not raw: break
+                if len(raw)!=size or len(averages)>=18000: raise ValueError('FULL_FRAME_STATS_REQUIRED')
+                frame=np.frombuffer(raw,dtype=np.uint8)
+                averages.append(float(frame.mean())/255)
+                differences.append(0. if previous is None else float(np.abs(frame.astype(np.int16)-previous).mean())/255)
+                previous=frame.astype(np.int16)
+            if proc.wait(): raise ValueError('FULL_VIDEO_DECODE_FAILED')
+        finally:
+            timer.cancel()
+            if proc.poll() is None: proc.kill();proc.wait()
+            proc.stdout.close()
+    count=len(averages)
+    times=[float(x) for x in re.findall(r'pts_time:([0-9.eE+-]+)',log.read_text())]
+    log.unlink()
+    if count<1 or len(times)!=count or any(not math.isfinite(t) for t in times): raise ValueError('FULL_FRAME_STATS_REQUIRED')
     jumps=[times[i] for i in range(1,count) if abs(averages[i]-averages[i-1])>.25]
     maximum=max([sum(t-1 < x <= t for x in jumps) for t in jumps]+[0])
-    # yuv420p commonly uses limited-range luma (black16, white235). These
-    # thresholds also include full-range black/white; do not test only 0/255.
     stats={'method':'full-frame-luma-motion-v1','frames':count,'nearBlackFraction':sum(x<.08 for x in averages)/count,
       'nearWhiteFraction':sum(x>.90 for x in averages)/count,'meanMotion':sum(differences[1:])/max(1,count-1),
       'maximumLargeLumaTransitionsPerSecond':maximum}
     return {'method':VERSION,'inputDigest':request['inputDigest'],'rawSha256':sha(file),'fullyDecoded':True,'decodedFrames':count,'technicalStats':stats,
-      'width':int(s['width']),'height':int(s['height']),'durationSeconds':duration,'hasAudioTrack':any(t['codec_type']=='audio' for t in info['streams']),
+      'width':width,'height':height,'durationSeconds':duration,'hasAudioTrack':any(t['codec_type']=='audio' for t in info['streams']),
       'displayRotation':s.get('tags',{}).get('rotate','0')}
 
 if __name__=='__main__':

@@ -2,7 +2,7 @@ import {createFalProvider, boundedBytes, decodeArtifact, sha256} from './fal-pro
 import {createGenerationStore} from './generation-store.mjs';
 import {createProviderDelivery} from './provider-delivery.mjs';
 
-const kinds = ['audio', 'video'];
+import {partKeys, sceneKeys, mediaKind} from './generation-parts.mjs';
 const terminal = part => ['READY', 'FAILED', 'NEEDS_REVIEW', 'CANCELLED'].includes(part.state);
 const retryable = error => ['PROVIDER_UNAVAILABLE', 'PROVIDER_NETWORK_FAILED', 'PROVIDER_TIMEOUT', 'PROVIDER_RATE_LIMITED'].includes(error?.message);
 const safeReason = error => ['PROVIDER_PRICE_CHANGED', 'PROVIDER_BALANCE_REQUIRED', 'PROVIDER_PERMISSION_REQUIRED',
@@ -18,7 +18,7 @@ function upgrade(job) {
   job.videoDuration ??= job.duration;
   if (job.parts?.audio) job.parts.audio.contextSeconds ??= job.parts.audio.handle?.endpoint?.includes('outpainting') ? 16 : 0;
   if (job.parts || terminal(job)) return job;
-  job.parts = Object.fromEntries(kinds.map(kind => {
+  job.parts = Object.fromEntries(partKeys(job).map(kind => {
     const prefix = kind.toUpperCase();
     const state = job.assets?.[kind] ? 'READY' : job.state === prefix + '_SUBMITTING' ? 'SUBMITTING' :
       job[kind + 'Handle'] ? 'WAIT' : 'QUEUED';
@@ -28,23 +28,25 @@ function upgrade(job) {
   delete job.audioHandle; delete job.videoHandle;
   return job;
 }
-const pending = job => job.parts ? kinds.some(kind => !terminal(job.parts[kind])) : !terminal(job);
+const pending = job => job.parts ? partKeys(job).some(kind => !terminal(job.parts[kind])) : !terminal(job);
 function summarize(job) {
   if (!job.parts) return;
-  const parts = kinds.map(kind => job.parts[kind]);
-  job.progress = Object.fromEntries(kinds.map(kind => [kind, job.parts[kind].state]));
-  job.timings = Object.fromEntries(kinds.map(kind => [kind, Object.fromEntries(
-    ['submittedAtMs', 'completedAtMs', 'readyAtMs'].filter(key => job.parts[kind][key] !== undefined)
-      .map(key => [key, job.parts[kind][key]]))]));
-  if (parts.every(terminal)) {
+  const keys = partKeys(job), parts = keys.map(key => job.parts[key]);
+  job.progress = Object.fromEntries(keys.map(key => [key, job.parts[key].state]));
+  job.timings = Object.fromEntries(keys.map(key => [key, Object.fromEntries(
+    ['submittedAtMs', 'completedAtMs', 'readyAtMs'].filter(k => job.parts[key][k] !== undefined)
+      .map(k => [k, job.parts[key][k]]))]));
+  const videos = sceneKeys(job).map(key => job.parts[key]);
+  if (job.parts.audio.state === 'READY' && videos.some(p => p.state === 'READY')) {
+    job.state = 'READY'; delete job.reason;
+  } else if (parts.every(terminal) || ['FAILED', 'NEEDS_REVIEW'].includes(job.parts.audio.state)) {
     const problem = parts.find(p => p.state === 'NEEDS_REVIEW') ?? parts.find(p => p.state === 'FAILED');
-    job.state = problem?.state ?? 'READY';
-    if (problem) job.reason = problem.reason;
+    job.state = problem?.state ?? 'FAILED'; job.reason = problem?.reason ?? 'GENERATION_FAILED';
   } else job.state = 'GENERATING';
 }
 
-// One coordinator per room, up to five sets and two independent provider jobs
-// per set. Small provider requests run together; large media preparation is
+// One coordinator per room, up to five songs and six independent scenes per
+// song. Small provider requests run together; large media preparation is
 // serialized so five downloads/transcodes cannot exhaust the Worker heap.
 export function createGenerationClass(Base) {
   return class GenerationRoom extends Base {
@@ -86,17 +88,17 @@ export function createGenerationClass(Base) {
         return {purged: true, providerPurge};
       });
     }
-    async saveAsset(job, name, artifact, duration) {
+    async saveAsset(job, name, artifact, duration, dimensions = {}) {
       await this.store().active(job.roomId);
-      const limit = name === 'video' ? 16 : name === 'audio' ? 12 : 3;
+      const limit = name.startsWith('video') ? 16 : name === 'audio' ? 12 : 3;
       const decoded = decodeArtifact(artifact, limit * 1024 * 1024), hash = await sha256(decoded);
       if (hash !== artifact.sha256) throw Error('NATIVE_RESULT_INVALID');
       const path = 'rooms/' + await sha256(JSON.stringify(job.roomId)) + '/assets/' + hash + '.media';
-      const contentType = name === 'video' ? 'video/mp4' : 'audio/wav';
+      const contentType = name.startsWith('video') ? 'video/mp4' : 'audio/wav';
       if (!await this.env.MEDIA.head(path)) await this.env.MEDIA.put(path, decoded,
         {onlyIf: {etagDoesNotMatch: '*'}, httpMetadata: {contentType}, customMetadata: {sha256: hash}});
       job.assets ??= {};
-      job.assets[name] = {...(name === 'video' ? {width: job.mediaProfile === 'club-hd-v1' ? 1920 : 854, height: job.mediaProfile === 'club-hd-v1' ? 1080 : 480} : {}), path, sha256: hash, byteLength: decoded.length, contentType, duration};
+      job.assets[name] = {...(name.startsWith('video') ? dimensions : {}), path, sha256: hash, byteLength: decoded.length, contentType, duration};
     }
     async enqueue(roomId, submissionIds) {
       return this.locked(async () => {
@@ -135,13 +137,13 @@ export function createGenerationClass(Base) {
         return {resumed};
       });
     }
-    async prepare(job, kind, provider) {
-      const part = job.parts[kind];
+    async prepare(job, key, provider) {
+      const kind = mediaKind(key), part = job.parts[key];
       const result = await provider.result(part.handle);
       // URLs stay transient. Only vetted bytes and hashes enter R2.
       const bytes = await provider.download(result[kind]?.url);
       const duration = kind === 'audio' ? job.duration : job.videoDuration;
-      const native = this.env.NATIVE_PROCESSOR.getByName('cloud-media-v7');
+      const native = this.env.NATIVE_PROCESSOR.getByName('cloud-media-v8');
       const response = await native.fetch(new Request('http://native.internal/prepare/' + kind,
         {method: 'POST', headers: {'content-type': 'application/octet-stream', 'x-vdj-duration-seconds': String(duration),
           'x-vdj-context-seconds': String(part.contextSeconds ?? 0), 'x-vdj-media-profile': job.mediaProfile ?? 'legacy'}, body: bytes, signal: AbortSignal.timeout(150000)}));
@@ -149,11 +151,10 @@ export function createGenerationClass(Base) {
       if (!response.ok) { const problem = await response.json().catch(() => ({})); throw Error(safeReason({message: problem.error})); }
       const prepared = JSON.parse(new TextDecoder().decode(await boundedBytes(response, 24 * 1024 * 1024)));
       if (prepared.duration !== duration || prepared.quality?.passed !== true) throw Error('NATIVE_RESULT_INVALID');
-      if (kind === 'video' && ((prepared.width ?? 854) !== (job.mediaProfile === 'club-hd-v1' ? 1920 : 854) ||
-          (prepared.height ?? 480) !== (job.mediaProfile === 'club-hd-v1' ? 1080 : 480))) throw Error('NATIVE_RESULT_INVALID');
+      if (kind === 'video' && ![[854, 480], [1920, 1080], [1920, 1088]].some(([w, h]) => (prepared.width ?? 854) === w && (prepared.height ?? 480) === h)) throw Error('NATIVE_RESULT_INVALID');
       job.quality ??= {};
-      job.quality[kind] = prepared.quality;
-      await this.saveAsset(job, kind, prepared[kind], duration);
+      job.quality[key] = prepared.quality;
+      await this.saveAsset(job, key, prepared[kind], duration, {width: prepared.width ?? 854, height: prepared.height ?? 480});
       if (kind === 'audio') await this.saveAsset(job, 'context', prepared.context, Math.min(16, job.duration));
       part.state = 'READY'; part.readyAtMs = Date.now(); delete part.handle;
       return true;
@@ -189,7 +190,7 @@ export function createGenerationClass(Base) {
           provider = createFalProvider({key: this.env.FAL_KEY, fetchImpl: this.env.testFetch ?? fetch});
         } catch (error) {
           for (const job of active) {
-            for (const kind of kinds) if (!terminal(job.parts[kind])) {
+            for (const kind of partKeys(job)) if (!terminal(job.parts[kind])) {
               const part = job.parts[kind]; part.state = 'FAILED'; part.reason = safeReason(error);
             }
             await persist(job);
@@ -199,14 +200,14 @@ export function createGenerationClass(Base) {
         // A batch shares the most recent completed musical context. Waiting for
         // each new song's context would serialize the entire batch again.
         const context = jobs.filter(j => j.assets?.context && j.state === 'READY').at(-1)?.assets.context;
-        const advance = async (job, kind) => {
-          const part = job.parts[kind];
+        const advance = async (job, key) => {
+          const kind = mediaKind(key), part = job.parts[key];
           if (terminal(part)) return;
           try {
             if (part.state === 'SUBMITTING') {
               part.state = 'NEEDS_REVIEW'; part.reason = 'PROVIDER_SUBMISSION_UNCERTAIN';
             } else if (part.state === 'QUEUED') {
-              if (kinds.some(k => ['FAILED', 'NEEDS_REVIEW'].includes(job.parts[k].state))) { part.state = 'CANCELLED'; }
+              if (['FAILED', 'NEEDS_REVIEW'].includes(job.parts.audio.state)) { part.state = 'CANCELLED'; }
               else {
                 if (!preflights.has(job.duration)) preflights.set(job.duration, provider.preflight({duration: job.duration}));
                 await preflights.get(job.duration);
@@ -217,7 +218,7 @@ export function createGenerationClass(Base) {
                 part.contextSeconds = contextUrl ? context.duration : 0;
                 part.state = 'SUBMITTING'; await persist(job);
                 // Never automatically retry this POST: a lost receipt is held.
-                part.handle = await provider.submit(kind, job.prompt, contextUrl, {duration: kind === 'audio' ? job.duration : job.videoDuration, mediaProfile: job.mediaProfile ?? 'legacy'});
+                part.handle = await provider.submit(kind, job.prompt, contextUrl, {duration: kind === 'audio' ? job.duration : job.videoDuration, mediaProfile: job.mediaProfile ?? 'legacy', sceneIndex: sceneKeys(job).indexOf(key)});
                 part.state = 'WAIT'; part.submittedAtMs = Date.now();
                 job.providerReceipts ??= [];
                 job.providerReceipts.push({kind, endpoint: part.handle.endpoint, requestId: part.handle.id});
@@ -231,12 +232,18 @@ export function createGenerationClass(Base) {
           } catch (error) { rejectPart(part, error); }
           await persist(job);
         };
-        await Promise.all(active.flatMap(job => kinds.map(kind => advance(job, kind))));
+        const all = active.flatMap(job => partKeys(job).map(key => ({job, key})));
+        const waiting = all.filter(({job, key}) => ['WAIT', 'SUBMITTING'].includes(job.parts[key].state));
+        await Promise.all(waiting.map(({job, key}) => advance(job, key)));
+        const inFlight = all.filter(({job, key}) => ['WAIT', 'SUBMITTING'].includes(job.parts[key].state)).length;
+        const queued = all.filter(({job, key}) => job.parts[key].state === 'QUEUED')
+          .sort((a, b) => partKeys(a.job).indexOf(a.key) - partKeys(b.job).indexOf(b.key));
+        await Promise.all(queued.slice(0, Math.max(0, 8 - inFlight)).map(({job, key}) => advance(job, key)));
         // No provider POST is held behind a media download or native QC request.
         // At most two files per alarm bound duration and memory, and resuming
         // PREPARING after restart only re-reads the existing provider receipt.
         let prepared = 0;
-        for (const job of active) for (const kind of kinds) {
+        for (const {job, key: kind} of [...all].sort((a, b) => partKeys(a.job).indexOf(a.key) - partKeys(b.job).indexOf(b.key))) {
           const part = job.parts[kind];
           if (part.state !== 'PREPARING' || prepared >= 2) continue;
           prepared++;
@@ -245,7 +252,7 @@ export function createGenerationClass(Base) {
           } catch (error) { rejectPart(part, error); }
           await persist(job);
         }
-        if (jobs.some(pending)) await this.ctx.storage.setAlarm(Date.now() + 5000);
+        if (jobs.some(pending)) await this.ctx.storage.setAlarm(Date.now() + (jobs.some(j => partKeys(j).some(k => j.parts?.[k]?.state === 'PREPARING')) ? 100 : 2000));
         else await this.ctx.storage.deleteAlarm();
       });
     }

@@ -20,9 +20,9 @@ function run(command, args) {
 // Only bounded bytes cross the private Container boundary. ffmpeg never receives
 // a provider URL, arbitrary command, path, filter or argument from a caller.
 export async function prepareMedia(bytes, kind, {ffmpeg = 'ffmpeg', ffprobe = 'ffprobe', seconds = 24, contextSeconds = 16, mediaProfile = 'legacy'} = {}) {
-  if (!['legacy', 'club-hd-v1'].includes(mediaProfile) || !['audio', 'video'].includes(kind) || !(kind === 'audio' ? [12, 24, 60] : [12, 24]).includes(seconds) || ![0, 12, 16].includes(contextSeconds) ||
+  if (!['legacy', 'club-hd-v1', 'club-flow-v1'].includes(mediaProfile) || !['audio', 'video'].includes(kind) || !(kind === 'audio' ? [12, 24, 60] : [12, 24]).includes(seconds) || ![0, 12, 16].includes(contextSeconds) ||
       !bytes.length || bytes.length > 48 * 1024 * 1024) throw Error('MEDIA_INPUT_INVALID');
-  const highQuality = mediaProfile === 'club-hd-v1';
+  const highQuality = mediaProfile !== 'legacy';
   const width = highQuality ? 1920 : 854, height = highQuality ? 1080 : 480;
   const audioTone = highQuality ? 'highpass=f=28,bass=g=3:f=85:w=0.7,equalizer=f=250:t=q:w=0.7:g=-1.5,' : '';
   const dir = await mkdtemp(join(tmpdir(), 'vdj-prepare-'));
@@ -50,10 +50,14 @@ export async function prepareMedia(bytes, kind, {ffmpeg = 'ffmpeg', ffprobe = 'f
       return {audio: artifact(audio), context: artifact(tail), duration: seconds, sampleRate: 44100, channels: 2};
     }
     if (duration < seconds - .1 || duration > seconds + 1 || stream.width > 2048 || stream.height > 2048 || stream.width * stream.height > 2200000) throw Error('MEDIA_INPUT_INVALID');
-    await run(ffmpeg, [...common, '-t', String(seconds), '-an', '-vf', `scale=${width}:${height}:force_original_aspect_ratio=decrease,pad=${width}:${height}:(ow-iw)/2:(oh-ih)/2,setsar=1,fps=24,tpad=stop_mode=clone:stop_duration=1,trim=duration=${seconds},setpts=PTS-STARTPTS`,
+    const rate = String(stream.avg_frame_rate).split('/').map(Number);
+    const copyVideo = mediaProfile === 'club-flow-v1' && stream.codec_name === 'h264' && stream.width === 1920 && [1080, 1088].includes(stream.height) && Math.abs(rate[0] / rate[1] - 24) < .001;
+    if (copyVideo) {
+      await run(ffmpeg, [...common, '-map', '0:v:0', '-an', '-frames:v', String(seconds * 24), '-c:v', 'copy', '-movflags', '+faststart', '-map_metadata', '-1', '-y', output]);
+    } else await run(ffmpeg, [...common, '-t', String(seconds), '-an', '-vf', `scale=${width}:${height}:force_original_aspect_ratio=decrease,pad=${width}:${height}:(ow-iw)/2:(oh-ih)/2,setsar=1,fps=24,tpad=stop_mode=clone:stop_duration=1,trim=duration=${seconds},setpts=PTS-STARTPTS`,
       '-c:v', 'libx264', '-threads', '1', '-preset', 'veryfast', '-crf', highQuality ? '18' : '22', '-maxrate', '8M', '-bufsize', '16M', '-pix_fmt', 'yuv420p', '-movflags', '+faststart', '-map_metadata', '-1', '-y', output]);
     const video = await readFile(output);
     if (video.length > 16 * 1024 * 1024) throw Error('MEDIA_RESULT_INVALID');
-    return {video: artifact(video), duration: seconds, width, height};
+    return {video: artifact(video), duration: seconds, width: copyVideo ? stream.width : width, height: copyVideo ? stream.height : height, copiedVideo: copyVideo};
   } finally { await rm(dir, {recursive: true, force: true}); }
 }

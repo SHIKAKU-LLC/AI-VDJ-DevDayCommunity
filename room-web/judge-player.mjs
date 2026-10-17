@@ -1,3 +1,4 @@
+export const mixCurve = fadeIn => Float32Array.from({length: 128}, (_, i) => .7 * (fadeIn ? Math.sin(i / 127 * Math.PI / 2) : Math.cos(i / 127 * Math.PI / 2)));
 // Schedule against the audio clock, not network or JavaScript timer completion.
 // Each source overlaps the next one. Until new media is decoded, repeat the
 // current track; a late/failed generation never removes the playing buffer.
@@ -6,16 +7,21 @@ export function createContinuousPlayer({context, destination = context.destinati
   const sources = new Set(), scheduled = [];
   const crossfade = 1.5;
   function schedule(track, at, fadeIn) {
-    const source = context.createBufferSource(), gain = context.createGain();
+    const source = context.createBufferSource(), gain = context.createGain(), bass = context.createBiquadFilter();
+    bass.type = 'lowshelf'; bass.frequency.value = 110;
     source.buffer = track.buffer;
     const end = at + track.buffer.duration;
-    gain.gain.setValueAtTime(fadeIn ? 0 : 0.8, at);
-    if (fadeIn) gain.gain.linearRampToValueAtTime(0.8, at + crossfade);
-    gain.gain.setValueAtTime(0.8, end - crossfade);
-    gain.gain.linearRampToValueAtTime(0, end);
-    source.connect(gain); gain.connect(destination);
+    gain.gain.setValueAtTime(fadeIn ? 0 : .7, at);
+    if (fadeIn) gain.gain.setValueCurveAtTime(mixCurve(true), at, crossfade);
+    gain.gain.setValueAtTime(.7, end - crossfade);
+    gain.gain.setValueCurveAtTime(mixCurve(false), end - crossfade, crossfade);
+    bass.gain.setValueAtTime(fadeIn ? -18 : 0, at);
+    if (fadeIn) bass.gain.linearRampToValueAtTime(0, at + crossfade / 2);
+    bass.gain.setValueAtTime(0, end - crossfade);
+    bass.gain.linearRampToValueAtTime(-18, end - crossfade / 2);
+    source.connect(bass); bass.connect(gain); gain.connect(destination);
     source.start(at); source.stop(end);
-    sources.add(source); source.onended = () => { sources.delete(source); source.disconnect(); gain.disconnect(); };
+    sources.add(source); source.onended = () => { sources.delete(source); source.disconnect(); bass.disconnect(); gain.disconnect(); };
     scheduled.push({id: track.id, start: at, end});
     if (scheduled.length > 100) scheduled.shift();
     nextAt = end - crossfade;

@@ -1,11 +1,12 @@
 import qrcode from './qr-encoder.mjs';
 import {createContinuousPlayer} from './judge-player.mjs';
+import {createScenePlayer} from './judge-scenes.mjs';
 import {createAudioReactiveVj} from './judge-vj.mjs';
 
 const $ = id => document.getElementById(id);
 const token = () => Array.from(crypto.getRandomValues(new Uint8Array(32)), b => b.toString(16).padStart(2, '0')).join('');
 const labels = {QUEUED: '生成の準備中', GENERATING: '音楽・映像を並行生成中', AUDIO_SUBMITTING: '音楽を依頼中', AUDIO_WAIT: '音楽を生成中', AUDIO_READY: '音楽が完成',
-  VIDEO_SUBMITTING: '映像を依頼中', VIDEO_WAIT: '24秒の映像を生成中',
+  VIDEO_SUBMITTING: '映像を依頼中', VIDEO_WAIT: '映像を生成中',
   READY: '再生準備完了', FAILED: '生成を完了できませんでした', NEEDS_REVIEW: '生成結果の確認が必要です'};
 const messages = {JUDGE_CLOSED: '現在はルームの受付期間外です。', JUDGE_CAPACITY: 'ルーム数の上限に達しました。',
   JUDGE_BUDGET: 'このルームまたはイベントの生成上限に達しました。', GENERATION_DISABLED: '生成サービスを準備しています。',
@@ -17,7 +18,8 @@ const messages = {JUDGE_CLOSED: '現在はルームの受付期間外です。',
   RATE_LIMITED: '少し時間をおいてから送信してください。'};
 let session, snapshot, jobs = [], capabilities, context, player, autoGenerate = true, polling = false, pendingSubmit, submitBusy = false;
 const loaded = new Map(), loadPending = new Set(), videos = new Map();
-let decodeFailures = 0, meter = {}, meterNode, playerInit, vj;
+let decodeFailures = 0, meter = {}, meterNode, playerInit, vj, scenePlayer;
+const sceneLoading = new Map(), sceneUrls = new Map(), sceneAssets = new Map();
 let generationRetryAfterMs = 0, queueBusy = false;
 const route = /^\/join\/([a-f0-9-]{36})$/.exec(location.pathname);
 let invitation = new URLSearchParams(location.search).get('code');
@@ -93,72 +95,127 @@ function ensurePlayer() {
   meterNode = new AudioWorkletNode(context, 'vdj-continuity-meter', {outputChannelCount: [2]});
   meterNode.connect(context.destination); meterNode.port.onmessage = event => { meter = event.data; };
   vj = createAudioReactiveVj({context, input: meterNode, canvas: $('vj-overlay'), videoLayer: $('videos')});
+  scenePlayer = createScenePlayer({clock: () => context.currentTime, onPrepare: scene => prepareScene(scene.id),
+    async onChange(scene, previous, isCurrent) {
+      const video = await prepareScene(scene.id);
+      if (!isCurrent()) return;
+      video.currentTime = 0; await video.play();
+      if (!isCurrent()) { video.pause(); return; }
+      for (const [id, node] of videos) node.classList.toggle('active', id === scene.id);
+      setTimeout(() => {
+        if (previous && !videos.get(previous.id)?.classList.contains('active')) videos.get(previous.id)?.pause();
+        // Keep the active scene and two nearby decoded clips; all other
+        // library entries remain descriptors until their turn approaches.
+        for (const [id, node] of videos) {
+          if (videos.size <= 3) break;
+          if (node.classList.contains('active')) continue;
+          node.pause(); node.removeAttribute('src'); node.load(); node.remove(); videos.delete(id);
+          URL.revokeObjectURL(sceneUrls.get(id)); sceneUrls.delete(id);
+        }
+      }, 800);
+      $('stage-empty').hidden = true;
+    }, onStop() { for (const node of videos.values()) node.pause(); }});
   player = createContinuousPlayer({context, destination: meterNode, onTrack(track) {
-    vj.setTrack(track.id);
-    const video = videos.get(track.id);
-    if (video) {
-      video.currentTime = 0;
-      video.play().then(() => {
-        for (const [id, node] of videos) node.classList.toggle('active', id === track.id);
-        $('stage-empty').hidden = true; $('credit-label').textContent = 'このアイデアから生まれました'; $('credit').textContent = track.nickname;
-      }).catch(() => { $('play-status').textContent = '映像を再生できません。再生ボタンから再開してください。'; });
-    }
+    vj.setTrack(track.id); scenePlayer.setTrack(track.id);
+    $('credit-label').textContent = 'このアイデアから生まれました'; $('credit').textContent = track.nickname;
     $('play-status').textContent = '再生中 · ' + track.prompt;
   }});
-  window.__vdjPlayback = () => ({...player.read(), decodeFailures, meter: {...meter}, visualizer: vj?.read(),
+  window.__vdjPlayback = () => ({...player.read(), decodeFailures, meter: {...meter}, visualizer: vj?.read(), scenes: scenePlayer.read(),
     video: [...videos.values()].filter(v => v.classList.contains('active')).map(v => ({paused: v.paused, readyState: v.readyState, currentTime: v.currentTime, duration: v.duration, width: v.videoWidth, height: v.videoHeight}))});
   })();
   return playerInit;
 }
-async function fetchAsset(job, kind) {
+async function fetchAsset(job, kind, descriptor = job.assets[kind]) {
   const response = await request(roomPath(`generated-media/${job.id}/${kind}`), undefined, {raw: true});
   const bytes = await response.arrayBuffer();
-  const descriptor = job.assets[kind];
   if (bytes.byteLength !== descriptor.byteLength) throw Error('MEDIA_INVALID');
   const hash = Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', bytes)), b => b.toString(16).padStart(2, '0')).join('');
   if (hash !== descriptor.sha256) throw Error('MEDIA_INVALID');
   return bytes;
 }
-async function load(job) {
-  if (loaded.has(job.id) || loadPending.has(job.id)) return;
-  loadPending.add(job.id);
+function updatePlayButton() {
+  if (!player) return;
+  const minimum = jobs.some(j => j.sceneCount > 1) ? 2 : 1;
+  const ready = player.read().ready > 0 && scenePlayer.read().ready >= minimum;
+  $('play').disabled = player.read().running || !ready;
+  if (ready && !player.read().running) $('play-status').textContent = '音楽と映像の準備完了。「再生する」を押してください。';
+}
+async function loadScene(id, trackId, descriptor, fetchBytes) {
+  if (sceneAssets.has(id)) return;
+  await ensurePlayer();
+  if (sceneAssets.has(id)) return;
+  sceneAssets.set(id, {descriptor, fetchBytes});
+  scenePlayer.add({id, trackId, duration: descriptor.duration}); updatePlayButton();
+}
+async function prepareScene(id) {
+  if (videos.has(id)) return videos.get(id);
+  if (sceneLoading.has(id)) return sceneLoading.get(id);
+  const task = decodeScene(id); sceneLoading.set(id, task);
+  try { return await task; } finally { sceneLoading.delete(id); }
+}
+async function decodeScene(id) {
+  const {descriptor, fetchBytes} = sceneAssets.get(id);
+  let blobUrl;
+  let video;
   try {
-    await ensurePlayer();
-    const [audioBytes, videoBytes] = await Promise.all([fetchAsset(job, 'audio'), fetchAsset(job, 'video')]);
-    const buffer = await context.decodeAudioData(audioBytes);
-    const duration = job.assets.audio.duration;
-    const videoDuration = job.assets.video.duration;
-    if (![12, 24, 60].includes(duration) || videoDuration !== (duration === 60 ? 12 : duration) ||
-        Math.abs(buffer.duration - duration) > 0.05 || buffer.numberOfChannels !== 2) throw Error('MEDIA_INVALID');
-    const video = document.createElement('video'); video.muted = true; video.loop = true; video.playsInline = true; video.preload = 'auto';
-    const blobUrl = URL.createObjectURL(new Blob([videoBytes], {type: 'video/mp4'}));
-    video.src = blobUrl; $('videos').append(video);
-    await new Promise((resolve, reject) => {
+    const bytes = await fetchBytes();
+    video = document.createElement('video'); video.muted = true; video.loop = false; video.playsInline = true; video.preload = 'auto';
+    blobUrl = URL.createObjectURL(new Blob([bytes], {type: 'video/mp4'}));
+    const loadedData = new Promise((resolve, reject) => {
       const timeout = setTimeout(() => reject(Error('VIDEO_TIMEOUT')), 20000);
       video.addEventListener('loadeddata', () => { clearTimeout(timeout); resolve(); }, {once: true});
       video.addEventListener('error', () => { clearTimeout(timeout); reject(Error('VIDEO_INVALID')); }, {once: true});
     });
-    if (Math.abs(video.duration - videoDuration) > .1 || ![[854, 480], [1920, 1080]].some(([w, h]) => video.videoWidth === w && video.videoHeight === h) ||
-        video.videoWidth !== (job.assets.video.width ?? 854) || video.videoHeight !== (job.assets.video.height ?? 480)) throw Error('VIDEO_INVALID');
-    videos.set(job.id, video); loaded.set(job.id, {...job, buffer, blobUrl});
-    // Publish to the audio scheduler in submission order even if a later fetch
-    // finishes first. Each audio/video pair must be decoded before adoption.
-    for (const ready of jobs.filter(j => j.state === 'READY')) {
-      if (!loaded.has(ready.id)) break;
-      player.add(loaded.get(ready.id));
-    }
-    $('play').disabled = player.read().running || player.read().ready === 0;
-    if (!player.read().running) $('play-status').textContent = '音楽と映像の準備完了。「再生する」を押してください。';
+    video.src = blobUrl; $('videos').append(video); await loadedData;
+    if (Math.abs(video.duration - descriptor.duration) > .1 ||
+        ![[854,480],[1920,1080],[1920,1088]].some(([w,h]) => video.videoWidth === w && video.videoHeight === h) ||
+        video.videoWidth !== (descriptor.width ?? 854) || video.videoHeight !== (descriptor.height ?? 480)) throw Error('VIDEO_INVALID');
+    videos.set(id, video); sceneUrls.set(id, blobUrl);
+    return video;
+  } catch (error) {
+    if (video) { video.removeAttribute('src'); video.load(); video.remove(); }
+    if (blobUrl) URL.revokeObjectURL(blobUrl); decodeFailures++; throw error;
+  }
+}
+async function load(job) {
+  const scenes = job.assets?.scenes ?? (job.assets?.video ? [{key:'video', ...job.assets.video}] : []);
+  for (const scene of scenes) void loadScene(job.id + ':' + scene.key, job.id, scene, () => fetchAsset(job, scene.key, scene));
+  if (loaded.has(job.id) || loadPending.has(job.id) || !job.assets?.audio) return;
+  loadPending.add(job.id);
+  try {
+    await ensurePlayer(); const buffer = await context.decodeAudioData(await fetchAsset(job, 'audio'));
+    const duration = job.assets.audio.duration;
+    if (![12,24,60].includes(duration) || Math.abs(buffer.duration - duration) > .05 || buffer.numberOfChannels !== 2) throw Error('MEDIA_INVALID');
+    loaded.set(job.id, {...job, buffer});
+    for (const ready of jobs.filter(j => j.assets?.audio)) { if (!loaded.has(ready.id)) break; player.add(loaded.get(ready.id)); }
+    updatePlayButton();
   } catch { decodeFailures++; status('素材を読み込めませんでした。現在の再生を続けながら再確認します。'); }
   finally { loadPending.delete(job.id); }
 }
+let libraryLoaded = false;
+async function loadLibrary() {
+  if (libraryLoaded) return;
+  try {
+    const result = await request(roomPath('scene-library')); libraryLoaded = true;
+    const own = new Set(jobs.flatMap(job => job.assets?.scenes ?? []).map(scene => scene.sha256));
+    for (const scene of result.scenes.filter(scene => !own.has(scene.sha256))) void loadScene('stock:' + scene.sha256, null, scene, async () => {
+      const response = await request(roomPath('library-media/' + scene.sha256), undefined, {raw:true});
+      const bytes = await response.arrayBuffer();
+      const hash = Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',bytes)), b=>b.toString(16).padStart(2,'0')).join('');
+      if (bytes.byteLength !== scene.byteLength || hash !== scene.sha256) throw Error('MEDIA_INVALID');
+      return bytes;
+    });
+  } catch { /* An empty/unavailable stock never interrupts owner media. */ }
+}
+
 async function poll() {
   if (!session || polling) return;
   polling = true;
   try {
     snapshot = await request(roomPath()); jobs = (await request(roomPath('generation'))).jobs; render();
     if (session.owner) {
-      for (const job of jobs.filter(j => j.state === 'READY')) void load(job);
+      for (const job of jobs) void load(job);
+      void loadLibrary();
       // Enqueue can wait behind a media inspection. Keep progress polling,
       // completed playback and new submissions responsive while it waits.
       void queuePending();
@@ -200,10 +257,10 @@ $('accept').onclick = async () => {
 };
 $('copy').onclick = () => navigator.clipboard.writeText(session.joinUrl).then(() => { $('copy').textContent = 'コピーしました'; }).catch(error);
 $('play').onclick = async () => {
-  try { await ensurePlayer(); meterNode.port.postMessage('start'); await player.start(); vj?.start(); $('stop').disabled = false; $('play').disabled = true; } catch (e) { error(e); }
+  try { await ensurePlayer(); meterNode.port.postMessage('start'); await player.start(); scenePlayer.start(); vj?.start(); $('stop').disabled = false; $('play').disabled = true; } catch (e) { error(e); }
 };
 $('stop').onclick = () => {
-  player?.stop(); vj?.stop(); meterNode?.port.postMessage('stop'); for (const node of videos.values()) node.pause();
+  player?.stop(); scenePlayer?.stop(); vj?.stop(); meterNode?.port.postMessage('stop'); for (const node of videos.values()) node.pause();
   $('play').disabled = false; $('stop').disabled = true; $('play-status').textContent = '再生を停止しました。';
 };
 $('fullscreen').onclick = () => $('stage').requestFullscreen().catch(error);
@@ -220,8 +277,8 @@ setInterval(() => void poll(), 4000);
 // Read-only playback evidence contains no capabilities, media URLs or samples.
 setInterval(() => { if (player) $('stage').dataset.playback = JSON.stringify(window.__vdjPlayback()); }, 1000);
 window.addEventListener('pagehide', () => {
-  player?.stop();
-  for (const track of loaded.values()) URL.revokeObjectURL(track.blobUrl);
+  player?.stop(); scenePlayer?.stop();
+  for (const url of sceneUrls.values()) URL.revokeObjectURL(url);
 });
 
 window.addEventListener('pagehide', event => { if (event.persisted) vj?.stop(); else vj?.dispose(); });

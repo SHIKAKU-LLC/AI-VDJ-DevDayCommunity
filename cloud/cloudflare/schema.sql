@@ -24,7 +24,7 @@ create table vdj_budget_reservations (
  event_id text not null references vdj_events(id),
  room_id text not null references vdj_rooms(id),
  plan_id text not null,
- cents integer not null check(cents in (50,100,150,250)),
+ cents integer not null check(cents in (50,100,150,250,1500)),
  created_at_ms integer not null,
  primary key(event_id,plan_id)
 );
@@ -36,4 +36,10 @@ create table vdj_runtime_records (
  version integer not null,
  document text not null check(json_valid(document)),
  primary key(room_id,kind,record_id)
+);
+
+create table if not exists vdj_stock_sources (
+ room_id text primary key references vdj_rooms(id),
+ event_id text not null references vdj_events(id),
+ created_at_ms integer not null
 );

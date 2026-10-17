@@ -11,6 +11,46 @@ import {createPortableNativeRuntime} from '../cloud/worker/native-runtime.mjs';
 import {decodeCompleteWave} from '../integration/runtime/bootstrap.mjs';
 const exec = promisify(execFile);
 
+test('flow profile preserves compatible H264 frames and fully inspects 1088-line output', {skip: !process.env.VDJ_QC_PYTHON}, async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'vdj-remux-test-'));
+  const service = createNativeService({authorize: async () => true,
+    createRuntime: () => createPortableNativeRuntime({python: process.env.VDJ_QC_PYTHON})});
+  try {
+    const path = join(dir, 'source.mp4');
+    await exec('ffmpeg', ['-nostdin', '-v', 'error', '-f', 'lavfi', '-i', 'testsrc2=size=1920x1088:rate=24:duration=12',
+      '-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '25', '-threads', '1', path]);
+    const response = await service.fetch(new Request('http://native.internal/prepare/video', {method: 'POST',
+      headers: {'content-type': 'application/octet-stream', 'x-vdj-duration-seconds': '12', 'x-vdj-media-profile': 'club-flow-v1'},
+      body: await readFile(path)}));
+    assert.equal(response.status, 200);
+    const result = await response.json();
+    assert.equal(result.copiedVideo, true); assert.equal(result.height, 1088);
+    assert.equal(result.quality.decodedFrames, 288); assert.equal(result.quality.passed, true);
+    const output = join(dir, 'output.mp4'); await writeFile(output, Buffer.from(result.video.data, 'base64'));
+    const frameHash = async file => (await exec('ffmpeg', ['-v', 'error', '-i', file, '-map', '0:v:0', '-f', 'hash', '-hash', 'sha256', '-'])).stdout;
+    assert.equal(await frameHash(path), await frameHash(output));
+  } finally { await service.close(); await rm(dir, {recursive: true, force: true}); }
+});
+
+test('full-frame visual inspection retains black, static and rapid-flash rejection', {skip: !process.env.VDJ_QC_PYTHON}, async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'vdj-visual-gates-'));
+  const runtime = await createPortableNativeRuntime({python: process.env.VDJ_QC_PYTHON});
+  try {
+    const {assessTechnicalVisual} = await import('../integration/qc/visual-policy.mjs');
+    for (const [name, filter, reason] of [
+      ['black', 'color=black:size=320x180:rate=24:duration=2', 'UNIFORM_BLACK_OR_WHITE_VIDEO'],
+      ['static', 'color=gray:size=320x180:rate=24:duration=2', 'STATIC_VIDEO_HOLD'],
+      ['flash', "nullsrc=size=320x180:rate=24:duration=2,geq=lum='if(mod(N,2),235,16)':cb=128:cr=128", 'RAPID_LUMA_TRANSITIONS_HOLD'],
+    ]) {
+      const path = join(dir, name + '.mp4');
+      await exec('ffmpeg', ['-nostdin', '-v', 'error', '-f', 'lavfi', '-i', filter, '-c:v', 'libx264', '-threads', '1', path]);
+      const measured = await runtime.native.inspectVideo({bytes: await readFile(path), inputDigest: 'a'.repeat(64)});
+      assert.equal(measured.decodedFrames, 48); assert.equal(measured.fullyDecoded, true);
+      assert.ok(assessTechnicalVisual(measured).reasons.includes(reason));
+    }
+  } finally { await runtime.close(); await rm(dir, {recursive: true, force: true}); }
+});
+
 test('club profile preserves 1080P detail and raises bass relative to the midrange', {skip: !process.env.VDJ_QC_PYTHON}, async () => {
   const dir = await mkdtemp(join(tmpdir(), 'vdj-club-test-'));
   const service = createNativeService({authorize: async () => true,

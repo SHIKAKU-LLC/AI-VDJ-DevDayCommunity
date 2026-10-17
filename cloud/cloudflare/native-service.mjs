@@ -83,7 +83,7 @@ export function createNativeService({authorize, createRuntime} = {}) {
           const seconds = Number(request.headers.get('x-vdj-duration-seconds') ?? 24);
           const contextSeconds = Number(request.headers.get('x-vdj-context-seconds') ?? 16);
           const mediaProfile = request.headers.get('x-vdj-media-profile') ?? 'legacy';
-          if (!['legacy', 'club-hd-v1'].includes(mediaProfile)) failure('INPUT_INVALID');
+          if (!['legacy', 'club-hd-v1', 'club-flow-v1'].includes(mediaProfile)) failure('INPUT_INVALID');
           if (!(prepare[1] === 'audio' ? [12, 24, 60] : [12, 24]).includes(seconds) || ![0, 12, 16].includes(contextSeconds)) failure('INPUT_INVALID');
           const prepared = await prepareMedia(Buffer.concat(parts, size), prepare[1], {seconds, contextSeconds, mediaProfile});
           if (prepare[1] === 'audio') {

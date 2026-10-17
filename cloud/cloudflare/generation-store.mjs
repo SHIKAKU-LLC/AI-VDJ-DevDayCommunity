@@ -53,7 +53,7 @@ export function createGenerationStore({db, eventId}) {
       if (!await query('select plan_id from vdj_budget_reservations where event_id=? and room_id=? and plan_id=?', eventId, roomId, submissionId).first()) fail('JUDGE_BUDGET');
       const submission = document.submissions.find(s => s.submissionId === submissionId);
       const job = {id: submissionId, roomId, prompt: submission.prompt, nickname: submission.nickname,
-        state: 'QUEUED', duration: 60, videoDuration: 12, mediaProfile: DJ_DIRECTION.mediaProfile, createdAtMs: Date.now(), maximumCents: DJ_DIRECTION.maximumCents};
+        state: 'QUEUED', duration: 60, videoDuration: 12, sceneCount: DJ_DIRECTION.sceneCount, mediaProfile: DJ_DIRECTION.mediaProfile, createdAtMs: Date.now(), maximumCents: DJ_DIRECTION.maximumCents};
       await query(`insert into vdj_runtime_records(room_id,kind,record_id,version,document) values(?,'cloud-generation',?,0,?)
         on conflict(room_id,kind,record_id) do nothing`, roomId, submissionId, JSON.stringify(job)).run();
       return (await records(roomId)).find(j => j.id === submissionId);
@@ -61,7 +61,7 @@ export function createGenerationStore({db, eventId}) {
     async save(job) {
       // Provider handles remain in private DO storage. Browser-visible D1 records
       // contain only safe progress, private R2 descriptors and the submitted text.
-      const safe = Object.fromEntries(['id', 'roomId', 'prompt', 'nickname', 'state', 'duration', 'videoDuration', 'mediaProfile', 'createdAtMs', 'maximumCents', 'reason', 'assets', 'quality', 'providerReceipts', 'progress', 'timings'].filter(k => job[k] !== undefined).map(k => [k, job[k]]));
+      const safe = Object.fromEntries(['id', 'roomId', 'prompt', 'nickname', 'state', 'duration', 'videoDuration', 'sceneCount', 'mediaProfile', 'createdAtMs', 'maximumCents', 'reason', 'assets', 'quality', 'providerReceipts', 'progress', 'timings'].filter(k => job[k] !== undefined).map(k => [k, job[k]]));
       await query("update vdj_runtime_records set document=?,version=version+1 where room_id=? and kind='cloud-generation' and record_id=?", JSON.stringify(safe), job.roomId, job.id).run();
     },
   };

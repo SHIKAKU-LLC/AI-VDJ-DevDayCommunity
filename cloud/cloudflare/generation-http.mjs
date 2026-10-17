@@ -1,8 +1,9 @@
+import {publicAssets, sceneKeys} from './generation-parts.mjs';
 import {createGenerationStore} from './generation-store.mjs';
 import {boundedBytes, sha256, createFalProvider} from './fal-provider.mjs';
 const answer = (value, status = 200) => Response.json(value, {status, headers: {'cache-control': 'no-store'}});
 export async function generationHttp(request, env) {
-  const url = new URL(request.url), match = /^\/api\/rooms\/([a-f0-9-]{36})\/(generation|generated-media)(?:\/([a-f0-9-]{36})\/(audio|video))?$/.exec(url.pathname);
+  const url = new URL(request.url), match = /^\/api\/rooms\/([a-f0-9-]{36})\/(generation|generated-media)(?:\/([a-f0-9-]{36})\/(audio|video(?:-[1-5])?))?$/.exec(url.pathname);
   if (!match) return null;
   if (url.origin !== env.PUBLIC_ORIGIN || request.headers.has('origin') && request.headers.get('origin') !== env.PUBLIC_ORIGIN || url.search) return answer({error: 'DENIED'}, 403);
   const [, roomId, route, jobId, kind] = match;
@@ -28,9 +29,10 @@ export async function generationHttp(request, env) {
         const own = new Set(document.submissions.filter(s => s.participantId === actor?.id).map(s => s.submissionId));
         jobs = jobs.filter(j => own.has(j.id));
       }
-      return answer({jobs: jobs.map(({id, prompt, nickname, state, reason, maximumCents, assets, progress}) => ({id, prompt, nickname, state, reason, maximumCents, progress,
-        ...(state === 'READY' ? {assets: Object.fromEntries(['audio', 'video'].map(k => [k, {sha256: assets[k].sha256, duration: assets[k].duration,
-          byteLength: assets[k].byteLength, contentType: assets[k].contentType, ...(k === 'video' ? {width: assets[k].width ?? 854, height: assets[k].height ?? 480} : {})}]))} : {})}))});
+      return answer({jobs: jobs.map(job => {
+        const {id, prompt, nickname, state, reason, maximumCents, progress, sceneCount = 1} = job;
+        return {id, prompt, nickname, state, reason, maximumCents, progress, sceneCount, assets: publicAssets(job)};
+      })});
     }
     if (route === 'generation' && request.method === 'POST' && !jobId) {
       if (request.headers.get('origin') !== env.PUBLIC_ORIGIN || request.headers.get('content-type') !== 'application/json') return answer({error: 'DENIED'}, 403);
@@ -52,8 +54,8 @@ export async function generationHttp(request, env) {
       return answer(result, 202);
     }
     if (route === 'generated-media' && request.method === 'GET' && jobId && kind) {
-      const job = (await store.records(roomId)).find(j => j.id === jobId && j.state === 'READY');
-      if (!job) return answer({error: 'NOT_READY'}, 404);
+      const job = (await store.records(roomId)).find(j => j.id === jobId);
+      if (!job?.assets?.[kind]) return answer({error: 'NOT_READY'}, 404);
       const file = job.assets[kind], object = await env.MEDIA.get(file.path);
       if (!object?.body || object.size !== file.byteLength || object.customMetadata?.sha256 !== file.sha256) return answer({error: 'MEDIA_UNAVAILABLE'}, 503);
       return new Response(object.body, {headers: {'content-type': file.contentType, 'content-length': String(file.byteLength),
@@ -70,4 +72,32 @@ export async function generationHttp(request, env) {
       ...(Number.isInteger(error.providerStatus) ? {providerStatus: error.providerStatus} : {}),
     }, code === 'ACTOR_DENIED' ? 403 : code === 'JUDGE_BUDGET' ? 429 : 503);
   }
+}
+
+
+// Only explicitly approved, non-personal stock rooms can supply fallback scenes.
+export async function sceneLibraryHttp(request, env) {
+  const url = new URL(request.url);
+  const match = /^\/api\/rooms\/([a-f0-9-]{36})\/(scene-library|library-media)(?:\/([a-f0-9]{64}))?$/.exec(url.pathname);
+  if (!match) return null;
+  if (request.method !== 'GET' || url.origin !== env.PUBLIC_ORIGIN || url.search ||
+      request.headers.has('origin') && request.headers.get('origin') !== env.PUBLIC_ORIGIN) return answer({error: 'DENIED'}, 403);
+  try {
+    await createGenerationStore({db: env.DB, eventId: env.EVENT_ID}).authorize(match[1], request.headers.get('x-room-owner'), true);
+    const result = await env.DB.prepare(`select g.document from vdj_runtime_records g
+      join vdj_stock_sources s on s.room_id=g.room_id join vdj_rooms r on r.id=s.room_id
+      where s.event_id=? and g.kind='cloud-generation' and coalesce(json_extract(r.document,'$.purged'),0)=0`).bind(env.EVENT_ID).all();
+    const files = result.results.flatMap(row => {
+      const job = JSON.parse(row.document);
+      return sceneKeys(job).filter(key => job.assets?.[key]).map(key => job.assets[key]);
+    }).slice(0, 50);
+    if (match[2] === 'scene-library' && !match[3]) return answer({scenes: files.map(({sha256, duration, byteLength, contentType, width, height}) =>
+      ({sha256, duration, byteLength, contentType, width, height}))});
+    const file = files.find(f => f.sha256 === match[3]);
+    if (!file) return answer({error: 'NOT_FOUND'}, 404);
+    const object = await env.MEDIA.get(file.path);
+    if (!object?.body || object.size !== file.byteLength || object.customMetadata?.sha256 !== file.sha256) return answer({error: 'MEDIA_UNAVAILABLE'}, 503);
+    return new Response(object.body, {headers: {'content-type': 'video/mp4', 'content-length': String(file.byteLength),
+      'cache-control': 'private, no-store', 'x-content-sha256': file.sha256}});
+  } catch { return answer({error: 'DENIED'}, 403); }
 }

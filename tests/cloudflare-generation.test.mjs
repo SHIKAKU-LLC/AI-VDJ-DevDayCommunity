@@ -6,15 +6,15 @@ import {createD1JudgeStore} from '../cloud/cloudflare/d1-store.mjs';
 import {createD1RoomRpc} from '../cloud/cloudflare/room-api.mjs';
 import {createGenerationStore} from '../cloud/cloudflare/generation-store.mjs';
 import {createGenerationClass} from '../cloud/cloudflare/generation-runtime.mjs';
-import {generationHttp} from '../cloud/cloudflare/generation-http.mjs';
+import {generationHttp, sceneLibraryHttp} from '../cloud/cloudflare/generation-http.mjs';
 import {MODELS, createFalProvider, sha256} from '../cloud/cloudflare/fal-provider.mjs';
 import {createContinuousPlayer} from '../room-web/judge-player.mjs';
 import {MUSIC_NEGATIVE_PROMPT} from '../cloud/cloudflare/creative-direction.mjs';
 
-async function fixture() {
+async function fixture({flow = false} = {}) {
   const sqlite = new DatabaseSync(':memory:');
   sqlite.exec(await readFile(new URL('../cloud/cloudflare/schema.sql', import.meta.url), 'utf8'));
-  sqlite.prepare('insert into vdj_events values(?,1,?,10,5000)').run('judge-test', Date.now() + 3600000);
+  sqlite.prepare('insert into vdj_events values(?,1,?,10,15000)').run('judge-test', Date.now() + 3600000);
   const db = {prepare: sql => ({bind(...args) {
     const s = sqlite.prepare(sql);
     return {async first() { return s.get(...args) ?? null; }, async all() { return {results: s.all(...args)}; },
@@ -62,9 +62,13 @@ async function fixture() {
     NATIVE_PROCESSOR: {getByName: () => ({fetch: async request => Response.json(request.url.endsWith('audio') ?
       {audio: await artifact(), context: await artifact(), duration: Number(request.headers.get('x-vdj-duration-seconds')), quality: {passed: true}} :
       {video: await artifact(), duration: Number(request.headers.get('x-vdj-duration-seconds')),
-        width: request.headers.get('x-vdj-media-profile') === 'club-hd-v1' ? 1920 : 854,
-        height: request.headers.get('x-vdj-media-profile') === 'club-hd-v1' ? 1080 : 480, quality: {passed: true}})})}};
+        width: request.headers.get('x-vdj-media-profile') !== 'legacy' ? 1920 : 854,
+        height: request.headers.get('x-vdj-media-profile') !== 'legacy' ? 1080 : 480, quality: {passed: true}})})}};
   const Class = createGenerationClass(class {}), runtime = new Class({storage}, env);
+  // Existing one-video records remain valid after the multi-scene rollout.
+  if (!flow) runtime.store = () => ({...store, async enqueue(...args) {
+    const job = await store.enqueue(...args); job.sceneCount = 1; await store.save(job); return job;
+  }});
   env.GENERATION = {getByName: () => runtime};
   return {sqlite, db, room, owner, join, rpc, submit, store, env, runtime, values, requests, posted: () => posted, uncertain: () => { unknown = true; }};
 }
@@ -77,8 +81,62 @@ test('generation reserves at most five sets, is idempotent and enforces global b
     for (const s of submissions.slice(0, 5)) await f.store.enqueue(f.room.roomId, s.submissionId);
     await f.store.enqueue(f.room.roomId, submissions[0].submissionId);
     await assert.rejects(f.store.enqueue(f.room.roomId, submissions[5].submissionId), /JUDGE_BUDGET/);
-    assert.equal(f.sqlite.prepare('select sum(cents) n from vdj_budget_reservations').get().n, 1250);
+    assert.equal(f.sqlite.prepare('select sum(cents) n from vdj_budget_reservations').get().n, 7500);
     assert.equal((await f.store.records(f.room.roomId)).length, 5);
+  } finally { f.sqlite.close(); }
+});
+test('five songs produce thirty independent scenes and publish early playable assets without duplicate paid requests', async () => {
+  const f = await fixture({flow: true});
+  try {
+    const submissions = [];
+    for (let n = 0; n < 5; n++) submissions.push((await f.submit()).submissionId);
+    await f.runtime.enqueue(f.room.roomId, submissions);
+    await f.runtime.alarm(); assert.equal(f.posted(), 8);
+    await f.runtime.alarm(); assert.equal(f.posted(), 16);
+    await f.runtime.alarm(); await f.runtime.alarm();
+    const partial = (await f.store.records(f.room.roomId))[0];
+    assert.ok(partial.assets.audio); assert.ok(partial.assets.video);
+    assert.equal(partial.state, 'READY');
+    assert.ok(Object.values(partial.progress).some(state => state !== 'READY'));
+    const response = await generationHttp(new Request(`https://test.example/api/rooms/${f.room.roomId}/generation`,
+      {headers: {'x-room-owner': f.owner}}), f.env);
+    const publicJobs = await response.json();
+    assert.ok(publicJobs.jobs[0].assets.scenes.length >= 1);
+    assert.ok(!JSON.stringify(publicJobs).includes('rooms/'));
+    assert.ok(!JSON.stringify(publicJobs).includes('queue.fal.run'));
+    for (let n = 0; n < 24; n++) await f.runtime.alarm();
+    const jobs = await f.store.records(f.room.roomId);
+    assert.equal(f.posted(), 35);
+    assert.equal(jobs.flatMap(job => job.providerReceipts).filter(r => r.kind === 'video').length, 30);
+    for (const job of jobs) {
+      assert.equal(job.sceneCount, 6);
+      assert.ok(Object.values(job.progress).every(state => state === 'READY'));
+      assert.equal(Object.keys(job.assets).filter(key => key.startsWith('video')).length, 6);
+    }
+    await f.runtime.enqueue(f.room.roomId, submissions); await f.runtime.alarm(); assert.equal(f.posted(), 35);
+  } finally { f.sqlite.close(); }
+});
+test('fallback library exposes only approved source rooms to authenticated owners', async () => {
+  const f = await fixture({flow: true});
+  try {
+    const submission = await f.submit(); await f.runtime.enqueue(f.room.roomId, [submission.submissionId]);
+    for (let n = 0; n < 8; n++) await f.runtime.alarm();
+    const url = `https://test.example/api/rooms/${f.room.roomId}/scene-library`;
+    const request = () => new Request(url, {headers: {'x-room-owner': f.owner}});
+    assert.deepEqual(await (await sceneLibraryHttp(request(), f.env)).json(), {scenes: []});
+    f.sqlite.prepare('insert into vdj_stock_sources values(?,?,?)').run(f.room.roomId, 'judge-test', Date.now());
+    const result = await (await sceneLibraryHttp(request(), f.env)).json();
+    assert.equal(result.scenes.length, 6);
+    assert.ok(!JSON.stringify(result).includes('rooms/'));
+    assert.equal((await sceneLibraryHttp(new Request(url), f.env)).status, 403);
+    assert.equal((await sceneLibraryHttp(new Request(url, {headers: {'x-room-owner': 'c'.repeat(64)}}), f.env)).status, 403);
+    const media = url.replace('scene-library', 'library-media/' + result.scenes[0].sha256);
+    assert.equal((await sceneLibraryHttp(new Request(media, {headers: {'x-room-owner': f.owner}}), f.env)).status, 200);
+    assert.equal((await sceneLibraryHttp(new Request(media.replace(result.scenes[0].sha256, '0'.repeat(64)),
+      {headers: {'x-room-owner': f.owner}}), f.env)).status, 404);
+    f.sqlite.prepare('insert into vdj_events values(?,1,?,1,15000)').run('other-event', Date.now() + 3600000);
+    f.sqlite.prepare('update vdj_stock_sources set event_id=?').run('other-event');
+    assert.deepEqual(await (await sceneLibraryHttp(request(), f.env)).json(), {scenes: []});
   } finally { f.sqlite.close(); }
 });
 test('durable generation continues through audio/video, keeps handles private and serves only owner media', async () => {
@@ -110,7 +168,7 @@ test('an unknown paid submission is never retried after object recreation', asyn
     assert.equal(f.posted(), 2); assert.equal((await f.store.records(f.room.roomId))[0].state, 'NEEDS_REVIEW');
   } finally { f.sqlite.close(); }
 });
-test('five sets start all ten independent requests before any provider response, with durable markers', async () => {
+test('five legacy sets bound concurrent submissions to eight and retain durable markers', async () => {
   const f = await fixture();
   let release;
   const barrier = new Promise(resolve => { release = resolve; });
@@ -124,17 +182,17 @@ test('five sets start all ten independent requests before any provider response,
       if (options?.method !== 'POST') return base(url, options);
       inFlight++; peak = Math.max(peak, inFlight);
       const saved = f.values.get('jobs');
-      assert.equal(saved.flatMap(j => Object.values(j.parts)).filter(p => p.state === 'SUBMITTING').length, 10);
-      if (inFlight === 10) release();
+      assert.equal(saved.flatMap(j => Object.values(j.parts)).filter(p => p.state === 'SUBMITTING').length >= 1, true);
+      if (inFlight === 8) release();
       await barrier;
       const result = await base(url, options); inFlight--; return result;
     };
     await f.runtime.alarm();
-    assert.equal(peak, 10); assert.equal(f.posted(), 10);
+    assert.equal(peak, 8); assert.equal(f.posted(), 8);
     assert.ok((await f.store.records(f.room.roomId)).every(j => j.state === 'GENERATING'));
-    assert.ok(f.values.get('jobs').every(j => Object.values(j.parts).every(p => p.state === 'WAIT' && p.handle.id)));
+    assert.equal(f.values.get('jobs').flatMap(j => Object.values(j.parts)).filter(p => p.state === 'WAIT' && p.handle.id).length, 8);
     const restarted = new (createGenerationClass(class {}))(f.runtime.ctx, f.env);
-    for (let i = 0; i < 6; i++) await restarted.alarm();
+    for (let i = 0; i < 9; i++) await restarted.alarm();
     assert.ok((await f.store.records(f.room.roomId)).every(j => j.state === 'READY'));
     assert.equal(f.posted(), 10); // recreation/result reads never repurchase
     assert.equal(f.values.get('alarm'), undefined);
@@ -294,7 +352,7 @@ test('generation-only credentials need no billing access and still enforce live 
     return Response.json({prices: Object.entries(MODELS).map(([kind, endpoint_id]) =>
       ({endpoint_id, unit: kind === 'video' ? 'seconds' : 'audios', unit_price: kind === 'video' ? .04 : .04, currency: 'USD'}))});
   }});
-  assert.deepEqual(await provider.preflight(), {maximumCents: 250});
+  assert.deepEqual(await provider.preflight(), {maximumCents: 1500});
 });
 test('H3 Max receives twelve seconds while the music keeps sixty seconds for a full build and peak', async () => {
   const submitted = [];
@@ -306,7 +364,7 @@ test('H3 Max receives twelve seconds while the music keeps sixty seconds for a f
   await provider.submit('video', '光の海'); await provider.submit('audio', '光の海');
   assert.equal(submitted[0].url, 'https://queue.fal.run/minimax/h3-max/text-to-video');
   assert.equal(submitted[0].input.duration, 12); assert.equal(submitted[0].input.resolution, '1080P');
-  assert.equal(submitted[0].input.prompt_expansion_mode, 'quality');
+  assert.equal(submitted[0].input.prompt_expansion_mode, 'balanced');
   assert.equal(submitted[0].input.enable_safety_checker, true);
   assert.equal(submitted[1].input.duration, 60);
   assert.ok(submitted[1].input.prompt.includes('sustain its full energy through seconds 36-60'));
@@ -352,7 +410,7 @@ test('purging a server-revoked room removes media and durable jobs while preserv
     assert.equal((await f.store.records(f.room.roomId)).length, 0);
     assert.equal((await f.env.MEDIA.list({prefix: 'rooms/'})).objects.length, 0);
     assert.equal(f.values.size, 0);
-    assert.equal(f.sqlite.prepare('select sum(cents) n from vdj_budget_reservations').get().n, 250);
+    assert.equal(f.sqlite.prepare('select sum(cents) n from vdj_budget_reservations').get().n, 1500);
     await assert.rejects(f.runtime.enqueue(f.room.roomId, [s.submissionId]), /ROOM_NOT_FOUND/);
     await f.runtime.alarm(); assert.equal(f.posted(), 2);
   } finally { f.sqlite.close(); }
@@ -384,9 +442,9 @@ test('budget schema migration preserves existing reservations and permits the ne
   const f = await fixture();
   try {
     f.sqlite.prepare('insert into vdj_budget_reservations values(?,?,?,?,?)').run('judge-test', f.room.roomId, 'prior', 100, Date.now());
-    f.sqlite.exec(await readFile(new URL('../cloud/cloudflare/generation-budget-migration.sql', import.meta.url), 'utf8'));
+    f.sqlite.exec(await readFile(new URL('../cloud/cloudflare/generation-flow-migration.sql', import.meta.url), 'utf8'));
     const submission = await f.submit(); await f.store.enqueue(f.room.roomId, submission.submissionId);
-    assert.equal(f.sqlite.prepare('select sum(cents) n from vdj_budget_reservations').get().n, 350);
+    assert.equal(f.sqlite.prepare('select sum(cents) n from vdj_budget_reservations').get().n, 1600);
     assert.equal(f.sqlite.prepare('select cents from vdj_budget_reservations where plan_id=?').get('prior').cents, 100);
     assert.deepEqual(f.sqlite.prepare('pragma foreign_key_check').all(), []);
   } finally { f.sqlite.close(); }
@@ -395,7 +453,8 @@ test('audio schedule has continuous overlap during delayed generation and adopts
   const intervals = []; let tick;
   const context = {currentTime: 0, state: 'running', destination: {}, async resume() {},
     createBufferSource: () => ({connect() {}, disconnect() {}, start(t) { this.at = t; }, stop(t) { if (t) intervals.push([this.at, t]); }}),
-    createGain: () => ({connect() {}, disconnect() {}, gain: {setValueAtTime() {}, linearRampToValueAtTime() {}}})};
+    createBiquadFilter: () => ({type:'', frequency:{value:0}, gain:{setValueAtTime(){},linearRampToValueAtTime(){}}, connect(){},disconnect(){}}),
+    createGain: () => ({connect() {}, disconnect() {}, gain: {setValueAtTime() {}, setValueCurveAtTime() {}, linearRampToValueAtTime() {}}})};
   const player = createContinuousPlayer({context, setTimer: fn => { tick = fn; }, clearTimer() {}});
   player.add({id: 'first', buffer: {duration: 24}}); await player.start();
   for (let time = 0; time < 100; time += .1) { context.currentTime = time; if (time > 30) player.add({id: 'second', buffer: {duration: 12}}); tick(); }
@@ -408,7 +467,8 @@ test('a sixty-second song is not interrupted at twelve-second video loop boundar
   let tick;
   const context = {currentTime: 0, state: 'running', destination: {}, async resume() {},
     createBufferSource: () => ({connect() {}, disconnect() {}, start() {}, stop() {}}),
-    createGain: () => ({connect() {}, disconnect() {}, gain: {setValueAtTime() {}, linearRampToValueAtTime() {}}})};
+    createBiquadFilter: () => ({type:'', frequency:{value:0}, gain:{setValueAtTime(){},linearRampToValueAtTime(){}}, connect(){},disconnect(){}}),
+    createGain: () => ({connect() {}, disconnect() {}, gain: {setValueAtTime() {}, setValueCurveAtTime() {}, linearRampToValueAtTime() {}}})};
   const player = createContinuousPlayer({context, setTimer: fn => { tick = fn; }, clearTimer() {}});
   player.add({id: 'build-and-peak', buffer: {duration: 60}});
   player.add({id: 'next', buffer: {duration: 60}});

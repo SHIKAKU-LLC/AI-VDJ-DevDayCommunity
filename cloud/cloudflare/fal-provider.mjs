@@ -67,15 +67,16 @@ export function createFalProvider({key, fetchImpl = fetch} = {}) {
       }
       return {maximumCents: DJ_DIRECTION.maximumCents};
     },
-    async submit(kind, prompt, contextUrl, {duration = kind === 'audio' ? 60 : 12, mediaProfile = DJ_DIRECTION.mediaProfile} = {}) {
+    async submit(kind, prompt, contextUrl, {duration = kind === 'audio' ? 60 : 12, mediaProfile = DJ_DIRECTION.mediaProfile, sceneIndex = 0} = {}) {
       if (!(kind === 'audio' ? [12, 60] : [12]).includes(duration)) throw Error('PROVIDER_DURATION_INVALID');
+      if (kind === 'video' && (!Number.isInteger(sceneIndex) || sceneIndex < 0 || sceneIndex >= DJ_DIRECTION.sceneCount)) throw Error('PROVIDER_SCENE_INVALID');
       const endpoint = kind === 'audio' ? contextUrl ? MODELS.continuation : MODELS.initial : MODELS.video;
       const input = kind === 'audio' ? {prompt: musicPrompt(prompt, {duration}), negative_prompt: MUSIC_NEGATIVE_PROMPT,
         output_format: 'wav', enable_prompt_expansion: false, enable_safety_checker: true,
         ...(contextUrl ? {audio_url: contextUrl, extend_seconds_before: 0, extend_seconds_after: duration} : {duration})} :
-        {prompt: visualPrompt(prompt),
-          duration, resolution: mediaProfile === DJ_DIRECTION.mediaProfile ? '1080P' : '480P', aspect_ratio: '16:9',
-          prompt_expansion_mode: mediaProfile === DJ_DIRECTION.mediaProfile ? 'quality' : 'disabled', enable_safety_checker: true};
+        {prompt: visualPrompt(prompt, {sceneIndex}),
+          duration, resolution: ['club-hd-v1', 'club-flow-v1'].includes(mediaProfile) ? '1080P' : '480P', aspect_ratio: '16:9',
+          prompt_expansion_mode: mediaProfile === 'club-flow-v1' ? 'balanced' : mediaProfile === 'club-hd-v1' ? 'quality' : 'disabled', enable_safety_checker: true};
       const result = await json('https://queue.fal.run/' + endpoint, 'POST', input);
       const id = result.request_id;
       return {id, endpoint, statusUrl: queueUrl(result.status_url, id), responseUrl: queueUrl(result.response_url, id)};
