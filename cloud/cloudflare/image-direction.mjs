@@ -47,6 +47,16 @@ export function parseImageDirection(result) {
   const answer = response.trim().replace(/^```(?:json)?\s*\n([\s\S]*?)\n```$/i, '$1');
   let value;
   try { value = JSON.parse(answer); } catch { throw invalid('JSON_SYNTAX'); }
+  // A model can name more visible colours/features than requested. Preserve
+  // the first bounded observations rather than purchasing a new inference.
+  // Validate every item before truncation so hidden URLs/instructions do not
+  // become an accepted structured result.
+  if (value && typeof value === 'object' && !Array.isArray(value)) {
+    value = {...value};
+    for (const [key, count, length] of [['palette',5,40],['features',6,80]]) {
+      if (Array.isArray(value[key]) && value[key].every(item => text(item,length))) value[key] = value[key].slice(0,count);
+    }
+  }
   try { return validateImageDirection(value); } catch {
     const diagnostic = !value || typeof value !== 'object' ? 'OBJECT' :
       Object.keys(value).sort().join(',') !== 'features,kind,palette,subject,summary' ? 'FIELDS' :
