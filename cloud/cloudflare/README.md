@@ -35,6 +35,21 @@ ContainersのDockerfileもWorkers Builds内で組み立てる。Containersは独
 ビルド用のGitHub連携・Cloudflare権限は対象を確認して設定する。生成用の秘密値はビルド変数に入れず、実行時のSecretとして別に設定する。
 参考: [Containersの配備](https://developers.cloudflare.com/containers/guides/deploy/)、[Workers Buildsの設定](https://developers.cloudflare.com/workers/ci-cd/builds/configuration/)。
 
+### PRのビルド検証
+
+本番Workerの`Builds → Previews Base`では、既定の`wrangler preview`を使用しない。
+既に作成済みのPR用環境は共通設定を引き継ぎ直さないため、対象のPreviewを選び、
+その`Settings → Builds`にも同じ設定を保存する。
+このリポジトリは`cloudflare.config.ts`を使うため、次の設定でPRのビルドと配備前検査を行う。
+
+- ビルド: `npm ci --prefix cloud/cloudflare --no-audit --no-fund && npm run build --prefix cloud/cloudflare`
+- 配備前検査: `cd cloud/cloudflare && npx cf deploy --prebuilt --mode production --dry-run`
+- ビルド変数: `NODE_VERSION=24.22.0`、本番と同じ公開オリジン・D1 ID、`VDJ_EVENT_ID=judge-preview`、`VDJ_GENERATION_ENABLED=false`
+
+ここでは検証だけを行い、Workerの切替、D1の更新、有料生成は行わない。
+実際に操作できる検証環境は、別Workerの`staging`モードを使う。
+設定を保存したら、対象PRの最新コミットでビルドコマンドと検証結果を確認する。
+
 `Dockerfile` と `native-service.mjs` は、既存のPython・ffmpeg検査をContainersから呼ぶための準備。
 通信はサーバー間の認証を必須とし、入力ファイルの上限とハッシュを確認する。同時処理は1件。
 任意のURL、ファイルパス、コマンド、利用者による検査結果の指定は受け付けない。

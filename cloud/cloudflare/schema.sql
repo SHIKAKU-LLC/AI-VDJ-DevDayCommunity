@@ -5,7 +5,7 @@ create table vdj_events (
  enabled integer not null default 0 check(enabled in (0,1)),
  expires_at_ms integer not null,
  maximum_rooms integer not null check(maximum_rooms between 1 and 100),
- maximum_cents integer not null check(maximum_cents between 50 and 20000)
+ maximum_cents integer not null check(maximum_cents between 50 and 37500)
 );
 create table vdj_rooms (
  id text primary key,
