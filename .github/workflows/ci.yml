@@ -31,8 +31,12 @@ jobs:
         run: bash scripts/setup_environment.sh
 
   web-and-room:
-    runs-on: ubuntu-24.04
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-24.04-8core
     timeout-minutes: 10
+    env:
+      OPENBLAS_NUM_THREADS: 1
+      OMP_NUM_THREADS: 1
     steps:
       - uses: actions/checkout@v4
         with:
@@ -44,15 +48,18 @@ jobs:
           cache-dependency-path: |
             qa-tools/package-lock.json
             snapshot/package-lock.json
+      - name: Confirm 8-core runner
+        run: node -e "const os = require('node:os'); const cpu = os.availableParallelism(); console.log(JSON.stringify({cpu, memoryGiB:Math.round(os.totalmem()/2**30)})); if (cpu < 8) process.exit(1)"
       - name: Install pinned local PostgreSQL verification runtime
         run: npm ci --prefix qa-tools --ignore-scripts --no-audit --no-fund
       - name: Install pinned portable SDK dependencies for synthetic header checks
         run: npm ci --prefix snapshot --ignore-scripts --no-audit --no-fund
       - name: Verify portable runtime, public UI, and durable collect contract
-        run: node --test --test-concurrency=2 tests/*.test.mjs snapshot/app/runtime/*.test.mjs integration/mac-host/*.test.mjs
+        run: node --test --test-concurrency=4 tests/*.test.mjs snapshot/app/runtime/*.test.mjs integration/mac-host/*.test.mjs
 
   runtime-analysis:
-    runs-on: ubuntu-24.04
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-24.04-8core
     timeout-minutes: 10
     env:
       OPENBLAS_NUM_THREADS: 1
@@ -71,6 +78,8 @@ jobs:
           node-version: '24'
           cache: npm
           cache-dependency-path: qa-tools/package-lock.json
+      - name: Confirm 8-core runner
+        run: node -e "const os = require('node:os'); const cpu = os.availableParallelism(); console.log(JSON.stringify({cpu, memoryGiB:Math.round(os.totalmem()/2**30)})); if (cpu < 8) process.exit(1)"
       - name: Install pinned offline analysis dependencies
         run: python -m pip install -r qa-tools/runtime-requirements.txt
       - name: Install pinned PostgreSQL runtime for native cloud integration checks
@@ -85,10 +94,10 @@ jobs:
         run: python snapshot/app/runtime/musical-features.test.py
       - name: Check independent evidence
         run: python snapshot/app/independent-evidence.test.py
-      - name: Check native integration in two isolated processes
+      - name: Check native integration in four isolated processes
         run: |
           VDJ_QC_PYTHON=python VDJ_QC_DSP=snapshot/app/runtime/dj-transition-dsp.py \
-            node --test --test-concurrency=2 \
+            node --test --test-concurrency=4 \
             tests/portable-qc-native.test.mjs \
             tests/prototype-native-pipeline.test.mjs \
             tests/cloud-worker-native.test.mjs \
