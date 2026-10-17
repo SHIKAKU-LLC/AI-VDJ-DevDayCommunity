@@ -13,6 +13,9 @@
 !qa-tools/
 !qa-tools/runtime-requirements.txt
 **/node_modules
+**/.cloudflare
+**/.wrangler
+**/.venv
 **/.env*
 **/*.wav
 **/*.mp3

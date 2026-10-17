@@ -5,6 +5,32 @@
 R2の単一素材を生成サービスへ渡す期間限定の取得処理は実装・単体検証済みで、生成処理からの呼出しは未接続。
 受付画面は生成準備中であることを表示し、生成・演奏ボタンを有効にしない。
 
+## 本番の組み立てと実行
+
+本番はCloudflareのWorkers BuildsでGitHubから取得・ビルドし、Workers・D1・R2・Containersで実行する方針。
+Air、Macの常駐プログラム、利用者のDockerには依存しない。利用者・審査員・オーナーはブラウザだけで接続する。
+以下のローカル起動は開発時の任意の確認方法であり、本番の動作条件ではない。
+
+Workers Buildsの設定案（未接続・未配備）:
+
+| 項目 | 設定案 |
+| --- | --- |
+| GitHub | `SHIKAKU-LLC/AI-VDJ-DevDayCommunity` のみ |
+| ルート | リポジトリのルート |
+| Node.js | `NODE_VERSION=24.22.0` |
+| ビルド | `npm ci --prefix cloud/cloudflare && npm run build --prefix cloud/cloudflare` |
+| 配備 | `cd cloud/cloudflare && npx cf deploy --prebuilt --mode production` |
+| 本番ブランチ | `main`。接続開始と公開は別途承認後 |
+
+ContainersのDockerfileもWorkers Builds内で組み立てる。Containersは独立した検証用Workerで動作確認してから本番へ接続する。
+ビルド用のGitHub連携・Cloudflare権限は対象を確認して設定する。生成用の秘密値はビルド変数に入れず、実行時のSecretとして別に設定する。
+参考: [Containersの配備](https://developers.cloudflare.com/containers/guides/deploy/)、[Workers Buildsの設定](https://developers.cloudflare.com/workers/ci-cd/builds/configuration/)。
+
+`Dockerfile` と `native-service.mjs` は、既存のPython・ffmpeg検査をContainersから呼ぶための準備。
+通信はサーバー間の認証を必須とし、入力ファイルの上限とハッシュを確認する。同時処理は1件。
+任意のURL、ファイルパス、コマンド、利用者による検査結果の指定は受け付けない。
+現時点では検査用HTTP処理と実際のPython検査をローカルで確認済み。Cloudflareでのイメージビルド・起動は未検証。
+
 ## ローカルで起動する
 
 Node.js 24とPython 3を使用する。リポジトリのルートで実行する。

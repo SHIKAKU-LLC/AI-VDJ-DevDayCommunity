@@ -112,4 +112,5 @@ jobs:
             tests/cloud-first-e2e.test.mjs \
             tests/cloud-native-continuation.test.mjs \
             tests/cloud-owner-autodj-integration.test.mjs \
+            tests/cloudflare-native-service.test.mjs \
             tests/mac-edge-launch-flow.test.mjs
