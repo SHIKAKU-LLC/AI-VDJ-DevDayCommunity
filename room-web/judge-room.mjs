@@ -2,10 +2,11 @@ import qrcode from './qr-encoder.mjs';
 import {createContinuousPlayer} from './judge-player.mjs';
 import {createScenePlayer} from './judge-scenes.mjs';
 import {createAudioReactiveVj} from './judge-vj.mjs';
+import {prepareReferenceImage} from './judge-image.mjs';
 
 const $ = id => document.getElementById(id);
 const token = () => Array.from(crypto.getRandomValues(new Uint8Array(32)), b => b.toString(16).padStart(2, '0')).join('');
-const labels = {QUEUED: '生成の準備中', GENERATING: '音楽・映像を並行生成中', AUDIO_SUBMITTING: '音楽を依頼中', AUDIO_WAIT: '音楽を生成中', AUDIO_READY: '音楽が完成',
+const labels = {QUEUED: '生成の準備中', DIRECTING: '画像の特徴から演出を作成中', GENERATING: '音楽・映像を並行生成中', AUDIO_SUBMITTING: '音楽を依頼中', AUDIO_WAIT: '音楽を生成中', AUDIO_READY: '音楽が完成',
   VIDEO_SUBMITTING: '映像を依頼中', VIDEO_WAIT: '映像を生成中',
   READY: '再生準備完了', FAILED: '生成を完了できませんでした', NEEDS_REVIEW: '生成結果の確認が必要です'};
 const messages = {JUDGE_CLOSED: '現在はルームの受付期間外です。', JUDGE_CAPACITY: 'ルーム数の上限に達しました。',
@@ -15,12 +16,19 @@ const messages = {JUDGE_CLOSED: '現在はルームの受付期間外です。',
   PROVIDER_AUTHENTICATION_FAILED: '運営側で生成サービスの接続設定を確認する必要があります。',
   PROVIDER_RATE_LIMITED: '生成サービスが混み合っています。しばらく待ってから再確認します。',
   ROOM_NOT_FOUND: 'このルームは終了したか、利用期限を過ぎています。', ACCEPTANCE_OFF: '現在は新しいアイデアの受付を閉じています。',
-  RATE_LIMITED: '少し時間をおいてから送信してください。'};
+  RATE_LIMITED: '少し時間をおいてから送信してください。',
+  IMAGE_FORMAT_INVALID: '画像を読み取れませんでした。JPEG・PNG・WebPの画像を選んでください。',
+  IMAGE_TOO_LARGE: '画像が大きすぎます。小さい画像を選んでください（元画像は8MBまで）。',
+  IMAGE_REFERENCE_LIMIT: 'このルームの画像投稿上限に達しました。画像を外すと文章だけで投稿できます。',
+  IMAGE_DIRECTION_DISABLED: '画像付き生成は準備中です。画像を外すと文章だけで投稿できます。',
+  IMAGE_REFERENCE_CONFLICT: '送信中の画像と一致しません。画像を選び直してください。',
+  IMAGE_REFERENCE_LOCKED: '送信済みの画像は変更できません。新しいアイデアとして投稿してください。'};
 let session, snapshot, jobs = [], capabilities, context, player, autoGenerate = true, polling = false, pendingSubmit, submitBusy = false;
 const loaded = new Map(), loadPending = new Set(), videos = new Map();
 let decodeFailures = 0, meter = {}, meterNode, playerInit, vj, scenePlayer;
 const sceneLoading = new Map(), sceneUrls = new Map(), sceneAssets = new Map();
 let generationRetryAfterMs = 0, queueBusy = false;
+let referenceImage, imageBusy = false, imageVersion = 0;
 const route = /^\/join\/([a-f0-9-]{36})$/.exec(location.pathname);
 let invitation = new URLSearchParams(location.search).get('code');
 if (location.search || location.hash) history.replaceState(null, '', location.pathname);
@@ -64,6 +72,11 @@ function render() {
     state.textContent = job ? labels[job.state] ?? '処理中' : jobs.length >= 5 ? '生成枠の上限に達しました' : '受付済み';
     if (job?.sceneCount > 1) state.textContent += ` · 映像 ${Object.entries(job.progress ?? {}).filter(([key, value]) => key.startsWith('video') && value === 'READY').length} / ${job.sceneCount} 本`;
     li.append(name, prompt, state);
+    if (job?.direction) {
+      const direction = document.createElement('p'); direction.className = 'note';
+      direction.textContent = job.direction.summary ? '画像を生かした演出：' + job.direction.summary : '画像の特徴を読み取り、演出へ組み込みます。';
+      li.append(direction);
+    }
     if (session.owner && (job?.state === 'FAILED' || Object.values(job?.progress ?? {}).includes('FAILED'))) {
       const retry = document.createElement('button'); retry.textContent = '生成済み素材の検査を再試行';
       retry.onclick = async () => {
@@ -242,16 +255,49 @@ $('join').onclick = async () => {
   } catch (e) { error(e); } finally { $('join').disabled = false; }
 };
 $('prompt-form').onsubmit = async event => {
-  event.preventDefault(); if (submitBusy) return;
+  event.preventDefault(); if (submitBusy || imageBusy) return;
   const prompt = $('prompt').value.trim(); if (!prompt) return;
   submitBusy = true; $('submit').disabled = true; $('error').textContent = '';
+  $('reference-image').disabled = true; $('remove-image').disabled = true;
   try {
-    if (!pendingSubmit || pendingSubmit.prompt !== prompt) pendingSubmit = {nonce: token(), prompt, ...(session.owner ? {nickname: 'オーナー'} : {})};
-    await request(roomPath('submissions'), pendingSubmit); pendingSubmit = null;
+    const imageHash = referenceImage?.hash;
+    if (!pendingSubmit || pendingSubmit.prompt !== prompt || pendingSubmit.imageHash !== imageHash) pendingSubmit = {nonce: token(), prompt, imageHash, ...(session.owner ? {nickname: 'オーナー'} : {})};
+    if (referenceImage) {
+      status('画像を受け付けています。演出用の詳しい指示は自動で作成します。');
+      const promptHash = Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(prompt))), b => b.toString(16).padStart(2, '0')).join('');
+      const headers = {'content-type': 'image/png', 'x-vdj-prompt-sha256': promptHash};
+      headers[session.owner ? 'x-room-owner' : 'authorization'] = session.owner ? session.capability : 'Bearer ' + session.capability;
+      const response = await fetch(roomPath('reference-image/' + pendingSubmit.nonce), {method: 'PUT', headers, body: referenceImage.blob, cache: 'no-store', credentials: 'omit'});
+      if (!response.ok) throw Error((await response.json().catch(() => ({}))).error ?? 'IMAGE_UPLOAD_UNAVAILABLE');
+    }
+    const {imageHash: _, ...submission} = pendingSubmit;
+    await request(roomPath('submissions'), submission); pendingSubmit = null; clearReference();
     $('prompt').value = ''; status(session.owner ? autoGenerate ? '受付完了。音楽と映像を生成しています。' :
       '受付完了。自動生成をONにすると音楽と映像を生成します。' : '受付完了。オーナーの画面で音楽と映像を準備します。'); await poll();
-  } catch (e) { error(e); } finally { submitBusy = false; $('submit').disabled = false; }
+  } catch (e) { error(e); } finally {
+    submitBusy = false; $('submit').disabled = false; $('reference-image').disabled = false; $('remove-image').disabled = false;
+  }
 };
+function clearReference() {
+  imageVersion++;
+  if (referenceImage) URL.revokeObjectURL(referenceImage.previewUrl);
+  referenceImage = null; $('reference-image').value = ''; $('image-preview').removeAttribute('src');
+  $('image-preview').hidden = true; $('remove-image').hidden = true; $('image-status').textContent = '';
+}
+$('reference-image').onchange = async () => {
+  const file = $('reference-image').files[0]; clearReference();
+  if (!file) return;
+  const version = imageVersion; imageBusy = true; $('submit').disabled = true; $('error').textContent = '';
+  try {
+    const image = await prepareReferenceImage(file);
+    if (version !== imageVersion) { URL.revokeObjectURL(image.previewUrl); return; }
+    referenceImage = image; $('image-preview').src = image.previewUrl; $('image-preview').hidden = false;
+    $('remove-image').hidden = false; $('image-status').textContent = '添付済み。画像の特徴と共通の世界観から、演出を自動で作ります。';
+  } catch (e) { if (version === imageVersion) error(e); } finally {
+    if (version === imageVersion) { imageBusy = false; $('submit').disabled = submitBusy; }
+  }
+};
+$('remove-image').onclick = clearReference;
 $('generate').onclick = () => { autoGenerate = !autoGenerate; session.autoGenerate = autoGenerate; persist(); render(); if (autoGenerate) void poll(); };
 $('accept').onclick = async () => {
   try { await request(roomPath('control'), {nonce: token(), expectedRevision: snapshot.controlRevision, accepting: !snapshot.accepting}); await poll(); } catch (e) { error(e); }
@@ -268,6 +314,7 @@ $('fullscreen').onclick = () => $('stage').requestFullscreen().catch(error);
 document.addEventListener('keydown', event => { if (event.key.toLowerCase() === 'f' && !['INPUT', 'TEXTAREA'].includes(event.target.tagName) && session?.owner) void $('stage').requestFullscreen(); });
 try {
   capabilities = await request('/api/room-capabilities', undefined, {authenticated: false});
+  $('image-option').hidden = !capabilities.cloud?.imageDirection;
   $('badge').textContent = capabilities.generation ? '受付中' : '準備中';
   $('create').disabled = !capabilities.generation;
   $('welcome-status').textContent = capabilities.generation ? 'インストール不要。ブラウザから始められます。' : '生成サービスを準備しています。しばらくお待ちください。';
@@ -278,6 +325,7 @@ setInterval(() => void poll(), 4000);
 // Read-only playback evidence contains no capabilities, media URLs or samples.
 setInterval(() => { if (player) $('stage').dataset.playback = JSON.stringify(window.__vdjPlayback()); }, 1000);
 window.addEventListener('pagehide', () => {
+  if (referenceImage) URL.revokeObjectURL(referenceImage.previewUrl);
   player?.stop(); scenePlayer?.stop();
   for (const url of sceneUrls.values()) URL.revokeObjectURL(url);
 });

@@ -15,7 +15,7 @@ def build(destination=DESTINATION):
         shutil.rmtree(child) if child.is_dir() else child.unlink()
     # Ship only the cloud interface. The historical owner/native setup pages
     # remain source history, never public assets in the Cloudflare service.
-    names = ['judge-room.html', 'judge-room.css', 'judge-room.mjs', 'judge-player.mjs',
+    names = ['judge-room.html', 'judge-room.css', 'judge-room.mjs', 'judge-image.mjs', 'judge-player.mjs',
              'judge-meter.mjs', 'judge-scenes.mjs', 'judge-vj.mjs', 'qr-encoder.mjs', 'LICENSE.qr.txt']
     files = {name: (ROOT / 'room-web' / name).read_bytes() for name in names}
     for name, content in files.items():

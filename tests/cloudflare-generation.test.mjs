@@ -7,7 +7,9 @@ import {createD1RoomRpc} from '../cloud/cloudflare/room-api.mjs';
 import {createGenerationStore} from '../cloud/cloudflare/generation-store.mjs';
 import {createGenerationClass} from '../cloud/cloudflare/generation-runtime.mjs';
 import {generationHttp, sceneLibraryHttp} from '../cloud/cloudflare/generation-http.mjs';
-import {MODELS, createFalProvider, decodeArtifact, sha256} from '../cloud/cloudflare/fal-provider.mjs';
+import {MODELS, REFERENCE_VIDEO_MODEL, createFalProvider, decodeArtifact, sha256} from '../cloud/cloudflare/fal-provider.mjs';
+import {referenceImageHttp} from '../cloud/cloudflare/reference-image.mjs';
+import {referencePng} from './helpers/reference-png.mjs';
 import {createContinuousPlayer} from '../room-web/judge-player.mjs';
 import {MUSIC_NEGATIVE_PROMPT} from '../cloud/cloudflare/creative-direction.mjs';
 
@@ -44,8 +46,8 @@ async function fixture({flow = false} = {}) {
   let posted = 0, unknown = false;
   const fetchImpl = async (url, options) => {
     requests.push({url: String(url), method: options?.method ?? 'GET'});
-    if (String(url).includes('/models/pricing')) return Response.json({prices: Object.entries(MODELS).map(([k, endpoint_id]) =>
-      ({endpoint_id, unit: k === 'video' ? 'seconds' : 'audios', unit_price: k === 'video' ? .04 : .04, currency: 'USD'}))});
+    if (String(url).includes('/models/pricing')) return Response.json({prices: Object.entries({...MODELS, videoReference: REFERENCE_VIDEO_MODEL}).map(([k, endpoint_id]) =>
+      ({endpoint_id, unit: k.startsWith('video') ? 'seconds' : 'audios', unit_price: .04, currency: 'USD'}))});
     if (String(url).includes('/account/billing')) return Response.json({credits: {currency: 'USD', current_balance: 10}});
     if (options?.method === 'DELETE') return Response.json({cdn_delete_results: []});
     if (options?.method === 'POST') {
@@ -72,6 +74,103 @@ async function fixture({flow = false} = {}) {
   env.GENERATION = {getByName: () => runtime};
   return {sqlite, db, room, owner, join, rpc, submit, store, env, runtime, values, requests, posted: () => posted, uncertain: () => { unknown = true; }};
 }
+
+async function attach(f, {capability = f.owner, nonce = 'd'.repeat(64), prompt = 'ネオンの猫', bytes = referencePng(), digest} = {}) {
+  return referenceImageHttp(new Request(`https://test.example/api/rooms/${f.room.roomId}/reference-image/${nonce}`, {
+    method: 'PUT', headers: new Headers([['origin', 'https://test.example'], ['content-type', 'image/png'],
+      [capability === f.owner ? 'x-room-owner' : 'authorization', capability === f.owner ? capability : 'Bearer ' + capability],
+      ['x-vdj-prompt-sha256', digest ?? await sha256(prompt)]]), body: bytes,
+  }), f.env);
+}
+const imagePlan = {kind: 'figure', subject: 'a stylised figurine', features: ['round glasses'], palette: ['cyan'], summary: '丸い眼鏡の特徴を残します。'};
+
+test('image upload is optional, authorised, bounded, immutable and matched to its submitter and text', async () => {
+  const f = await fixture({flow: true});
+  try {
+    assert.equal((await attach(f)).status, 503);
+    f.env.IMAGE_DIRECTION_ENABLED = 'true'; f.env.AI = {async run() { return {answer: JSON.stringify(imagePlan)}; }};
+    assert.equal((await attach(f, {capability: '0'.repeat(64)})).status, 403);
+    assert.equal((await attach(f, {bytes: new Uint8Array(2*1024*1024+1)})).status, 413);
+    assert.equal((await attach(f)).status, 201); assert.equal((await attach(f)).status, 200);
+    assert.equal((await attach(f, {prompt: '別の言葉'})).status, 409);
+    const receipt = await f.rpc({op: 'submit', room_id: f.room.roomId, capability: f.owner,
+      payload: {nonce: 'd'.repeat(64), prompt: 'ネオンの猫', nickname: '合成テスト'}});
+    await assert.rejects(f.store.enqueue(f.room.roomId, receipt.submissionId), /IMAGE_DIRECTION_DISABLED/);
+    assert.equal(f.sqlite.prepare('select count(*) n from vdj_budget_reservations').get().n, 0);
+    await f.runtime.enqueue(f.room.roomId, [receipt.submissionId]);
+    assert.ok(f.values.get('jobs')[0].reference);
+  } finally { f.sqlite.close(); }
+});
+
+test('short text alone does not call vision; attached image is interpreted once then used for six distinct H3 requests', async () => {
+  const f = await fixture({flow: true}); let observations = 0;
+  try {
+    f.env.IMAGE_DIRECTION_ENABLED = 'true'; f.env.AI = {async run() { observations++; return {answer: JSON.stringify(imagePlan)}; }};
+    await attach(f);
+    const image = await f.rpc({op: 'submit', room_id: f.room.roomId, capability: f.owner,
+      payload: {nonce: 'd'.repeat(64), prompt: 'ネオンの猫', nickname: '合成テスト'}});
+    await f.runtime.enqueue(f.room.roomId, [image.submissionId]);
+    await f.runtime.alarm(); await f.runtime.alarm();
+    assert.equal(observations, 1);
+    assert.equal(f.requests.filter(r => r.method === 'POST' && r.url.includes(REFERENCE_VIDEO_MODEL)).length, 6);
+    const publicState = await (await generationHttp(new Request(`https://test.example/api/rooms/${f.room.roomId}/generation`, {headers: {'x-room-owner': f.owner}}), f.env)).json();
+    assert.equal(publicState.jobs[0].direction.summary, imagePlan.summary);
+    assert.ok(!JSON.stringify(publicState).includes('provider-media'));
+    assert.ok(!JSON.stringify(publicState).includes('actorProof'));
+    assert.ok(!JSON.stringify(publicState).includes('rooms/'));
+    const plain = await f.submit(); await f.runtime.enqueue(f.room.roomId, [plain.submissionId]);
+    for (let n = 0; n < 20; n++) await f.runtime.alarm();
+    assert.equal(observations, 1);
+    assert.equal(f.posted(), 14);
+    assert.equal((await f.store.records(f.room.roomId)).find(j => j.id === plain.submissionId).state, 'READY');
+    f.sqlite.prepare('insert into vdj_stock_sources values(?,?,?)').run(f.room.roomId,'judge-test',Date.now());
+    const library = await (await sceneLibraryHttp(new Request(`https://test.example/api/rooms/${f.room.roomId}/scene-library`,
+      {headers:{'x-room-owner':f.owner}}),f.env)).json();
+    assert.equal(library.scenes.length,6);
+    // Synthetic prepared bytes intentionally hash alike, so inspect the job
+    // selection through distinct markers instead of assuming unique media.
+    const row = f.sqlite.prepare("select document from vdj_runtime_records where kind='cloud-generation' and record_id=?").get(image.submissionId);
+    const marked = JSON.parse(row.document); marked.assets.video.sha256 = 'f'.repeat(64);
+    f.sqlite.prepare("update vdj_runtime_records set document=? where kind='cloud-generation' and record_id=?").run(JSON.stringify(marked),image.submissionId);
+    const after = await (await sceneLibraryHttp(new Request(`https://test.example/api/rooms/${f.room.roomId}/scene-library`,
+      {headers:{'x-room-owner':f.owner}}),f.env)).json();
+    assert.ok(!after.scenes.some(scene=>scene.sha256==='f'.repeat(64)));
+  } finally { f.sqlite.close(); }
+});
+
+test('lost image-analysis result is held without another AI call or any paid video request', async () => {
+  const f = await fixture({flow: true}); let observations = 0;
+  try {
+    f.env.IMAGE_DIRECTION_ENABLED = 'true'; f.env.AI = {async run() { observations++; throw Error('no receipt'); }};
+    await attach(f);
+    const receipt = await f.rpc({op: 'submit', room_id: f.room.roomId, capability: f.owner,
+      payload: {nonce: 'd'.repeat(64), prompt: 'ネオンの猫', nickname: '合成テスト'}});
+    await f.runtime.enqueue(f.room.roomId, [receipt.submissionId]);
+    await f.runtime.alarm(); await f.runtime.alarm();
+    assert.equal(observations, 1); assert.equal(f.posted(), 0);
+    assert.equal(f.values.get('jobs')[0].state, 'NEEDS_REVIEW');
+  } finally { f.sqlite.close(); }
+});
+
+test('participant reference cannot bind to another actor and a changed submitted prompt is rejected before reservation', async () => {
+  const f = await fixture({flow: true});
+  try {
+    f.env.IMAGE_DIRECTION_ENABLED = 'true'; f.env.AI = {async run() { return {answer: JSON.stringify(imagePlan)}; }};
+    const member = 'c'.repeat(64);
+    await f.rpc({op:'join', room_id:f.room.roomId, capability:f.join, payload:{nickname:'参加者', participantCapability:member}});
+    const forged = await generationHttp(new Request(`https://test.example/api/rooms/${f.room.roomId}/generation`,{headers:{'x-room-owner':member}}),f.env);
+    assert.equal(forged.status,403);
+    await attach(f, {capability:member});
+    const ownerReceipt = await f.rpc({op:'submit',room_id:f.room.roomId,capability:f.owner,
+      payload:{nonce:'d'.repeat(64),prompt:'ネオンの猫',nickname:'オーナー'}});
+    const ownerJob = await f.store.enqueue(f.room.roomId,ownerReceipt.submissionId);
+    assert.equal(ownerJob.reference,undefined);
+    const memberReceipt = await f.rpc({op:'submit',room_id:f.room.roomId,capability:member,
+      payload:{nonce:'d'.repeat(64),prompt:'書き換えた文章'}});
+    await assert.rejects(f.store.enqueue(f.room.roomId,memberReceipt.submissionId,{imageDirectionEnabled:true}),/IMAGE_REFERENCE_INVALID/);
+    assert.equal(f.sqlite.prepare('select count(*) n from vdj_budget_reservations').get().n,1);
+  } finally { f.sqlite.close(); }
+});
 
 test('generation reserves at most five sets, is idempotent and enforces global budget', async () => {
   const f = await fixture();

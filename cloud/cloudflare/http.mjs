@@ -26,7 +26,7 @@ async function admission(request) {
 
 // This entry can collect ideas before the generation runtime is connected.
 // Capabilities stay disabled until real generation and playback are wired.
-export function createCloudflareRoomApi({db, eventId, origin, generationEnabled = false} = {}) {
+export function createCloudflareRoomApi({db, eventId, origin, generationEnabled = false, imageDirectionEnabled = false} = {}) {
   if (!origin || new URL(origin).origin !== origin) throw Error('JUDGE_CONFIGURATION_REQUIRED');
   const store = createD1JudgeStore({db, eventId});
   const rpc = createD1RoomRpc({db, eventId});
@@ -37,7 +37,7 @@ export function createCloudflareRoomApi({db, eventId, origin, generationEnabled 
     if (request.method === 'GET' && url.pathname === '/api/room-capabilities') return response({mode: 'judge-cloud',
       durable: true, serverManaged: true, generation: generationEnabled, autoDJ: false,
       reason: generationEnabled ? null : 'PROVIDER_NOT_CONNECTED',
-      cloud: {generationJobs: generationEnabled, portableQC: generationEnabled, browserPlayback: generationEnabled,
+      cloud: {generationJobs: generationEnabled, portableQC: generationEnabled, browserPlayback: generationEnabled, imageDirection: generationEnabled && imageDirectionEnabled,
         clipRelativeTimeline: false, playerObserver: false, macRequired: false}});
     if (request.method === 'POST' && url.pathname === '/api/judge/rooms') {
       if (request.headers.get('origin') !== origin) return response({error: 'ORIGIN_DENIED'}, 403);
