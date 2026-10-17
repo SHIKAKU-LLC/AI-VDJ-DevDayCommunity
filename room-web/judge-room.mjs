@@ -74,7 +74,7 @@ function render() {
     }
     return li;
   }));
-  const maximum = Math.max(250, ...jobs.map(job => job.maximumCents ?? 250)) / 100;
+  const maximum = (jobs.length ? Math.max(...jobs.map(job => job.maximumCents ?? 250)) : 1500) / 100;
   $('budget').textContent = `生成枠 ${jobs.length} / 5 セット。運営負担は1セット上限 $${maximum.toFixed(2)}、ルーム合計上限 $${(maximum * 5).toFixed(2)}。`;
 }
 async function queuePending() {
