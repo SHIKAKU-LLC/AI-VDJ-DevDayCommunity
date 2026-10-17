@@ -28,17 +28,20 @@ export function encodeBytes(bytes) {
 }
 export function createFalProvider({key, fetchImpl = fetch} = {}) {
   if (typeof key !== 'string' || !key.trim() || /[\r\n]/.test(key)) throw Error('PROVIDER_NOT_CONNECTED');
+  if (!/^[\x21-\x7e]+$/.test(key)) throw Error('PROVIDER_KEY_FORMAT');
   async function json(url, method = 'GET', input) {
+    const phase = url.includes('/models/pricing') ? 'pricing' : url.includes('/account/billing') ? 'billing' : 'generation';
+    const problem = (code, status) => Object.assign(Error(code), {providerPhase: phase, ...(status ? {providerStatus: status} : {})});
     let response;
     try {
-      response = await fetchImpl(url, {method, redirect: 'error', signal: AbortSignal.timeout(20000),
+      response = await fetchImpl(url, {method, redirect: 'manual', signal: AbortSignal.timeout(20000),
         headers: new Headers([['authorization', ['Key', key].join(' ')], ['content-type', 'application/json'], ['x-fal-store-io', '0']]),
         ...(input ? {body: JSON.stringify(input)} : {})});
-    } catch { throw Error('PROVIDER_UNAVAILABLE'); }
+    } catch (error) { throw problem(error?.name === 'TimeoutError' ? 'PROVIDER_TIMEOUT' : 'PROVIDER_NETWORK_FAILED'); }
     if (!response.ok) {
       await response.body?.cancel();
-      throw Error(({401: 'PROVIDER_AUTHENTICATION_FAILED', 403: 'PROVIDER_PERMISSION_REQUIRED',
-        404: 'PROVIDER_ENDPOINT_UNAVAILABLE', 429: 'PROVIDER_RATE_LIMITED'})[response.status] ?? 'PROVIDER_UNAVAILABLE');
+      throw problem(({401: 'PROVIDER_AUTHENTICATION_FAILED', 403: 'PROVIDER_PERMISSION_REQUIRED',
+        404: 'PROVIDER_ENDPOINT_UNAVAILABLE', 429: 'PROVIDER_RATE_LIMITED'})[response.status] ?? 'PROVIDER_UNAVAILABLE', response.status);
     }
     return JSON.parse(new TextDecoder().decode(await boundedBytes(response, 262144)));
   }
@@ -50,17 +53,15 @@ export function createFalProvider({key, fetchImpl = fetch} = {}) {
   }
   return {
     async preflight() {
-      const [price, bill] = await Promise.all([
-        json('https://api.fal.ai/v1/models/pricing?endpoint_id=' + encodeURIComponent(Object.values(MODELS).join(','))),
-        json('https://api.fal.ai/v1/account/billing?expand=credits'),
-      ]);
+      // The runtime uses a generation-only key. Billing is verified by the
+      // operator; D1 reserves the event and room ceilings before paid requests.
+      const price = await json('https://api.fal.ai/v1/models/pricing?endpoint_id=' + encodeURIComponent(Object.values(MODELS).join(',')));
       for (const [kind, endpoint] of Object.entries(MODELS)) {
         const rate = price.prices?.find(p => p.endpoint_id === endpoint);
         if (!rate || rate.currency !== 'USD' || rate.unit !== (kind === 'video' ? 'seconds' : 'audios') ||
             !Number.isFinite(rate.unit_price) || rate.unit_price <= 0 || rate.unit_price > (kind === 'video' ? 0.0525 : 0.10)) throw Error('PROVIDER_PRICE_CHANGED');
       }
-      if (bill.credits?.currency !== 'USD' || !Number.isFinite(bill.credits.current_balance) || bill.credits.current_balance < 1.5) throw Error('PROVIDER_BALANCE_REQUIRED');
-      return {balanceUsd: bill.credits.current_balance, maximumCents: 150};
+      return {maximumCents: 150};
     },
     async submit(kind, prompt, contextUrl) {
       const endpoint = kind === 'audio' ? contextUrl ? MODELS.continuation : MODELS.initial : MODELS.video;

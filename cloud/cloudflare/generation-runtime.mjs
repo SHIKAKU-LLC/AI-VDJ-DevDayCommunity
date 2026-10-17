@@ -106,9 +106,10 @@ export function createGenerationClass(Base) {
           }
         } catch (error) {
           if (job.state.endsWith('_SUBMITTING')) { job.state = 'NEEDS_REVIEW'; job.reason = 'PROVIDER_SUBMISSION_UNCERTAIN'; }
-          else if (job.state.endsWith('_WAIT') && error.message === 'PROVIDER_UNAVAILABLE' && (job.readFailures ?? 0) < 6) {
-            // Read-only retries keep the original request handle. They cannot
-            // repeat the paid POST and survive an object restart.
+          else if (['PROVIDER_UNAVAILABLE', 'PROVIDER_NETWORK_FAILED', 'PROVIDER_TIMEOUT', 'PROVIDER_RATE_LIMITED'].includes(error.message) &&
+              (job.readFailures ?? 0) < 6) {
+            // Retry preflight or result reads only. SUBMITTING was handled above,
+            // so this cannot repeat a paid POST after an uncertain response.
             job.readFailures = (job.readFailures ?? 0) + 1;
           }
           else { job.state = 'FAILED'; job.reason = safeReason(error); }

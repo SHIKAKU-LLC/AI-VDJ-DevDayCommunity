@@ -50,7 +50,11 @@ export async function generationHttp(request, env) {
   } catch (error) {
     const code = ['ACTOR_DENIED', 'ROOM_NOT_FOUND', 'JUDGE_BUDGET', 'GENERATION_DISABLED', 'SUBMISSION_NOT_FOUND',
       'PROVIDER_NOT_CONNECTED', 'PROVIDER_PERMISSION_REQUIRED', 'PROVIDER_BALANCE_REQUIRED', 'PROVIDER_PRICE_CHANGED',
-      'PROVIDER_AUTHENTICATION_FAILED', 'PROVIDER_ENDPOINT_UNAVAILABLE', 'PROVIDER_RATE_LIMITED', 'PROVIDER_UNAVAILABLE'].includes(error.message) ? error.message : 'GENERATION_UNAVAILABLE';
-    return answer({error: code, phase}, code === 'ACTOR_DENIED' ? 403 : code === 'JUDGE_BUDGET' ? 429 : 503);
+      'PROVIDER_AUTHENTICATION_FAILED', 'PROVIDER_ENDPOINT_UNAVAILABLE', 'PROVIDER_RATE_LIMITED', 'PROVIDER_UNAVAILABLE',
+      'PROVIDER_TIMEOUT', 'PROVIDER_NETWORK_FAILED', 'PROVIDER_KEY_FORMAT'].includes(error.message) ? error.message : 'GENERATION_UNAVAILABLE';
+    return answer({error: code, phase,
+      ...(['pricing', 'billing', 'generation'].includes(error.providerPhase) ? {providerPhase: error.providerPhase} : {}),
+      ...(Number.isInteger(error.providerStatus) ? {providerStatus: error.providerStatus} : {}),
+    }, code === 'ACTOR_DENIED' ? 403 : code === 'JUDGE_BUDGET' ? 429 : 503);
   }
 }

@@ -107,7 +107,9 @@ test('preflight authentication, permission and rate failures reserve no budget o
         body: JSON.stringify({submissionIds: [s.submissionId]}),
       }), f.env);
       assert.equal(response.status, 503);
-      assert.deepEqual(await response.json(), {error, phase: 'provider-preflight'});
+      const details = await response.json();
+      assert.equal(details.error, error); assert.equal(details.phase, 'provider-preflight');
+      assert.ok(['pricing', 'billing'].includes(details.providerPhase)); assert.equal(details.providerStatus, status);
     }
     assert.equal(f.sqlite.prepare('select count(*) n from vdj_budget_reservations').get().n, 0);
     assert.equal(f.posted(), 0);
@@ -134,6 +136,7 @@ test('provider rejects price changes and private-network media without making a 
 test('Wan receives one explicit 24-second video request with bounded output settings', async () => {
   let submitted;
   const provider = createFalProvider({key: 'synthetic-only', fetchImpl: async (url, options) => {
+    assert.equal(options.redirect, 'manual');
     submitted = {url, input: JSON.parse(options.body)};
     const id = crypto.randomUUID();
     return Response.json({request_id: id, status_url: `https://queue.fal.run/model/requests/${id}/status`, response_url: `https://queue.fal.run/model/requests/${id}`});
@@ -143,6 +146,15 @@ test('Wan receives one explicit 24-second video request with bounded output sett
   assert.deepEqual(submitted.input, {prompt: 'Large-screen music visual, smooth continuous movement, no flashing or strobing, no text. 青い波',
     duration: 24, resolution: '480p', aspect_ratio: '16:9', audio: false,
     enable_prompt_expansion: false, enable_thinking: false, enable_safety_checker: true});
+});
+test('generation-only credentials need no billing access and still enforce live model prices', async () => {
+  const provider = createFalProvider({key: 'synthetic-only', fetchImpl: async (url, options) => {
+    assert.ok(url.includes('/models/pricing'));
+    assert.equal(options.redirect, 'manual');
+    return Response.json({prices: Object.entries(MODELS).map(([kind, endpoint_id]) =>
+      ({endpoint_id, unit: kind === 'video' ? 'seconds' : 'audios', unit_price: kind === 'video' ? .05 : .04, currency: 'USD'}))});
+  }});
+  assert.deepEqual(await provider.preflight(), {maximumCents: 150});
 });
 test('budget schema migration preserves existing reservations and permits the new per-set limit', async () => {
   const f = await fixture();
