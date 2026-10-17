@@ -80,6 +80,7 @@ export function createNativeContainerClass(Container) {
         const response = await this.fetch(new Request('http://native.internal/self-check', {
           method: 'POST', headers: {'content-type': 'application/json'}, body: '{}', signal: AbortSignal.timeout(150000),
         }));
+        result = {state: 'failed', httpStatus: response.status};
         const value = await response.json();
         if (response.ok && value.kind === 'synthetic-bootstrap-check-v1' && value.passed === true &&
             value.frameCount === 24 * 44100 && value.sampleRate === 44100 && value.channels === 2) {

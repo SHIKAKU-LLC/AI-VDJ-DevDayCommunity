@@ -111,8 +111,8 @@ test('a failed synthetic check is not retried after object recreation', async ()
   const state = context(), first = new NativeProcessor(state, {});
   await first.startSyntheticCheck();
   await Promise.all(state.pending);
-  assert.deepEqual(await first.syntheticStatus(), {state: 'failed'});
+  assert.deepEqual(await first.syntheticStatus(), {state: 'failed', httpStatus: 503});
   const second = new NativeProcessor(state, {});
-  assert.deepEqual(await second.startSyntheticCheck(), {state: 'failed'});
+  assert.deepEqual(await second.startSyntheticCheck(), {state: 'failed', httpStatus: 503});
   assert.equal(second.starts.length, 0);
 });

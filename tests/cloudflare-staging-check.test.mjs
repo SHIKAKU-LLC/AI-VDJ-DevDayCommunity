@@ -6,7 +6,7 @@ test('staging check cannot be started in production, cross-origin or with caller
   const origin = 'https://staging.example.com';
   let starts = 0;
   const env = {PUBLIC_ORIGIN: origin, STAGING_NATIVE_CHECK: 'enabled', NATIVE_PROCESSOR: {getByName(name) {
-    assert.equal(name, 'staging-native-check-v1');
+    assert.equal(name, 'staging-native-check-v2');
     return {syntheticStatus: async () => ({state: 'not-started'}), startSyntheticCheck: async () => { starts++; return {state: 'running'}; }};
   }}};
   const call = (init = {}) => new Request(origin + '/api/staging/native-check', init);

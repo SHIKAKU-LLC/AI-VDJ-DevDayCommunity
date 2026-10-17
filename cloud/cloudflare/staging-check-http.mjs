@@ -10,7 +10,9 @@ export async function stagingCheck(request, env) {
       if (chunk.byteLength) return Response.json({error: 'EMPTY_BODY_REQUIRED'}, {status: 400, headers});
     }
   }
-  const instance = env.NATIVE_PROCESSOR.getByName('staging-native-check-v1');
+  // v1 was allocated before the first image rollout finished. Allocate this
+  // fixed replacement only after the /self-check image reached 100%.
+  const instance = env.NATIVE_PROCESSOR.getByName('staging-native-check-v2');
   const result = request.method === 'GET' ? await instance.syntheticStatus() : await instance.startSyntheticCheck();
   return Response.json(result, {status: result.state === 'running' ? 202 : 200, headers});
 }
