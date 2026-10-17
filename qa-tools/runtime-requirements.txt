@@ -1,0 +1,6 @@
+# Offline synthetic analysis only. No neural model or source media download.
+numpy==2.0.2
+scipy==1.13.1
+soundfile==0.13.1
+librosa==0.11.0
+numba==0.60.0

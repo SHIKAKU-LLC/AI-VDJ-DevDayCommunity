@@ -1,0 +1,53 @@
+{
+  "status": "FROZEN_UNMOUNTED_V2",
+  "files": [
+    {
+      "file": "room-ui.css",
+      "sourceSha256": "14cd7bfd97225c805ae92b6e38707135dda38e3ad5a01c6c6ebcefbfdc631230",
+      "repositorySha256": "14cd7bfd97225c805ae92b6e38707135dda38e3ad5a01c6c6ebcefbfdc631230"
+    },
+    {
+      "file": "room-components.mjs",
+      "sourceSha256": "e954d45245d7e4e4531c8c3b2dfc3168edec74ae0e4d960609a2b1e13d5df457",
+      "repositorySha256": "e954d45245d7e4e4531c8c3b2dfc3168edec74ae0e4d960609a2b1e13d5df457"
+    },
+    {
+      "file": "room-ui-model.mjs",
+      "sourceSha256": "466fa1f20c40e2cba8200544609f5f226d0bfdc639dd970d7c49cdebe4340354",
+      "repositorySha256": "44d0b0b7e0c3218acc7b932e75f91d408d9cd64b9cbc355e7f0dd859eae12714"
+    },
+    {
+      "file": "room-api-client.mjs",
+      "sourceSha256": "adee93762f5645caf431bc8da870a49d5b8218973e702eb639ae442a242b11e1",
+      "repositorySha256": "f57d77a8ce89666d75ff849ebf96894f041e21295b765f6e6e91a727cbb19914"
+    },
+    {
+      "file": "room-model-port.mjs",
+      "sourceSha256": "1accc7c34bdaf0461959c8798a7cabb17431254768a8949639118325ab362c5a",
+      "repositorySha256": "18409f9b9801f76137a4b71f757c3d23773744e7354e38448c0c7b3cbd08a7db"
+    },
+    {
+      "file": "room-contract-view.mjs",
+      "sourceSha256": "b79861ab641f99e516f638e99a9e61b463d6308f760f43b95b81efe527a43ad3",
+      "repositorySha256": "bd30e9fa402d1db99fefdb1045e0e715f610c3b73a28243c16eca66498321ccc"
+    },
+    {
+      "file": "join-projection.mjs",
+      "sourceSha256": "f64fb1f7be24861e85c1a4e1b5a4d7fbd251c152c3f8db414fee92e81d291970",
+      "repositorySha256": "f64fb1f7be24861e85c1a4e1b5a4d7fbd251c152c3f8db414fee92e81d291970"
+    }
+  ],
+  "publicMounted": false,
+  "excluded": [
+    "design gallery",
+    "template without host entry"
+  ],
+  "adaptations": [
+    "Headers API without literal assignment",
+    "actor-bound durable operation GET",
+    "owner control nonce and revision propagation",
+    "receipt room/session/nonce validation",
+    "controlRevision independent from eventSeq",
+    "operations envelope kind/nonce/receipt and control receipt followed by authenticated snapshot"
+  ]
+}

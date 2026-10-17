@@ -1,0 +1,18 @@
+{
+  "id": "ai-vdj-web-v1",
+  "publicFileCount": 8,
+  "capability": "local-media-audition; generation-disabled",
+  "files": [
+    "index.html",
+    "output.css",
+    "output.html",
+    "output.js",
+    "studio.mjs",
+    "style.css",
+    "vercel.json",
+    "web.css",
+    "release.json"
+  ],
+  "configurationFileCount": 1,
+  "status": "DEVELOPMENT"
+}

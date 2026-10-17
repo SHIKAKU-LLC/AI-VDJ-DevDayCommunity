@@ -1,0 +1,233 @@
+{
+  "fixture": "synthetic-browser-v1",
+  "physicalSpeakerVerified": false,
+  "browser": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36",
+  "secureContext": true,
+  "sampleRate": 44100,
+  "processedWindow": {
+    "startFrame": 0,
+    "byteLength": 2048,
+    "sha256": "f0c3fdd185358dd8a745f447542d55309f73626d0a37df3a223af4080fe28050",
+    "expectedSha256": "f0c3fdd185358dd8a745f447542d55309f73626d0a37df3a223af4080fe28050"
+  },
+  "videoFrames": [
+    {
+      "nowMs": 18404.3,
+      "mediaTime": 0.291667,
+      "presentedFrames": 3,
+      "width": 320,
+      "height": 180,
+      "muted": true,
+      "volume": 0
+    }
+  ],
+  "states": [
+    {
+      "phase": "IDLE",
+      "sourceCount": 1,
+      "playbackRevision": 0,
+      "audioStarted": false,
+      "videoPresented": false
+    },
+    {
+      "phase": "GESTURE_REQUIRED",
+      "sourceCount": 1,
+      "playbackRevision": 0,
+      "audioStarted": false,
+      "videoPresented": false
+    },
+    {
+      "phase": "READY",
+      "sourceCount": 1,
+      "playbackRevision": 0,
+      "audioStarted": false,
+      "videoPresented": false
+    },
+    {
+      "phase": "PREPARING",
+      "sourceCount": 1,
+      "playbackRevision": 0,
+      "audioStarted": false,
+      "videoPresented": false
+    },
+    {
+      "phase": "STARTING",
+      "sourceCount": 1,
+      "playbackRevision": 0,
+      "audioStarted": false,
+      "videoPresented": false
+    },
+    {
+      "phase": "PLAYING",
+      "sourceCount": 1,
+      "playbackRevision": 1,
+      "audioStarted": true,
+      "videoPresented": true
+    }
+  ],
+  "guards": [
+    {
+      "phase": "prepare",
+      "valid": true
+    },
+    {
+      "phase": "prepare",
+      "valid": true
+    },
+    {
+      "phase": "ack",
+      "valid": true
+    }
+  ],
+  "checks": [
+    {
+      "name": "credit-overlay-after-browser-ack",
+      "passed": true
+    },
+    {
+      "name": "actual-browser-start-ack",
+      "passed": true,
+      "nameDetail": "browser processing and presentation; physical speaker unverified"
+    }
+  ],
+  "events": [
+    {
+      "type": "output-state",
+      "value": {
+        "phase": "IDLE",
+        "reason": null,
+        "message": "再生を開始すると、この画面が音声出力を担当します。",
+        "role": "output",
+        "playbackRevision": 0,
+        "pendingRevision": null,
+        "cueId": null,
+        "audioStarted": false,
+        "videoPresented": false,
+        "sourceCount": 1,
+        "cloudRole": "output",
+        "activationEnabled": true,
+        "fixtureMode": true
+      }
+    },
+    {
+      "type": "output-state",
+      "value": {
+        "phase": "GESTURE_REQUIRED",
+        "reason": null,
+        "message": "音声を有効にするには、この画面で「再生を有効にする」を押してください。",
+        "role": "output",
+        "playbackRevision": 0,
+        "pendingRevision": null,
+        "cueId": null,
+        "audioStarted": false,
+        "videoPresented": false,
+        "sourceCount": 1,
+        "cloudRole": "output",
+        "activationEnabled": true,
+        "fixtureMode": true
+      }
+    },
+    {
+      "type": "output-state",
+      "value": {
+        "phase": "READY",
+        "reason": null,
+        "message": "音声出力の準備ができました。完成済みの音楽・映像を待っています。",
+        "role": "output",
+        "playbackRevision": 0,
+        "pendingRevision": null,
+        "cueId": null,
+        "audioStarted": false,
+        "videoPresented": false,
+        "sourceCount": 1,
+        "cloudRole": "output",
+        "activationEnabled": true,
+        "fixtureMode": true
+      }
+    },
+    {
+      "type": "output-state",
+      "value": {
+        "phase": "PREPARING",
+        "reason": null,
+        "message": "同じキューの音楽・映像と再生証跡を確認中です。",
+        "role": "output",
+        "playbackRevision": 0,
+        "pendingRevision": 1,
+        "cueId": "cue-fixture",
+        "audioStarted": false,
+        "videoPresented": false,
+        "sourceCount": 1,
+        "cloudRole": "output",
+        "activationEnabled": true,
+        "fixtureMode": true
+      }
+    },
+    {
+      "type": "output-state",
+      "value": {
+        "phase": "STARTING",
+        "reason": null,
+        "message": "音声の実再生と映像の提示を確認中です。",
+        "role": "output",
+        "playbackRevision": 0,
+        "pendingRevision": 1,
+        "cueId": "cue-fixture",
+        "audioStarted": false,
+        "videoPresented": false,
+        "sourceCount": 1,
+        "cloudRole": "output",
+        "activationEnabled": true,
+        "fixtureMode": true
+      }
+    },
+    {
+      "type": "output-state",
+      "value": {
+        "phase": "PLAYING",
+        "reason": null,
+        "message": "音楽と映像を再生中です。",
+        "role": "output",
+        "playbackRevision": 1,
+        "pendingRevision": 1,
+        "cueId": "cue-fixture",
+        "audioStarted": true,
+        "videoPresented": true,
+        "sourceCount": 1,
+        "cloudRole": "output",
+        "activationEnabled": true,
+        "fixtureMode": true
+      }
+    },
+    {
+      "type": "output-state",
+      "value": {
+        "phase": "STOPPED",
+        "reason": "CUE_DURATION_END",
+        "message": "停止しました。再開するには、この画面で音声を再度有効にしてください。",
+        "role": "output",
+        "playbackRevision": 1,
+        "pendingRevision": null,
+        "cueId": null,
+        "audioStarted": false,
+        "videoPresented": false,
+        "sourceCount": 1,
+        "cloudRole": "output",
+        "activationEnabled": true,
+        "fixtureMode": true
+      }
+    }
+  ],
+  "ack": {
+    "roomId": "11111111-1111-4111-8111-111111111111",
+    "cueId": "cue-fixture",
+    "clipId": "music-fixture",
+    "playbackRevision": 1,
+    "audioTime": 0.25541950113378686,
+    "actual": true,
+    "audioStarted": true,
+    "videoPresented": true
+  },
+  "previewUrl": "https://ai-gyszvv244-hapx2yukigmailcoms-projects.vercel.app",
+  "sourceCommit": "6feb846"
+}

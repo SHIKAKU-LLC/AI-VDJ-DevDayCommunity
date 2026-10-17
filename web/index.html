@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="ja">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>AI VDJ Studio · Web Preview</title><link rel="stylesheet" href="/style.css"><link rel="stylesheet" href="/web.css"><script type="module" src="/studio.mjs"></script></head>
+<body><main>
+<header><div><small>PERFORMANCE / STUDIO</small><h1>AI VDJ</h1></div><div class="header-actions"><span class="badge">WEB PREVIEW</span><span id="connection-status" role="status">未接続</span><button disabled aria-describedby="connection-reason">fal.ai に接続</button></div></header>
+<nav class="studio-tabs" role="tablist" aria-label="作業画面">
+ <button type="button" role="tab" id="tab-performance" data-tab="performance" aria-controls="performance" aria-selected="true">演奏</button>
+ <button type="button" role="tab" id="tab-details" data-tab="details" aria-controls="details" aria-selected="false" tabindex="-1">詳細・レビュー <span>0</span></button>
+ <button type="button" role="tab" id="tab-library" data-tab="library" aria-controls="library" aria-selected="false" tabindex="-1">ライブラリ・履歴</button>
+</nav>
+<div class="session-strip"><span id="state" role="status" aria-live="polite">未開始</span><span>生成要求なし</span><span class="strip-note">音声 1 系統 / 映像出力 16:9</span></div>
+<section id="performance" role="tabpanel" aria-labelledby="tab-performance" class="performance-panel">
+ <div class="deck-row">
+  <article class="deck now-deck"><div class="deck-heading"><span class="eyebrow">01 / NOW</span><span id="media-state" class="state-chip">未開始</span></div><strong id="music-name">まだ演奏されていません</strong><p id="video-name">映像はまだ提示されていません</p><p class="metadata-note">速度 1倍 / BPM・キーは未確認</p></article>
+  <article class="deck next-deck"><div class="deck-heading"><span class="eyebrow">02 / NEXT</span><span class="state-chip">候補なし</span></div><strong>演奏可能な cue を待っています</strong><p>音楽と映像の両方が生成・検証完了したセットはまだありません。</p><button id="prepare-cues" type="button" data-open-tab="details">個別の詳細設定</button><button id="cue-adopt" type="button" disabled aria-describedby="cue-adopt-reason">生成セットをDJへ接続</button><p id="cue-adopt-reason">実生成セットの本番接続は未有効です。自分で選んだ素材の再生確認は、DJ採用に数えません。</p></article>
+ </div>
+ <section class="intent-composer" aria-labelledby="intent-heading">
+  <div class="intent-heading"><h2 id="intent-heading">次の cue をつくる</h2><span>共通の演出意図 / 未生成</span></div>
+  <div class="intent-input-row"><label for="intent">会場をどう変えたい？<textarea id="intent" rows="2" maxlength="2000" placeholder="もっと会場を盛り上げたい。一旦落ち着かせたい。光が広がる感じに。" aria-describedby="intent-reason"></textarea></label><button id="intent-generate" type="button" disabled aria-describedby="intent-reason">次の cue を生成</button></div>
+  <div class="intent-asset-states" aria-label="同じ cue の準備状態"><span>音楽 <strong>未送信</strong></span><span>16:9 映像 <strong>未送信</strong></span><span id="intent-playback-state">演奏は未開始</span></div>
+  <p id="intent-reason">実生成・LLM解釈・本番DJ採用は未接続です。入力はこのタブ内だけで保持され、まだ解釈・送信されません。</p>
+  <p class="set-gate-note">音楽と映像の両方を生成・検証してから、セットで cue 一覧に追加します。</p>
+  <div id="pending-set-list" aria-label="生成セットの待機状態"><p>生成待ち 0 / 音楽・映像とも未送信</p></div>
+ </section>
+ <div id="monitor-panel"><section class="workspace"><div class="preview"><div class="monitor-heading"><span class="eyebrow">16:9 / MONITOR</span><span id="monitor-state">映像未開始</span></div><canvas id="monitor" width="1280" height="720" aria-label="16:9 映像モニター"></canvas><p id="message" role="status">開始前は無音。詳細・レビューで自分の素材を選ぶと、ブラウザ内だけで再生を確認できます。</p><div class="projection"><button id="output" type="button" disabled>映像を別画面に出す</button><button id="output-focus" type="button" disabled>出力を表示</button><button id="fullscreen" type="button">この画面で没入</button><button type="button" data-open-tab="details">素材を選ぶ</button></div><p class="projection-note">音声はconsoleのみ。別画面は16:9の映像専用。選択した素材の再生確認は、実生成・QC・DJ採用ではありません。</p></div></section></div>
+ <aside class="cue-panel"><div class="section-heading"><h2>完成した cue と接続</h2><span>演奏可能 0</span></div><p>音楽と映像の両方が生成・検証完了したセットはまだありません。生成待ちは上の別欄に表示します。</p><div id="live-cue-list"><p class="empty-state">完成セットなし</p></div><details><summary>映像の味付け</summary><p>公開版の生成映像と音源解析への接続を準備中です。パルス・音楽的な強拍・速度処理は適用しません。</p><button disabled>生成映像の設定を適用</button></details><details><summary>AI DJ の採用条件</summary><p>同じ生成意図・versionの音楽と映像、音楽の親曲/context照合、両素材QC、映像review、明示的な再生commitが必要です。公開版ではこの接続を有効にしていません。</p></details></aside>
+ <section class="timeline-panel"><div class="section-heading"><h2>接続タイムライン</h2><span id="timeline-clock">0:00</span></div><p id="timeline-state">未開始 / 秒軸。拍・小節の同期は未認定です。</p><div class="time-lane"><span class="lane-name">音楽</span><div class="timeline-track"><span id="music-lane" class="lane-empty">まだ再生されていません</span><span id="music-playhead" class="actual-playhead" hidden></span></div></div><div class="time-lane"><span class="lane-name">映像</span><div class="timeline-track"><span id="video-lane" class="lane-empty">まだ提示されていません</span><span id="video-playhead" class="actual-playhead" hidden></span></div></div><progress id="position" max="1" value="0" aria-label="音楽の再生位置" hidden></progress></section>
+</section>
+<section id="details" role="tabpanel" aria-labelledby="tab-details" hidden>
+ <div class="panel-intro"><span class="eyebrow">DETAILS / REVIEW</span><h2>個別設定と素材レビュー</h2><p>次の cue の共通意図は演奏画面で入力します。個別の条件と接続状況はここで確認できます。</p><button type="button" data-open-tab="performance">演奏画面へ戻る</button></div>
+ <section class="local-review"><div class="section-heading"><h2>自分の素材で再生を確認</h2><span>ブラウザ内 / アップロードなし</span></div><p>音楽と映像を一つずつ選び、演奏画面の「再生を開始」を押してください。動画の埋込み音声は常に無音。選択ファイルはサーバーへ送信されません。</p><div class="local-inputs"><label>音楽ファイル<input id="music-file" type="file" accept="audio/*"></label><label>映像ファイル<input id="video-file" type="file" accept="video/*"></label></div><p>音楽終了時に両方を停止します。映像は尺末尾でloopします。拍・小節同期と物理AV同期は未検証です。この確認だけではQC済みの生成cueになりません。</p><button type="button" data-open-tab="performance">選択素材を演奏画面で確認</button></section>
+ <section class="generation"><h2>共通の生成条件</h2><p id="connection-reason">fal BYOK・LLM解釈・実生成は接続準備中です。公開runtimeのDB・private media保存・AV連携が未設定のため、実キーの入力と生成送信を有効にしていません。</p><div class="capabilities"><article class="deck"><h3>音楽</h3><p>共通の演出意図から、現在の音楽を受け継ぐ仕様をつくります。continuationの親曲/context照合、音声QCとDJへのcommitは未接続です。</p><button disabled aria-describedby="connection-reason">音楽の個別条件を適用</button></article><article class="deck"><h3>16:9映像</h3><p>同じ演出意図から映像の仕様をつくり、音楽と同じcueで準備します。生成・QC・本人reviewの公開連携は未接続です。</p><button disabled aria-describedby="connection-reason">映像の個別条件を適用</button></article></div></section>
+ <p><a href="https://github.com/hapx2yuki/AI-VDJ-DevDayCommunity">GitHub リポジトリ</a>（非公開リポジトリ）</p><p id="release">公開ソースを確認中</p>
+</section>
+<section id="library" role="tabpanel" aria-labelledby="tab-library" hidden>
+ <div class="panel-intro"><span class="eyebrow">LIBRARY / INSPECT</span><h2>素材と採用の履歴</h2><p>このタブで選択した素材を表示します。生成履歴・採用履歴の保存接続は準備中です。</p><button type="button" data-open-tab="performance">演奏画面へ戻る</button></div>
+ <section class="local-review"><h2>このタブの選択素材</h2><p id="library-music">音楽はまだ選択されていません</p><p id="library-video">映像はまだ選択されていません</p><p>自分の素材 / 生成・QC・DJ採用は未実施。再読込・新しいセッションで解放され、公開保存やアップロードは行いません。</p></section><section class="local-review"><div class="section-heading"><h2>生成と採用の履歴</h2><span>0件</span></div><p>生成要求・完成セット・本番採用はありません。</p></section>
+</section>
+<footer>WEB PREVIEW · 実生成なし。本人の保存音源・映像・private runtimeは公開していません。選択したファイルと入力文はこのタブ内だけで扱います。</footer>
+</main>
+<div class="transport-dock"><button id="start" type="button" disabled>再生を開始</button><button id="stop" type="button" disabled>停止</button><button id="new-session" type="button" disabled>新しいセッション</button><span id="clock">0:00</span><label>音量<input id="volume" type="range" min="0" max="1" step=".01" value=".55"></label><span class="transport-hint">Space: 演奏 / 停止</span></div>
+</body></html>

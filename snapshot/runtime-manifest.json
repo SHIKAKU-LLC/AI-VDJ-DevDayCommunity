@@ -1,0 +1,185 @@
+{
+  "status": "portable-code-snapshot-with-reviewed-local-modules; public-generation-disabled",
+  "files": [
+    {
+      "sourcePath": "app/runtime/fal-sdk.mjs",
+      "sourceSha256": "5e3db5070cc79bebaf46d91fe90dead80f216b2c8b9ae1b385ef72d8291536d9",
+      "repositoryPath": "snapshot/app/runtime/fal-sdk.mjs",
+      "repositorySha256": "12561c3e5f5bc6c0c6e2c6827851003d09afcd90081361bedcb1a82a3ec8f7f1",
+      "transformation": "Policy-compatible module names/imports and Headers API"
+    },
+    {
+      "sourcePath": "app/runtime/owner-auth.mjs",
+      "sourceSha256": "1f9f55ba6249175e4f61862ae901c79350acb41c07205eebbb0b176effa193c5",
+      "repositoryPath": "snapshot/app/runtime/owner-verifier.mjs",
+      "repositorySha256": "62371a87ea71a1285c0d73c90195e4c5576124aa65cb48b1d483a5770f04cda0",
+      "transformation": "Policy-compatible module names/imports and Headers API"
+    },
+    {
+      "sourcePath": "app/runtime/key-proof.mjs",
+      "sourceSha256": "71d6b13f0385c6bd98325d17557f126ce63ff58484eedffe0e1fb0afc5424da3",
+      "repositoryPath": "snapshot/app/runtime/key-proof.mjs",
+      "repositorySha256": "aa45df2cf8a9b0d88919a75023ef7d06bb0aa4db2e56a78dbc07d41a28ca5d4c",
+      "transformation": "Policy-compatible module names/imports and Headers API"
+    },
+    {
+      "sourcePath": "app/runtime/durable-public-runtime.mjs",
+      "sourceSha256": "79b3e6b5f9877506a0c0bdc0f9e38fb130c4b5df5756b1e7909784856f24a57c",
+      "repositoryPath": "snapshot/app/runtime/durable-public-runtime.mjs",
+      "repositorySha256": "b40faa067edaa850a9ac5b161c381db0e8cc25bc00a87859fb97a76581e6b5e6",
+      "transformation": "Policy-compatible module names/imports and Headers API"
+    },
+    {
+      "sourcePath": "app/runtime/public-bootstrap.mjs",
+      "sourceSha256": "3f82abc16b1ce656349b0bef33feb84ea294d27d8462dbc449b988e342943c23",
+      "repositoryPath": "snapshot/app/runtime/public-bootstrap.mjs",
+      "repositorySha256": "b7315feb9531745274780ba8e4c30ddf2a0a7dcf412e00bc77c02ad35430c231",
+      "transformation": "Policy-compatible module names/imports and Headers API"
+    },
+    {
+      "sourcePath": "app/runtime/record-repository.mjs",
+      "sourceSha256": "eca8acf766483d0697912a3fe2a7a984125796277026ed7353384b5033aa6b4d",
+      "repositoryPath": "snapshot/app/runtime/record-repository.mjs",
+      "repositorySha256": "cbc8cdab73214b63b3bccc02de5d7d115ead7b66ed04d15261b763cc33e1769e",
+      "transformation": "Policy-compatible module names/imports and Headers API"
+    },
+    {
+      "sourcePath": "app/runtime/postgres-repository.mjs",
+      "sourceSha256": "e30266b1ea2356c13d4d492b6a3f81b08ac9503497d6da3ecbd275b74e9b7c97",
+      "repositoryPath": "snapshot/app/runtime/postgres-repository.mjs",
+      "repositorySha256": "fd342cf89702cccf0b361de3f904cad72576df38f650a0d8c76ab388f38f5ff2",
+      "transformation": "Policy-compatible module names/imports and Headers API"
+    },
+    {
+      "sourcePath": "app/runtime/private-object-store.mjs",
+      "sourceSha256": "d49230db29c2729c98562cb9a692c65e197de701587a383b71d7367b5b450deb",
+      "repositoryPath": "snapshot/app/runtime/private-object-store.mjs",
+      "repositorySha256": "5667348253da1981cb5e1c299d7fbd4689e9bb6ba2726c761192881984666160",
+      "transformation": "Policy-compatible module names/imports and Headers API"
+    },
+    {
+      "sourcePath": "app/runtime/byok-browser.mjs",
+      "sourceSha256": "527d0e3dd8ca01dd0f8f29187b811463ceb3ff7a080ba68be3dd04195d7b2f1e",
+      "repositoryPath": "snapshot/app/runtime/byok-browser.mjs",
+      "repositorySha256": "527d0e3dd8ca01dd0f8f29187b811463ceb3ff7a080ba68be3dd04195d7b2f1e",
+      "transformation": "none"
+    },
+    {
+      "sourcePath": "app/runtime/authenticated-tab.mjs",
+      "sourceSha256": "1c4a0d86e800539a3e50460345dda1081c5d1a507246b1d795b650c2ec3a966e",
+      "repositoryPath": "snapshot/app/runtime/authenticated-tab.mjs",
+      "repositorySha256": "4c1d96da3f36db2f741ba059f9167895f07aac4cdabbffb65fd4d8a7657ec487",
+      "transformation": "Policy-compatible module names/imports and Headers API"
+    },
+    {
+      "sourcePath": "app/runtime/first-track.mjs",
+      "sourceSha256": "44e97527402510b15ece655630a67702509a79f1509c64cb3e99c47da2b5a0ee",
+      "repositoryPath": "snapshot/app/runtime/first-track.mjs",
+      "repositorySha256": "44e97527402510b15ece655630a67702509a79f1509c64cb3e99c47da2b5a0ee",
+      "transformation": "none"
+    },
+    {
+      "sourcePath": "app/runtime/persist-initial-track.mjs",
+      "sourceSha256": "d47ad01923d7f55b2483cf4c252ec8275ac4dedaa5d1ae85900ad869a0479260",
+      "repositoryPath": "snapshot/app/runtime/persist-initial-track.mjs",
+      "repositorySha256": "d47ad01923d7f55b2483cf4c252ec8275ac4dedaa5d1ae85900ad869a0479260",
+      "transformation": "none"
+    },
+    {
+      "sourcePath": "app/runtime/capabilities.mjs",
+      "sourceSha256": "213ac2d963ee7d3eb61ef77a1ed2ded5d23a70babc044be137b078c115741775",
+      "repositoryPath": "snapshot/app/runtime/capabilities.mjs",
+      "repositorySha256": "213ac2d963ee7d3eb61ef77a1ed2ded5d23a70babc044be137b078c115741775",
+      "transformation": "none"
+    },
+    {
+      "sourcePath": "app/connection/fal-auth-contract.mjs",
+      "sourceSha256": "c78ae0b50946ed144844e2412573624f1a504594f006e98ddd09d510e0c717a2",
+      "repositoryPath": "snapshot/app/connection/fal-contract.mjs",
+      "repositorySha256": "c78ae0b50946ed144844e2412573624f1a504594f006e98ddd09d510e0c717a2",
+      "transformation": "none"
+    },
+    {
+      "sourcePath": "app/runtime/intent-compiler.mjs",
+      "sourceSha256": "7935c0d2b05668d8d94fd58b6b11ec069e19bed222d97e4e2781b39944709790",
+      "repositoryPath": "snapshot/app/runtime/intent-compiler.mjs",
+      "repositorySha256": "7935c0d2b05668d8d94fd58b6b11ec069e19bed222d97e4e2781b39944709790",
+      "transformation": "Reviewed runtime patch chain; none"
+    },
+    {
+      "sourcePath": "app/runtime/intent-cues.mjs",
+      "sourceSha256": "f60decb03ef740738f9c133ed92a77c438a0078f1533b487d6e87bae348cdd4c",
+      "repositoryPath": "snapshot/app/runtime/intent-cues.mjs",
+      "repositorySha256": "f60decb03ef740738f9c133ed92a77c438a0078f1533b487d6e87bae348cdd4c",
+      "transformation": "none"
+    },
+    {
+      "sourcePath": "app/runtime/fal-intent-interpreter.mjs",
+      "sourceSha256": "025487470aca931f63aee628461976cfb1b4c55d0663b305f28879348c52fdd7",
+      "repositoryPath": "snapshot/app/runtime/fal-intent-interpreter.mjs",
+      "repositorySha256": "2c9409c439eb39d0b473106611efd307a4eb801502e4da24ff6a4bb2ee980623",
+      "transformation": "Extract side-effect-free semantic compilation into intent-semantics.mjs; preserve provider interpretation behavior"
+    },
+    {
+      "sourcePath": "app/runtime/participant-rooms.mjs",
+      "sourceSha256": "7600ba07b08e51276aa52e9af8dc1a23af1112adda601936c4e617ea4de7f406",
+      "repositoryPath": "snapshot/app/runtime/participant-rooms.mjs",
+      "repositorySha256": "f9325efd36273056241e9fb0c6b2f8407ece74cac95ff0eaa5d9edad8cc3a52d",
+      "transformation": "Reviewed runtime patch chain; preserve public room epoch field via existing policy-compatible constant"
+    },
+    {
+      "sourcePath": "app/runtime/participant-room-routes.mjs",
+      "sourceSha256": "cb94ff6f20e362feb5de117f6fa65c08906441cf619c74eaf984c6202cd5c109",
+      "repositoryPath": "snapshot/app/runtime/participant-room-routes.mjs",
+      "repositorySha256": "cb94ff6f20e362feb5de117f6fa65c08906441cf619c74eaf984c6202cd5c109",
+      "transformation": "Reviewed runtime patch chain; none"
+    },
+    {
+      "sourcePath": "app/runtime/participant-room-store.mjs",
+      "sourceSha256": "d952ec4bfbd6847e41434cbaeab79c63e61c00036fcdc322df308b1b218d8cfd",
+      "repositoryPath": "snapshot/app/runtime/participant-room-store.mjs",
+      "repositorySha256": "d952ec4bfbd6847e41434cbaeab79c63e61c00036fcdc322df308b1b218d8cfd",
+      "transformation": "none"
+    },
+    {
+      "sourcePath": "app/runtime/collect-participant-rooms.mjs",
+      "sourceSha256": "4d78b7ce344961d35a1fd3868de0dffa60ce0d832fa4cef92ee5918920e88212",
+      "repositoryPath": "snapshot/app/runtime/collect-participant-rooms.mjs",
+      "repositorySha256": "65e5891d72f0bc7899863a36eaf31803d5b2ba983bcf9a323986dc5ca78c2c2d",
+      "transformation": "Public room epoch field constant; excludes authentication credential assignments"
+    },
+    {
+      "sourcePath": "app/runtime/public-participant-rooms.mjs",
+      "sourceSha256": "fa629e51c078d586896799e504e02ac2e7211ca54278ac40ab24ddfca69be783",
+      "repositoryPath": "snapshot/app/runtime/public-participant-rooms.mjs",
+      "repositorySha256": "fa629e51c078d586896799e504e02ac2e7211ca54278ac40ab24ddfca69be783",
+      "transformation": "none"
+    },
+    {
+      "sourcePath": "app/runtime/dj-transition-selector.mjs",
+      "sourceSha256": "5c4dd4e780f94943a02b548a99bc9d4de1d38f98358dbb4bbf9684ba3fcf1f70",
+      "repositoryPath": "snapshot/app/runtime/dj-transition-selector.mjs",
+      "repositorySha256": "5c4dd4e780f94943a02b548a99bc9d4de1d38f98358dbb4bbf9684ba3fcf1f70",
+      "transformation": "Reviewed runtime patch chain; none"
+    },
+    {
+      "sourcePath": "app/runtime/dj-transition-ports.mjs",
+      "sourceSha256": "349e368192c64ffa4308dccb94e247ba57b0ae60be9e9ac9298f3eb5bf3068c0",
+      "repositoryPath": "snapshot/app/runtime/dj-transition-ports.mjs",
+      "repositorySha256": "349e368192c64ffa4308dccb94e247ba57b0ae60be9e9ac9298f3eb5bf3068c0",
+      "transformation": "Reviewed runtime patch chain; none"
+    },
+    {
+      "sourcePath": "app/runtime/fal-intent-interpreter.mjs (semantic functions)",
+      "sourceSha256": "025487470aca931f63aee628461976cfb1b4c55d0663b305f28879348c52fdd7",
+      "repositoryPath": "snapshot/app/runtime/intent-semantics.mjs",
+      "repositorySha256": "8f05baaadb05a80db16ca3f3a5edd9a7b612b02a714691744b21f29bd9a708dc",
+      "transformation": "Extract shared semantic input/output validation and compilation without SDK import"
+    }
+  ],
+  "freezeAtUtc": "2026-10-12T14:59:22.003751+00:00",
+  "publicRoomBackendDeployed": false,
+  "publicRoomMode": "collect",
+  "publicGenerationEnabled": false,
+  "localRuntimeIntegrationManifest": "docs/runtime-integration-manifest.json"
+}

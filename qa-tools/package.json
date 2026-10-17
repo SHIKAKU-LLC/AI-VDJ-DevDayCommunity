@@ -1,0 +1,9 @@
+{
+  "name": "ai-vdj-room-sql-verification",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@electric-sql/pglite": "0.5.9",
+    "qrcode-generator": "2.0.4"
+  }
+}

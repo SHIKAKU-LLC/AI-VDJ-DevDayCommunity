@@ -1,0 +1,40 @@
+// Normalize the runtime's participant-rooms.mjs payload; do not import its Node-only code.
+const names={QUEUED:'PENDING',INTERPRETING:'GENERATING',ATOMIC_READY:'GENERATING',PARTIAL_HOLD:'FAILED',UNRESOLVED_HOLD:'UNKNOWN',NEEDS_CLARIFICATION:'CLARIFY'};
+function cloudRequest(raw,s){
+ const matches=(s.jobs??[]).filter(j=>j.submissionId===s.submissionId),job=matches.length===1?matches[0]:null;
+ const channel=k=>{const q=job?.channels?.[k];return q?.status==='QC_READY'&&q.qcPassed===true&&q.durationSeconds===24&&
+  q.generationId===job.generationId&&q.controlVersion===job.controlVersion?{...q}:{status:job?.stages?.[k]?.state??'QUEUED',qcPassed:false};};
+ const music=channel('music'),video=channel('video'),atomic=job?.atomicReady===true&&job.actualGenerationThisRun===true&&
+  typeof job.cueId==='string'&&!!job.cueId&&music.qcPassed&&video.qcPassed&&video.compositionQcPassed===true;
+ const credit=raw.currentCredit,playing=atomic&&job.state==='PLAYING'&&job.actualPlayback===true&&job.playerAcknowledged===true&&
+  credit?.actual===true&&credit.actualPlayback===true&&credit.roomId===raw.roomId&&credit.submissionId===s.submissionId&&
+  credit.participantId===s.participantId&&credit.cueId===job.cueId&&credit.generationId===job.generationId&&
+  Number.isSafeInteger(credit.playbackRevision)&&credit.playbackRevision===job.playbackRevision;
+ const state=playing?'PLAYING':job?.state==='PLAYING'?'HOLD':
+  ['READY','RESERVED'].includes(job?.state)?atomic?'READY':'WAIT_REVIEW':
+  ['PENDING','PARTIAL_READY','WAIT_REVIEW','HOLD','PLAYED','CLARIFY'].includes(job?.state)?job.state:'PENDING';
+ return {requestId:s.submissionId,participantId:s.participantId,nickname:s.nickname,prompt:s.prompt,state,
+  selectionState:atomic&&job?.state==='RESERVED'?'RESERVED':null,cueId:job?.cueId??null,generationId:job?.generationId,
+  controlVersion:job?.controlVersion,atomicReady:atomic,mode:atomic?'provider':'cloud',actualGenerationThisRun:atomic,
+  playbackRevision:playing?credit.playbackRevision:null,music,video,reason:s.reason??null,question:job?.question??null};
+}
+export function roomView(raw){
+ const requests=(raw.submissions??[]).map(s=>{if(raw.mode==='cloud')return cloudRequest(raw,s);const cue=(raw.mode==='collect'?[]:raw.cues??[]).find(c=>c.submissionId===s.submissionId);
+  const channel=k=>{const result=cue?.[k],job=(raw.mode==='collect'?[]:s.jobs)?.find(j=>j.channel===k),b=result?.binding;
+   const bound=!!cue&&b?.roomId===raw.roomId&&b?.submissionId===s.submissionId&&b?.generationId===cue.generationId&&b?.commonIntentSha256===cue.commonIntentSha256&&b?.controlVersion===cue.controlVersion&&b?.channel===k;
+   return {status:result&&bound?'QC_READY':job?.state??(raw.mode==='collect'?'NOT_GENERATED':'QUEUED'),qcPassed:bound&&result.qc?.passed===true,durationSeconds:result?.durationSeconds,generationId:b?.generationId,controlVersion:b?.controlVersion,compositionQcPassed:result?.compositionQC?.passed===true};};
+  return {requestId:s.submissionId,participantId:s.participantId,nickname:s.nickname,prompt:s.prompt,state:raw.mode==='collect'&&!['FAILED','CANCELLED','REJECTED','UNRESOLVED_HOLD'].includes(s.state)?'PENDING':cue?.status==='PLAYING'?(raw.currentCredit?.cueId===cue.cueId&&raw.currentCredit?.actual===true?'PLAYING':'PLAYED'):names[s.state]??s.state,selectionState:['SELECTED','STAGING'].includes(cue?.status)?'RESERVED':null,cueId:cue?.cueId??null,generationId:s.generationId,controlVersion:s.controlVersion,atomicReady:cue?.atomicReady===true,mode:raw.mode,actualGenerationThisRun:cue?.actualGenerationThisRun===true,music:channel('music'),video:channel('video'),reason:s.reason??(raw.mode==='collect'?'SOURCE_NOT_CONNECTED_GENERATION_DISABLED':null),question:s.question??null};
+ });
+ return {roomId:raw.roomId,roomEpoch:raw.sessionId,revision:raw.eventSeq,jobStateSha256:raw.mode==='cloud'&&/^[a-f0-9]{64}$/.test(raw.jobStateSha256??'')?raw.jobStateSha256:null,controlRevision:raw.controlRevision,status:raw.closed?'ENDED':'OPEN',accepting:raw.accepting,generationPaused:raw.generationPaused,autoDJ:raw.autoDJ,requests,decision:raw.decision,supply:raw.supply,playbackAdapterAvailable:raw.playbackAdapterAvailable===true,mode:raw.mode,generationUnavailable:raw.mode==='collect',
+  // The authoritative credit, including an explicit null after Stop, lets the
+  // model return a requeued Cue from PLAYING to READY (only identifying fields).
+  ...(Object.hasOwn(raw,'currentCredit')?{currentCredit:raw.currentCredit?{cueId:raw.currentCredit.cueId,
+   playbackRevision:raw.currentCredit.playbackRevision,actual:raw.currentCredit.actual===true}:null}:{})};
+}
+export function actualCreditView(event,rawRoom){
+ // This function takes only events read from the authenticated server feed, never a participant POST.
+ if(event?.type!=='participantCredit'||event.mode!=='provider'||event.actual!==true||event.simulated===true||rawRoom?.mode!=='provider'||event.roomId!==rawRoom.roomId||rawRoom.currentCredit?.cueId!==event.cueId||rawRoom.currentCredit?.playbackRevision!==event.playbackRevision||rawRoom.currentCredit?.actual!==true)return null;
+ const cue=rawRoom.cues?.find(c=>c.cueId===event.cueId),submission=rawRoom.submissions?.find(s=>s.submissionId===event.submissionId);
+ if(!cue||!submission||cue.status!=='PLAYING'||cue.playbackRevision!==event.playbackRevision||cue.contribution?.participantId!==event.participantId||cue.generationId!==event.generationId||!Number.isFinite(event.audioTime))return null;
+ return {type:'cue.playback.started',roomId:event.roomId,roomEpoch:rawRoom.sessionId,requestId:event.submissionId,cueId:event.cueId,generationId:event.generationId,controlVersion:cue.controlVersion,playbackRevision:event.playbackRevision,authoritative:true,audioCommitted:true,videoPresented:true};
+}

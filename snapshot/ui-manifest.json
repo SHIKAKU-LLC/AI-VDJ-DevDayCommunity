@@ -1,0 +1,192 @@
+{
+  "status": "UI_FROZEN",
+  "publicGenerationEnabled": false,
+  "publicDjAdoptionEnabled": false,
+  "scope": "private browser-code-only snapshot; not directly deployed",
+  "files": [
+    {
+      "sourcePath": "app/index.html",
+      "sourceSha256": "7cf55de8647b280a5cd51d61a8dc05af78c19110e4b1cf9a94ba3af7fe079aa7",
+      "servePath": "/index.html",
+      "repositoryPath": "snapshot/ui/app/index.html",
+      "repositorySha256": "7cf55de8647b280a5cd51d61a8dc05af78c19110e4b1cf9a94ba3af7fe079aa7",
+      "transformation": "none"
+    },
+    {
+      "sourcePath": "app/style.css",
+      "sourceSha256": "8ccff9fe0a882753acaa980bfaab8aa23fa003c4731188fe9b46f2ebe45d0fb6",
+      "servePath": "/style.css",
+      "repositoryPath": "snapshot/ui/app/style.css",
+      "repositorySha256": "8ccff9fe0a882753acaa980bfaab8aa23fa003c4731188fe9b46f2ebe45d0fb6",
+      "transformation": "none"
+    },
+    {
+      "sourcePath": "app/demo.mjs",
+      "sourceSha256": "51dcefcdfd752feb43ba2e26c667d61689ceb79e0111fd27ba1d5835c1e7343c",
+      "servePath": "/demo.mjs",
+      "repositoryPath": "snapshot/ui/app/demo.mjs",
+      "repositorySha256": "d768be2dfa3f725c55742cd069687eba472fd4580d828022cef2d8e2ae46778c",
+      "transformation": "Preserve the FileReader data URL and its MIME instead of rewriting its prefix; no embedded media bytes."
+    },
+    {
+      "sourcePath": "app/fal-connection.mjs",
+      "sourceSha256": "9b5448e93864b7e12029b2504cf190e15fde7ab78bf979778261169854834851",
+      "servePath": "/fal-connection.mjs",
+      "repositoryPath": "snapshot/ui/app/fal-connection.mjs",
+      "repositorySha256": "9b5448e93864b7e12029b2504cf190e15fde7ab78bf979778261169854834851",
+      "transformation": "none"
+    },
+    {
+      "sourcePath": "app/causal-pulse.mjs",
+      "sourceSha256": "7afcc19e438731cd9566b390106e25dbc5c649f9f35b18fa422e932eeeb5c826",
+      "servePath": "/causal-pulse.mjs",
+      "repositoryPath": "snapshot/ui/app/causal-pulse.mjs",
+      "repositorySha256": "7afcc19e438731cd9566b390106e25dbc5c649f9f35b18fa422e932eeeb5c826",
+      "transformation": "none"
+    },
+    {
+      "sourcePath": "app/onset-detector.mjs",
+      "sourceSha256": "bc5df8fa7bf86efe68ead156d4734f1baf8dc1c5e06bc73e40a00964ffedcbd6",
+      "servePath": "/onset-detector.mjs",
+      "repositoryPath": "snapshot/ui/app/onset-detector.mjs",
+      "repositorySha256": "bc5df8fa7bf86efe68ead156d4734f1baf8dc1c5e06bc73e40a00964ffedcbd6",
+      "transformation": "none"
+    },
+    {
+      "sourcePath": "app/scene-sequence.mjs",
+      "sourceSha256": "24087a93058b3c9a66c8226ad56d3c6fd4ead71e235090d79e6d97bbbffcfc7d",
+      "servePath": "/scene-sequence.mjs",
+      "repositoryPath": "snapshot/ui/app/scene-sequence.mjs",
+      "repositorySha256": "24087a93058b3c9a66c8226ad56d3c6fd4ead71e235090d79e6d97bbbffcfc7d",
+      "transformation": "none"
+    },
+    {
+      "sourcePath": "app/scene-video-adapter.mjs",
+      "sourceSha256": "e197df84547d99aedcb837efe42df006490b7e5583edf9b40ca228e6177ea378",
+      "servePath": "/scene-video-adapter.mjs",
+      "repositoryPath": "snapshot/ui/app/scene-video-adapter.mjs",
+      "repositorySha256": "e197df84547d99aedcb837efe42df006490b7e5583edf9b40ca228e6177ea378",
+      "transformation": "none"
+    },
+    {
+      "sourcePath": "app/scene-controller.mjs",
+      "sourceSha256": "4764ab2053fad56c042979fe6df4fc1cf071119c1bc4d363da4935bf909f9b6f",
+      "servePath": "/scene-controller.mjs",
+      "repositoryPath": "snapshot/ui/app/scene-controller.mjs",
+      "repositorySha256": "4764ab2053fad56c042979fe6df4fc1cf071119c1bc4d363da4935bf909f9b6f",
+      "transformation": "none"
+    },
+    {
+      "sourcePath": "app/batch-playback.mjs",
+      "sourceSha256": "272fbd69b5b3b02b05125da2c8fae09f07777e8d61da86057e484807e4111836",
+      "servePath": "/batch-playback.mjs",
+      "repositoryPath": "snapshot/ui/app/batch-playback.mjs",
+      "repositorySha256": "272fbd69b5b3b02b05125da2c8fae09f07777e8d61da86057e484807e4111836",
+      "transformation": "none"
+    },
+    {
+      "sourcePath": "app/queued-video-playback.mjs",
+      "sourceSha256": "f13f87c668909f07a2984bd816a7f4bccb5f590808893e53d7991f5a9484b6f5",
+      "servePath": "/queued-video-playback.mjs",
+      "repositoryPath": "snapshot/ui/app/queued-video-playback.mjs",
+      "repositorySha256": "f13f87c668909f07a2984bd816a7f4bccb5f590808893e53d7991f5a9484b6f5",
+      "transformation": "none"
+    },
+    {
+      "sourcePath": "app/audio-clock.mjs",
+      "sourceSha256": "f1c01885376c322719982950803a718e8935547a869dd11123f442dca8bb2439",
+      "servePath": "/audio-clock.mjs",
+      "repositoryPath": "snapshot/ui/app/audio-clock.mjs",
+      "repositorySha256": "f1c01885376c322719982950803a718e8935547a869dd11123f442dca8bb2439",
+      "transformation": "none"
+    },
+    {
+      "sourcePath": "app/worklet.mjs",
+      "sourceSha256": "a1fb22b93ccbece3b0e5ac4c7bb2af8cf7a7a6cd6dbb97cb66edaecb2252ede6",
+      "servePath": "/worklet.mjs",
+      "repositoryPath": "snapshot/ui/app/worklet.mjs",
+      "repositorySha256": "a1fb22b93ccbece3b0e5ac4c7bb2af8cf7a7a6cd6dbb97cb66edaecb2252ede6",
+      "transformation": "none"
+    },
+    {
+      "sourcePath": "app/public-playback.mjs",
+      "sourceSha256": "9df1b50d06f02a465d750910215d4eb51678eebc1d95e7c093ab510bb5333b6f",
+      "servePath": "/public-playback.mjs",
+      "repositoryPath": "snapshot/ui/app/public-playback.mjs",
+      "repositorySha256": "9df1b50d06f02a465d750910215d4eb51678eebc1d95e7c093ab510bb5333b6f",
+      "transformation": "none"
+    },
+    {
+      "sourcePath": "vnext/impact-pulse/impact-pulse.mjs",
+      "sourceSha256": "5e332986c6fda26f90152bf3d8d7d18421e3abca01021ba985fa9aebedb28d16",
+      "servePath": "/impact-pulse.mjs",
+      "repositoryPath": "snapshot/ui/vnext/impact-pulse/impact-pulse.mjs",
+      "repositorySha256": "5e332986c6fda26f90152bf3d8d7d18421e3abca01021ba985fa9aebedb28d16",
+      "transformation": "none"
+    },
+    {
+      "sourcePath": "src/browser-adapter.mjs",
+      "sourceSha256": "642dc878549829d31124c0040bca32b663f9d5a195ebbb4a92164e3ee6ed2991",
+      "servePath": "/src/browser-adapter.mjs",
+      "repositoryPath": "snapshot/ui/src/browser-adapter.mjs",
+      "repositorySha256": "642dc878549829d31124c0040bca32b663f9d5a195ebbb4a92164e3ee6ed2991",
+      "transformation": "none"
+    },
+    {
+      "sourcePath": "src/realtime-pulse.mjs",
+      "sourceSha256": "854813644c22664f509f92aa35db17351b370705e4b70e489258ffbdf255a8c6",
+      "servePath": "/src/realtime-pulse.mjs",
+      "repositoryPath": "snapshot/ui/src/realtime-pulse.mjs",
+      "repositorySha256": "854813644c22664f509f92aa35db17351b370705e4b70e489258ffbdf255a8c6",
+      "transformation": "none"
+    },
+    {
+      "sourcePath": "src/motif-contract.mjs",
+      "sourceSha256": "e277a7521e4b9c0c97cfdb676ed11af4ecbcf368fe2e17dba456945bb55b908b",
+      "servePath": "/src/motif-contract.mjs",
+      "repositoryPath": "snapshot/ui/src/motif-contract.mjs",
+      "repositorySha256": "e277a7521e4b9c0c97cfdb676ed11af4ecbcf368fe2e17dba456945bb55b908b",
+      "transformation": "none"
+    },
+    {
+      "sourcePath": "public/output.html",
+      "sourceSha256": "a1a006374613eafefaad763d3bbc8f9b34959e6376b342cf6e763c2e58d50be2",
+      "servePath": "/output.html",
+      "repositoryPath": "snapshot/ui/public/output.html",
+      "repositorySha256": "a1a006374613eafefaad763d3bbc8f9b34959e6376b342cf6e763c2e58d50be2",
+      "transformation": "none"
+    },
+    {
+      "sourcePath": "public/output.css",
+      "sourceSha256": "03157ee657e5690f8635aca8eef4f69e6a448fa03669e264217b727f670d508e",
+      "servePath": "/output.css",
+      "repositoryPath": "snapshot/ui/public/output.css",
+      "repositorySha256": "03157ee657e5690f8635aca8eef4f69e6a448fa03669e264217b727f670d508e",
+      "transformation": "none"
+    },
+    {
+      "sourcePath": "public/output-renderer.js",
+      "sourceSha256": "2d9953ece78251832057c7dae3e011b51cfd1db56f617456a7f625a93f3443bc",
+      "servePath": "/output-renderer.js",
+      "repositoryPath": "snapshot/ui/public/output-renderer.js",
+      "repositorySha256": "2d9953ece78251832057c7dae3e011b51cfd1db56f617456a7f625a93f3443bc",
+      "transformation": "none"
+    },
+    {
+      "sourcePath": "public/output-controller.js",
+      "sourceSha256": "cbcc0cb79678bce13319676176f4a58e398b806ee5c49a5013333450061ac463",
+      "servePath": "/output-controller.js",
+      "repositoryPath": "snapshot/ui/public/output-controller.js",
+      "repositorySha256": "cbcc0cb79678bce13319676176f4a58e398b806ee5c49a5013333450061ac463",
+      "transformation": "none"
+    },
+    {
+      "sourcePath": "public/output-page.js",
+      "sourceSha256": "ae329a0c4dab1e4fdc422fe0bc236fb205aa45d254018f2659b36e78847a6a48",
+      "servePath": "/output-page.js",
+      "repositoryPath": "snapshot/ui/public/output-page.js",
+      "repositorySha256": "ae329a0c4dab1e4fdc422fe0bc236fb205aa45d254018f2659b36e78847a6a48",
+      "transformation": "none"
+    }
+  ]
+}

@@ -1,0 +1,19 @@
+import {DJ_STRATEGY} from './dj-transition-selector.mjs';
+import {RoomError} from './participant-rooms.mjs';
+export function createParticipantRoomRoutes({service,authenticateOwner,origin,clientIdentity=req=>req.socket?.remoteAddress??'local'}={}){if(!service||typeof authenticateOwner!=='function'||typeof origin!=='function')throw Error('ROOM_HTTP_DEPENDENCIES_REQUIRED');return async(req,res)=>{const url=new URL(req.url,'http://localhost'),route=url.pathname;if(!route.startsWith('/api/rooms')&&route!=='/api/room-capabilities')return false;const json=(code,value)=>{if(res.destroyed)return;res.writeHead(code,{'Content-Type':'application/json','Cache-Control':'no-store','X-Content-Type-Options':'nosniff'}).end(JSON.stringify(value));};try{if(req.method!=='GET'&&req.headers.origin!==origin(req))throw new RoomError('ROOM_SAME_ORIGIN_REQUIRED',403);const body=async()=>{let bytes=0,raw='';for await(const c of req){bytes+=c.length;if(bytes>16384)throw new RoomError('ROOM_BODY_LIMIT',413);raw+=c;}let v;try{v=JSON.parse(raw);}catch{throw new RoomError('ROOM_INVALID_JSON',400);}if(!v||typeof v!=='object'||Array.isArray(v))throw new RoomError('ROOM_INVALID_JSON',400);return v;};
+ if(route==='/api/room-capabilities'&&req.method==='GET'){json(200,{mode:service.mode,roomApiAvailable:true,providerGenerationAvailable:service.mode==='provider',anonymousParticipation:true,providerKeyShared:false,cueSeconds:24,automaticDJStrategy:DJ_STRATEGY,defaults:{participants:5,participantCountIsConfigurable:true,activeSubmissions:2},actualAPIRequests:service.mode==='provider'?null:0});return true;}
+ if(route==='/api/rooms'&&req.method==='POST'){const ownerId=await authenticateOwner(req);if(!ownerId)throw new RoomError('ROOM_OWNER_AUTH_REQUIRED',403);json(201,await service.create({...await body(),ownerId}));return true;}
+ const match=route.match(/^\/api\/rooms\/([A-Za-z0-9_-]{1,100})(?:\/(join|participants|submissions|operations|events|control|dj\/tick)(?:\/([A-Za-z0-9_-]{1,100}))?)?$/);if(!match)throw new RoomError('ROOM_ROUTE_NOT_FOUND',404);const[,rid,op,sid]=match;
+ if(req.headers['x-fal-key'])throw new RoomError('PARTICIPANT_PROVIDER_KEY_NOT_REQUIRED',400);const auth=req.headers.authorization,a={ownerToken:req.headers['x-room-owner'],participantToken:typeof auth==='string'&&auth.startsWith('Bearer ')?auth.slice(7):null};
+ if(op==='join'&&req.method==='GET')json(200,await service.joinInfo(rid,url.searchParams.get('code')));
+ else if(op==='participants'&&req.method==='POST')json(201,await service.join(rid,await body(),clientIdentity(req)));
+ else if(op==='submissions'&&!sid&&req.method==='POST')json(202,await service.submit(rid,a,await body()));
+ else if(op==='submissions'&&!sid&&req.method==='GET')json(200,await service.submissionByNonce(rid,a,url.searchParams.get('nonce')));
+ else if(op==='submissions'&&sid&&req.method==='GET')json(200,await service.submission(rid,a,sid));
+ else if(op==='operations'&&sid&&req.method==='GET')json(200,await service.operation(rid,a,sid));
+ else if(op==='events'&&req.method==='GET')json(200,await service.events(rid,a,Number(url.searchParams.get('after')??0)));
+ else if(op==='control'&&req.method==='POST')json(200,await service.control(rid,a,await body()));
+ else if(op==='dj/tick'&&req.method==='POST'){await body();json(200,await service.djTick(rid,a));}
+ else if(!op&&req.method==='GET')json(200,await service.state(rid,a));
+ else throw new RoomError('ROOM_METHOD_NOT_ALLOWED',405);return true;
+ }catch(e){if(e instanceof RoomError&&e.retryAfterSeconds)res.setHeader('Retry-After',String(e.retryAfterSeconds));json(e instanceof RoomError?e.status:503,{code:e instanceof RoomError?e.code:'ROOM_OPERATION_HOLD',retryAfterSeconds:e instanceof RoomError?e.retryAfterSeconds:null,automaticRetry:false,currentPlaybackStopped:false});return true;}};}

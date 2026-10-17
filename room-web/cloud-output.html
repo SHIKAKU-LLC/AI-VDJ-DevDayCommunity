@@ -1,0 +1,11 @@
+<!doctype html>
+<html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="referrer" content="no-referrer"><title>AI VDJ 音声・映像出力</title>
+<link rel="stylesheet" href="/cloud-output.css"><link rel="stylesheet" href="/playback/playback.css"></head>
+<body><main><h1>音声・映像出力</h1><p>この画面が音声と映像を担当します。owner画面で再生を操作してください。</p>
+<div id="output" class="vdj-playback-output" aria-label="映像出力"></div>
+<p id="participant-credit" class="cloud-participant-credit" role="status" aria-live="polite" hidden></p>
+<div id="controls"></div><p id="status" role="status" aria-live="polite">owner画面からの接続を待っています。</p>
+<details id="observer-diagnostics"><summary>出力の状態を確認</summary><output id="observer-diagnostics-value"></output></details>
+<p>この出力画面を会場のディスプレイに表示してください。音量は会場の機器で調整できます。</p>
+</main><script type="module" src="/cloud-output.mjs"></script></body></html>

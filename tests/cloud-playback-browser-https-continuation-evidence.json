@@ -1,0 +1,2156 @@
+{
+  "kind": "synthetic-https-three-cue-browser-evidence-v1",
+  "deploymentOrigin": "https://ai-p1g4ktpt6-hapx2yukigmailcoms-projects.vercel.app",
+  "deploymentId": "dpl_EAdCWyPbravYdAV9X6kE1vMzHK7c",
+  "codeCommit": "a209cede6a9b67b8a32c001afd57703436b8f16c",
+  "bundleMetadataSha256": "367108e8ff113715a44802403797fdeb943680f5ce9cd8311ff30decc1fdf17a",
+  "scope": "Synthetic cumulative future queue and visual three-cue continuity. Native clip-relative mapping is verified separately. Same synthetic nickname marker; not three real participants. Physical speaker/display sync and provider execution unverified.",
+  "owner": {
+    "fixture": "synthetic-browser-v1",
+    "physicalSpeakerVerified": false,
+    "browser": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36",
+    "secureContext": true,
+    "sampleRate": 44100,
+    "processedWindow": {
+      "startFrame": 3175200,
+      "byteLength": 2048,
+      "sha256": "d45cb50b2fa50daf6b8d93d8ab318099cecc17e9d88ee6bed0d1a3ae848c1ccb",
+      "expectedSha256": "d45cb50b2fa50daf6b8d93d8ab318099cecc17e9d88ee6bed0d1a3ae848c1ccb"
+    },
+    "videoFrames": [
+      {
+        "nowMs": 38758.9,
+        "mediaTime": 0.291667,
+        "presentedFrames": 4,
+        "width": 320,
+        "height": 180,
+        "muted": true,
+        "volume": 0,
+        "cueId": "cue-fixture"
+      },
+      {
+        "nowMs": 62725.6,
+        "mediaTime": 0.25,
+        "presentedFrames": 3,
+        "width": 320,
+        "height": 180,
+        "muted": true,
+        "volume": 0,
+        "cueId": "cue-fixture-2"
+      },
+      {
+        "nowMs": 86709.5,
+        "mediaTime": 0.25,
+        "presentedFrames": 3,
+        "width": 320,
+        "height": 180,
+        "muted": true,
+        "volume": 0,
+        "cueId": "cue-fixture-3"
+      }
+    ],
+    "states": [
+      {
+        "phase": "IDLE",
+        "sourceCount": 1,
+        "playbackRevision": 0,
+        "audioStarted": false,
+        "videoPresented": false
+      },
+      {
+        "phase": "GESTURE_REQUIRED",
+        "sourceCount": 1,
+        "playbackRevision": 0,
+        "audioStarted": false,
+        "videoPresented": false
+      },
+      {
+        "phase": "READY",
+        "sourceCount": 1,
+        "playbackRevision": 0,
+        "audioStarted": false,
+        "videoPresented": false
+      },
+      {
+        "phase": "PREPARING",
+        "sourceCount": 1,
+        "playbackRevision": 0,
+        "audioStarted": false,
+        "videoPresented": false
+      },
+      {
+        "phase": "STARTING",
+        "sourceCount": 1,
+        "playbackRevision": 0,
+        "audioStarted": false,
+        "videoPresented": false
+      },
+      {
+        "phase": "PLAYING",
+        "sourceCount": 1,
+        "playbackRevision": 1,
+        "audioStarted": true,
+        "videoPresented": true
+      },
+      {
+        "phase": "PREPARING",
+        "sourceCount": 1,
+        "playbackRevision": 1,
+        "audioStarted": false,
+        "videoPresented": false
+      },
+      {
+        "phase": "STARTING",
+        "sourceCount": 1,
+        "playbackRevision": 1,
+        "audioStarted": false,
+        "videoPresented": false
+      },
+      {
+        "phase": "PLAYING",
+        "sourceCount": 1,
+        "playbackRevision": 2,
+        "audioStarted": true,
+        "videoPresented": true
+      },
+      {
+        "phase": "PREPARING",
+        "sourceCount": 1,
+        "playbackRevision": 2,
+        "audioStarted": false,
+        "videoPresented": false
+      },
+      {
+        "phase": "STARTING",
+        "sourceCount": 1,
+        "playbackRevision": 2,
+        "audioStarted": false,
+        "videoPresented": false
+      },
+      {
+        "phase": "PLAYING",
+        "sourceCount": 1,
+        "playbackRevision": 3,
+        "audioStarted": true,
+        "videoPresented": true
+      }
+    ],
+    "guards": [
+      {
+        "phase": "prepare",
+        "valid": true
+      },
+      {
+        "phase": "ack",
+        "valid": true
+      },
+      {
+        "phase": "prepare",
+        "valid": true
+      },
+      {
+        "phase": "prepare",
+        "valid": true
+      },
+      {
+        "phase": "ack",
+        "valid": true
+      },
+      {
+        "phase": "prepare",
+        "valid": true
+      },
+      {
+        "phase": "prepare",
+        "valid": true
+      },
+      {
+        "phase": "ack",
+        "valid": true
+      },
+      {
+        "phase": "prepare",
+        "valid": true
+      },
+      {
+        "phase": "prepare",
+        "valid": true
+      },
+      {
+        "phase": "ack",
+        "valid": true
+      }
+    ],
+    "checks": [
+      {
+        "name": "seed-source-start-no-participant-credit",
+        "passed": true
+      },
+      {
+        "name": "credit-overlay-after-browser-ack",
+        "passed": true
+      },
+      {
+        "name": "actual-browser-start-ack",
+        "passed": true,
+        "nameDetail": "browser processing and presentation; physical speaker unverified"
+      },
+      {
+        "name": "credit-overlay-after-browser-ack",
+        "passed": true
+      },
+      {
+        "name": "actual-browser-start-ack",
+        "passed": true,
+        "nameDetail": "browser processing and presentation; physical speaker unverified"
+      },
+      {
+        "name": "credit-overlay-after-browser-ack",
+        "passed": true
+      },
+      {
+        "name": "actual-browser-start-ack",
+        "passed": true,
+        "nameDetail": "browser processing and presentation; physical speaker unverified"
+      }
+    ],
+    "events": [
+      {
+        "type": "output-state",
+        "value": {
+          "phase": "IDLE",
+          "reason": null,
+          "message": "再生を開始すると、この画面が音声出力を担当します。",
+          "role": "output",
+          "playbackRevision": 0,
+          "pendingRevision": null,
+          "cueId": null,
+          "audioStarted": false,
+          "videoPresented": false,
+          "sourceCount": 1,
+          "cloudRole": "output",
+          "activationEnabled": true,
+          "fixtureMode": true
+        }
+      },
+      {
+        "type": "seed-state",
+        "value": {
+          "phase": "STARTING",
+          "reason": null,
+          "graphEpoch": 1,
+          "participantCredit": false
+        }
+      },
+      {
+        "type": "seed-state",
+        "value": {
+          "phase": "SOURCE_PLAYING",
+          "reason": null,
+          "graphEpoch": 1,
+          "participantCredit": false
+        }
+      },
+      {
+        "type": "output-state",
+        "value": {
+          "phase": "GESTURE_REQUIRED",
+          "reason": null,
+          "message": "音声を有効にするには、この画面で「再生を有効にする」を押してください。",
+          "role": "output",
+          "playbackRevision": 0,
+          "pendingRevision": null,
+          "cueId": null,
+          "audioStarted": false,
+          "videoPresented": false,
+          "sourceCount": 1,
+          "cloudRole": "output",
+          "activationEnabled": true,
+          "fixtureMode": true
+        }
+      },
+      {
+        "type": "output-state",
+        "value": {
+          "phase": "READY",
+          "reason": null,
+          "message": "音声出力の準備ができました。完成済みの音楽・映像を待っています。",
+          "role": "output",
+          "playbackRevision": 0,
+          "pendingRevision": null,
+          "cueId": null,
+          "audioStarted": false,
+          "videoPresented": false,
+          "sourceCount": 1,
+          "cloudRole": "output",
+          "activationEnabled": true,
+          "fixtureMode": true
+        }
+      },
+      {
+        "type": "seed-state",
+        "value": {
+          "phase": "HANDED_OFF",
+          "reason": null,
+          "graphEpoch": 1,
+          "participantCredit": false
+        }
+      },
+      {
+        "type": "output-state",
+        "value": {
+          "phase": "PREPARING",
+          "reason": null,
+          "message": "同じキューの音楽・映像と再生証跡を確認中です。",
+          "role": "output",
+          "playbackRevision": 0,
+          "pendingRevision": 1,
+          "cueId": "cue-fixture",
+          "audioStarted": false,
+          "videoPresented": false,
+          "sourceCount": 1,
+          "cloudRole": "output",
+          "activationEnabled": true,
+          "fixtureMode": true
+        }
+      },
+      {
+        "type": "output-state",
+        "value": {
+          "phase": "STARTING",
+          "reason": null,
+          "message": "音声の実再生と映像の提示を確認中です。",
+          "role": "output",
+          "playbackRevision": 0,
+          "pendingRevision": 1,
+          "cueId": "cue-fixture",
+          "audioStarted": false,
+          "videoPresented": false,
+          "sourceCount": 1,
+          "cloudRole": "output",
+          "activationEnabled": true,
+          "fixtureMode": true
+        }
+      },
+      {
+        "type": "output-state",
+        "value": {
+          "phase": "PLAYING",
+          "reason": null,
+          "message": "音楽と映像を再生中です。",
+          "role": "output",
+          "playbackRevision": 1,
+          "pendingRevision": 1,
+          "cueId": "cue-fixture",
+          "audioStarted": true,
+          "videoPresented": true,
+          "sourceCount": 1,
+          "cloudRole": "output",
+          "activationEnabled": true,
+          "fixtureMode": true
+        }
+      },
+      {
+        "type": "output-state",
+        "value": {
+          "phase": "PREPARING",
+          "reason": null,
+          "message": "同じキューの音楽・映像と再生証跡を確認中です。",
+          "role": "output",
+          "playbackRevision": 1,
+          "pendingRevision": 2,
+          "cueId": "cue-fixture-2",
+          "audioStarted": false,
+          "videoPresented": false,
+          "sourceCount": 1,
+          "cloudRole": "output",
+          "activationEnabled": true,
+          "fixtureMode": true
+        }
+      },
+      {
+        "type": "output-state",
+        "value": {
+          "phase": "STARTING",
+          "reason": null,
+          "message": "音声の実再生と映像の提示を確認中です。",
+          "role": "output",
+          "playbackRevision": 1,
+          "pendingRevision": 2,
+          "cueId": "cue-fixture-2",
+          "audioStarted": false,
+          "videoPresented": false,
+          "sourceCount": 1,
+          "cloudRole": "output",
+          "activationEnabled": true,
+          "fixtureMode": true
+        }
+      },
+      {
+        "type": "output-state",
+        "value": {
+          "phase": "PLAYING",
+          "reason": null,
+          "message": "音楽と映像を再生中です。",
+          "role": "output",
+          "playbackRevision": 2,
+          "pendingRevision": 2,
+          "cueId": "cue-fixture-2",
+          "audioStarted": true,
+          "videoPresented": true,
+          "sourceCount": 1,
+          "cloudRole": "output",
+          "activationEnabled": true,
+          "fixtureMode": true
+        }
+      },
+      {
+        "type": "output-state",
+        "value": {
+          "phase": "PREPARING",
+          "reason": null,
+          "message": "同じキューの音楽・映像と再生証跡を確認中です。",
+          "role": "output",
+          "playbackRevision": 2,
+          "pendingRevision": 3,
+          "cueId": "cue-fixture-3",
+          "audioStarted": false,
+          "videoPresented": false,
+          "sourceCount": 1,
+          "cloudRole": "output",
+          "activationEnabled": true,
+          "fixtureMode": true
+        }
+      },
+      {
+        "type": "output-state",
+        "value": {
+          "phase": "STARTING",
+          "reason": null,
+          "message": "音声の実再生と映像の提示を確認中です。",
+          "role": "output",
+          "playbackRevision": 2,
+          "pendingRevision": 3,
+          "cueId": "cue-fixture-3",
+          "audioStarted": false,
+          "videoPresented": false,
+          "sourceCount": 1,
+          "cloudRole": "output",
+          "activationEnabled": true,
+          "fixtureMode": true
+        }
+      },
+      {
+        "type": "output-state",
+        "value": {
+          "phase": "PLAYING",
+          "reason": null,
+          "message": "音楽と映像を再生中です。",
+          "role": "output",
+          "playbackRevision": 3,
+          "pendingRevision": 3,
+          "cueId": "cue-fixture-3",
+          "audioStarted": true,
+          "videoPresented": true,
+          "sourceCount": 1,
+          "cloudRole": "output",
+          "activationEnabled": true,
+          "fixtureMode": true
+        }
+      },
+      {
+        "type": "output-state",
+        "value": {
+          "phase": "STOPPED",
+          "reason": "CUE_DURATION_END",
+          "message": "停止しました。再開するには、この画面で音声を再度有効にしてください。",
+          "role": "output",
+          "playbackRevision": 3,
+          "pendingRevision": null,
+          "cueId": null,
+          "audioStarted": false,
+          "videoPresented": false,
+          "sourceCount": 1,
+          "cloudRole": "output",
+          "activationEnabled": true,
+          "fixtureMode": true
+        }
+      }
+    ],
+    "seedAck": {
+      "kind": "cloud-source-playback-started-v1",
+      "graphEpoch": 1,
+      "sourceClipId": "seed-fixture",
+      "sourceSha256": "2c2a066ee5fcf7bb4be13b3c02e854724165dd053136440c3fed7a34ff440e35",
+      "sourceContextSha256": "57191c8b3cd09d39b52aa314284416fa2f83fbd5b14c34b88491257a8e5dae18",
+      "sourcePlaybackRevision": 0,
+      "sampleRate": 44100,
+      "playedUntilFrame": 11264,
+      "processedWindowSha256": "f0c3fdd185358dd8a745f447542d55309f73626d0a37df3a223af4080fe28050",
+      "actual": true,
+      "audioStarted": true,
+      "participantCredit": false
+    },
+    "ack": {
+      "roomId": "11111111-1111-4111-8111-111111111111",
+      "cueId": "cue-fixture-3",
+      "clipId": "music-fixture-3",
+      "playbackRevision": 3,
+      "audioTime": 72.2227664399093,
+      "actual": true,
+      "audioStarted": true,
+      "videoPresented": true
+    },
+    "processedWindows": [
+      {
+        "startFrame": 0,
+        "byteLength": 2048,
+        "sha256": "f0c3fdd185358dd8a745f447542d55309f73626d0a37df3a223af4080fe28050",
+        "expectedSha256": null
+      },
+      {
+        "startFrame": 1058400,
+        "byteLength": 2048,
+        "sha256": "60c77e34cf5f032de927b363ab6f3669869a576980389f157969994c949951fb",
+        "expectedSha256": "60c77e34cf5f032de927b363ab6f3669869a576980389f157969994c949951fb"
+      },
+      {
+        "startFrame": 2116800,
+        "byteLength": 2048,
+        "sha256": "932a57c6e1a2d0f093bfd7fcb21446cc45cb30911a3aaf776713ad850ec025fd",
+        "expectedSha256": "932a57c6e1a2d0f093bfd7fcb21446cc45cb30911a3aaf776713ad850ec025fd"
+      },
+      {
+        "startFrame": 3175200,
+        "byteLength": 2048,
+        "sha256": "d45cb50b2fa50daf6b8d93d8ab318099cecc17e9d88ee6bed0d1a3ae848c1ccb",
+        "expectedSha256": "d45cb50b2fa50daf6b8d93d8ab318099cecc17e9d88ee6bed0d1a3ae848c1ccb"
+      }
+    ],
+    "commandCounts": {
+      "set-duration": 1,
+      "trace-frame": 4,
+      "chunk": 1,
+      "play": 4,
+      "replace-future": 3
+    },
+    "telemetry": {
+      "sampleRate": 44100,
+      "consumedFrames": 3185024,
+      "receivedFrames": 4233600,
+      "underrunFrames": 0,
+      "stopped": false
+    },
+    "cueAcks": [
+      {
+        "roomId": "11111111-1111-4111-8111-111111111111",
+        "cueId": "cue-fixture",
+        "clipId": "music-fixture",
+        "playbackRevision": 1,
+        "audioTime": 24.24453514739229,
+        "actual": true,
+        "audioStarted": true,
+        "videoPresented": true,
+        "processedWindow": {
+          "startFrame": 1058400,
+          "byteLength": 2048,
+          "sha256": "60c77e34cf5f032de927b363ab6f3669869a576980389f157969994c949951fb",
+          "expectedSha256": "60c77e34cf5f032de927b363ab6f3669869a576980389f157969994c949951fb"
+        }
+      },
+      {
+        "roomId": "11111111-1111-4111-8111-111111111111",
+        "cueId": "cue-fixture-2",
+        "clipId": "music-fixture-2",
+        "playbackRevision": 2,
+        "audioTime": 48.233650793650796,
+        "actual": true,
+        "audioStarted": true,
+        "videoPresented": true,
+        "processedWindow": {
+          "startFrame": 2116800,
+          "byteLength": 2048,
+          "sha256": "932a57c6e1a2d0f093bfd7fcb21446cc45cb30911a3aaf776713ad850ec025fd",
+          "expectedSha256": "932a57c6e1a2d0f093bfd7fcb21446cc45cb30911a3aaf776713ad850ec025fd"
+        }
+      },
+      {
+        "roomId": "11111111-1111-4111-8111-111111111111",
+        "cueId": "cue-fixture-3",
+        "clipId": "music-fixture-3",
+        "playbackRevision": 3,
+        "audioTime": 72.2227664399093,
+        "actual": true,
+        "audioStarted": true,
+        "videoPresented": true,
+        "processedWindow": {
+          "startFrame": 3175200,
+          "byteLength": 2048,
+          "sha256": "d45cb50b2fa50daf6b8d93d8ab318099cecc17e9d88ee6bed0d1a3ae848c1ccb",
+          "expectedSha256": "d45cb50b2fa50daf6b8d93d8ab318099cecc17e9d88ee6bed0d1a3ae848c1ccb"
+        }
+      }
+    ],
+    "visualContinuity": [
+      {
+        "phase": "PREPARING",
+        "currentRevision": 1,
+        "pendingRevision": 2,
+        "visibleCueIds": [
+          "cue-fixture"
+        ]
+      },
+      {
+        "phase": "STARTING",
+        "currentRevision": 1,
+        "pendingRevision": 2,
+        "visibleCueIds": [
+          "cue-fixture"
+        ]
+      },
+      {
+        "phase": "PREPARING",
+        "currentRevision": 2,
+        "pendingRevision": 3,
+        "visibleCueIds": [
+          "cue-fixture-2"
+        ]
+      },
+      {
+        "phase": "STARTING",
+        "currentRevision": 2,
+        "pendingRevision": 3,
+        "visibleCueIds": [
+          "cue-fixture-2"
+        ]
+      }
+    ]
+  },
+  "output": {
+    "fixture": "synthetic-browser-v1",
+    "physicalSpeakerVerified": false,
+    "browser": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36",
+    "secureContext": true,
+    "sampleRate": 44100,
+    "processedWindow": {
+      "startFrame": 3175200,
+      "byteLength": 2048,
+      "sha256": "d45cb50b2fa50daf6b8d93d8ab318099cecc17e9d88ee6bed0d1a3ae848c1ccb",
+      "expectedSha256": "d45cb50b2fa50daf6b8d93d8ab318099cecc17e9d88ee6bed0d1a3ae848c1ccb"
+    },
+    "videoFrames": [
+      {
+        "nowMs": 38758.9,
+        "mediaTime": 0.291667,
+        "presentedFrames": 4,
+        "width": 320,
+        "height": 180,
+        "muted": true,
+        "volume": 0,
+        "cueId": "cue-fixture"
+      },
+      {
+        "nowMs": 62725.6,
+        "mediaTime": 0.25,
+        "presentedFrames": 3,
+        "width": 320,
+        "height": 180,
+        "muted": true,
+        "volume": 0,
+        "cueId": "cue-fixture-2"
+      },
+      {
+        "nowMs": 86709.5,
+        "mediaTime": 0.25,
+        "presentedFrames": 3,
+        "width": 320,
+        "height": 180,
+        "muted": true,
+        "volume": 0,
+        "cueId": "cue-fixture-3"
+      }
+    ],
+    "states": [
+      {
+        "phase": "IDLE",
+        "sourceCount": 1,
+        "playbackRevision": 0,
+        "audioStarted": false,
+        "videoPresented": false
+      },
+      {
+        "phase": "GESTURE_REQUIRED",
+        "sourceCount": 1,
+        "playbackRevision": 0,
+        "audioStarted": false,
+        "videoPresented": false
+      },
+      {
+        "phase": "READY",
+        "sourceCount": 1,
+        "playbackRevision": 0,
+        "audioStarted": false,
+        "videoPresented": false
+      },
+      {
+        "phase": "PREPARING",
+        "sourceCount": 1,
+        "playbackRevision": 0,
+        "audioStarted": false,
+        "videoPresented": false
+      },
+      {
+        "phase": "STARTING",
+        "sourceCount": 1,
+        "playbackRevision": 0,
+        "audioStarted": false,
+        "videoPresented": false
+      },
+      {
+        "phase": "PLAYING",
+        "sourceCount": 1,
+        "playbackRevision": 1,
+        "audioStarted": true,
+        "videoPresented": true
+      },
+      {
+        "phase": "PREPARING",
+        "sourceCount": 1,
+        "playbackRevision": 1,
+        "audioStarted": false,
+        "videoPresented": false
+      },
+      {
+        "phase": "STARTING",
+        "sourceCount": 1,
+        "playbackRevision": 1,
+        "audioStarted": false,
+        "videoPresented": false
+      },
+      {
+        "phase": "PLAYING",
+        "sourceCount": 1,
+        "playbackRevision": 2,
+        "audioStarted": true,
+        "videoPresented": true
+      },
+      {
+        "phase": "PREPARING",
+        "sourceCount": 1,
+        "playbackRevision": 2,
+        "audioStarted": false,
+        "videoPresented": false
+      },
+      {
+        "phase": "STARTING",
+        "sourceCount": 1,
+        "playbackRevision": 2,
+        "audioStarted": false,
+        "videoPresented": false
+      },
+      {
+        "phase": "PLAYING",
+        "sourceCount": 1,
+        "playbackRevision": 3,
+        "audioStarted": true,
+        "videoPresented": true
+      },
+      {
+        "phase": "STOPPED",
+        "sourceCount": 1,
+        "playbackRevision": 3,
+        "audioStarted": false,
+        "videoPresented": false
+      }
+    ],
+    "guards": [],
+    "checks": [],
+    "events": [],
+    "commandCounts": {
+      "set-duration": 1,
+      "trace-frame": 4,
+      "chunk": 1,
+      "play": 4,
+      "replace-future": 3
+    },
+    "seedStates": [
+      {
+        "phase": "STARTING",
+        "reason": null,
+        "graphEpoch": 1,
+        "participantCredit": false
+      },
+      {
+        "phase": "SOURCE_PLAYING",
+        "reason": null,
+        "graphEpoch": 1,
+        "participantCredit": false
+      },
+      {
+        "phase": "HANDED_OFF",
+        "reason": null,
+        "graphEpoch": 1,
+        "participantCredit": false
+      }
+    ],
+    "telemetry": {
+      "sampleRate": 44100,
+      "consumedFrames": 4233600,
+      "receivedFrames": 4233600,
+      "underrunFrames": 0,
+      "stopped": true
+    },
+    "processedWindows": [
+      {
+        "startFrame": 0,
+        "byteLength": 2048,
+        "sha256": "f0c3fdd185358dd8a745f447542d55309f73626d0a37df3a223af4080fe28050",
+        "expectedSha256": null
+      },
+      {
+        "startFrame": 1058400,
+        "byteLength": 2048,
+        "sha256": "60c77e34cf5f032de927b363ab6f3669869a576980389f157969994c949951fb",
+        "expectedSha256": "60c77e34cf5f032de927b363ab6f3669869a576980389f157969994c949951fb"
+      },
+      {
+        "startFrame": 2116800,
+        "byteLength": 2048,
+        "sha256": "932a57c6e1a2d0f093bfd7fcb21446cc45cb30911a3aaf776713ad850ec025fd",
+        "expectedSha256": "932a57c6e1a2d0f093bfd7fcb21446cc45cb30911a3aaf776713ad850ec025fd"
+      },
+      {
+        "startFrame": 3175200,
+        "byteLength": 2048,
+        "sha256": "d45cb50b2fa50daf6b8d93d8ab318099cecc17e9d88ee6bed0d1a3ae848c1ccb",
+        "expectedSha256": "d45cb50b2fa50daf6b8d93d8ab318099cecc17e9d88ee6bed0d1a3ae848c1ccb"
+      }
+    ],
+    "visualContinuity": [
+      {
+        "phase": "PREPARING",
+        "currentRevision": 1,
+        "pendingRevision": 2,
+        "visibleCueIds": [
+          "cue-fixture"
+        ]
+      },
+      {
+        "phase": "STARTING",
+        "currentRevision": 1,
+        "pendingRevision": 2,
+        "visibleCueIds": [
+          "cue-fixture"
+        ]
+      },
+      {
+        "phase": "PREPARING",
+        "currentRevision": 2,
+        "pendingRevision": 3,
+        "visibleCueIds": [
+          "cue-fixture-2"
+        ]
+      },
+      {
+        "phase": "STARTING",
+        "currentRevision": 2,
+        "pendingRevision": 3,
+        "visibleCueIds": [
+          "cue-fixture-2"
+        ]
+      }
+    ]
+  },
+  "restartAndStop": {
+    "fixture": "synthetic-browser-v1",
+    "physicalSpeakerVerified": false,
+    "browser": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36",
+    "secureContext": true,
+    "sampleRate": 44100,
+    "processedWindow": {
+      "startFrame": 3175200,
+      "byteLength": 2048,
+      "sha256": "d45cb50b2fa50daf6b8d93d8ab318099cecc17e9d88ee6bed0d1a3ae848c1ccb",
+      "expectedSha256": "d45cb50b2fa50daf6b8d93d8ab318099cecc17e9d88ee6bed0d1a3ae848c1ccb"
+    },
+    "videoFrames": [
+      {
+        "nowMs": 38758.9,
+        "mediaTime": 0.291667,
+        "presentedFrames": 4,
+        "width": 320,
+        "height": 180,
+        "muted": true,
+        "volume": 0,
+        "cueId": "cue-fixture"
+      },
+      {
+        "nowMs": 62725.6,
+        "mediaTime": 0.25,
+        "presentedFrames": 3,
+        "width": 320,
+        "height": 180,
+        "muted": true,
+        "volume": 0,
+        "cueId": "cue-fixture-2"
+      },
+      {
+        "nowMs": 86709.5,
+        "mediaTime": 0.25,
+        "presentedFrames": 3,
+        "width": 320,
+        "height": 180,
+        "muted": true,
+        "volume": 0,
+        "cueId": "cue-fixture-3"
+      }
+    ],
+    "states": [
+      {
+        "phase": "IDLE",
+        "sourceCount": 1,
+        "playbackRevision": 0,
+        "audioStarted": false,
+        "videoPresented": false
+      },
+      {
+        "phase": "GESTURE_REQUIRED",
+        "sourceCount": 1,
+        "playbackRevision": 0,
+        "audioStarted": false,
+        "videoPresented": false
+      },
+      {
+        "phase": "READY",
+        "sourceCount": 1,
+        "playbackRevision": 0,
+        "audioStarted": false,
+        "videoPresented": false
+      },
+      {
+        "phase": "PREPARING",
+        "sourceCount": 1,
+        "playbackRevision": 0,
+        "audioStarted": false,
+        "videoPresented": false
+      },
+      {
+        "phase": "STARTING",
+        "sourceCount": 1,
+        "playbackRevision": 0,
+        "audioStarted": false,
+        "videoPresented": false
+      },
+      {
+        "phase": "PLAYING",
+        "sourceCount": 1,
+        "playbackRevision": 1,
+        "audioStarted": true,
+        "videoPresented": true
+      },
+      {
+        "phase": "PREPARING",
+        "sourceCount": 1,
+        "playbackRevision": 1,
+        "audioStarted": false,
+        "videoPresented": false
+      },
+      {
+        "phase": "STARTING",
+        "sourceCount": 1,
+        "playbackRevision": 1,
+        "audioStarted": false,
+        "videoPresented": false
+      },
+      {
+        "phase": "PLAYING",
+        "sourceCount": 1,
+        "playbackRevision": 2,
+        "audioStarted": true,
+        "videoPresented": true
+      },
+      {
+        "phase": "PREPARING",
+        "sourceCount": 1,
+        "playbackRevision": 2,
+        "audioStarted": false,
+        "videoPresented": false
+      },
+      {
+        "phase": "STARTING",
+        "sourceCount": 1,
+        "playbackRevision": 2,
+        "audioStarted": false,
+        "videoPresented": false
+      },
+      {
+        "phase": "PLAYING",
+        "sourceCount": 1,
+        "playbackRevision": 3,
+        "audioStarted": true,
+        "videoPresented": true
+      }
+    ],
+    "guards": [
+      {
+        "phase": "prepare",
+        "valid": true
+      },
+      {
+        "phase": "ack",
+        "valid": true
+      },
+      {
+        "phase": "prepare",
+        "valid": true
+      },
+      {
+        "phase": "prepare",
+        "valid": true
+      },
+      {
+        "phase": "ack",
+        "valid": true
+      },
+      {
+        "phase": "prepare",
+        "valid": true
+      },
+      {
+        "phase": "prepare",
+        "valid": true
+      },
+      {
+        "phase": "ack",
+        "valid": true
+      },
+      {
+        "phase": "prepare",
+        "valid": true
+      },
+      {
+        "phase": "prepare",
+        "valid": true
+      },
+      {
+        "phase": "ack",
+        "valid": true
+      },
+      {
+        "phase": "prepare",
+        "valid": true
+      },
+      {
+        "phase": "ack",
+        "valid": true
+      },
+      {
+        "phase": "prepare",
+        "valid": true
+      },
+      {
+        "phase": "ack",
+        "valid": true
+      },
+      {
+        "phase": "ack",
+        "valid": false
+      }
+    ],
+    "checks": [
+      {
+        "name": "seed-source-start-no-participant-credit",
+        "passed": true
+      },
+      {
+        "name": "credit-overlay-after-browser-ack",
+        "passed": true
+      },
+      {
+        "name": "actual-browser-start-ack",
+        "passed": true,
+        "nameDetail": "browser processing and presentation; physical speaker unverified"
+      },
+      {
+        "name": "credit-overlay-after-browser-ack",
+        "passed": true
+      },
+      {
+        "name": "actual-browser-start-ack",
+        "passed": true,
+        "nameDetail": "browser processing and presentation; physical speaker unverified"
+      },
+      {
+        "name": "credit-overlay-after-browser-ack",
+        "passed": true
+      },
+      {
+        "name": "actual-browser-start-ack",
+        "passed": true,
+        "nameDetail": "browser processing and presentation; physical speaker unverified"
+      },
+      {
+        "name": "fresh-suspended-restart-graph",
+        "passed": true
+      },
+      {
+        "name": "restart-source-start-no-participant-credit",
+        "passed": true
+      },
+      {
+        "name": "fresh-suspended-restart-graph",
+        "passed": true
+      },
+      {
+        "name": "restart-source-start-no-participant-credit",
+        "passed": true
+      },
+      {
+        "name": "stop",
+        "passed": true
+      },
+      {
+        "name": "stale-guard-rejection",
+        "passed": true
+      }
+    ],
+    "events": [
+      {
+        "type": "output-state",
+        "value": {
+          "phase": "IDLE",
+          "reason": null,
+          "message": "再生を開始すると、この画面が音声出力を担当します。",
+          "role": "output",
+          "playbackRevision": 0,
+          "pendingRevision": null,
+          "cueId": null,
+          "audioStarted": false,
+          "videoPresented": false,
+          "sourceCount": 1,
+          "cloudRole": "output",
+          "activationEnabled": true,
+          "fixtureMode": true
+        }
+      },
+      {
+        "type": "seed-state",
+        "value": {
+          "phase": "STARTING",
+          "reason": null,
+          "graphEpoch": 1,
+          "participantCredit": false
+        }
+      },
+      {
+        "type": "seed-state",
+        "value": {
+          "phase": "SOURCE_PLAYING",
+          "reason": null,
+          "graphEpoch": 1,
+          "participantCredit": false
+        }
+      },
+      {
+        "type": "output-state",
+        "value": {
+          "phase": "GESTURE_REQUIRED",
+          "reason": null,
+          "message": "音声を有効にするには、この画面で「再生を有効にする」を押してください。",
+          "role": "output",
+          "playbackRevision": 0,
+          "pendingRevision": null,
+          "cueId": null,
+          "audioStarted": false,
+          "videoPresented": false,
+          "sourceCount": 1,
+          "cloudRole": "output",
+          "activationEnabled": true,
+          "fixtureMode": true
+        }
+      },
+      {
+        "type": "output-state",
+        "value": {
+          "phase": "READY",
+          "reason": null,
+          "message": "音声出力の準備ができました。完成済みの音楽・映像を待っています。",
+          "role": "output",
+          "playbackRevision": 0,
+          "pendingRevision": null,
+          "cueId": null,
+          "audioStarted": false,
+          "videoPresented": false,
+          "sourceCount": 1,
+          "cloudRole": "output",
+          "activationEnabled": true,
+          "fixtureMode": true
+        }
+      },
+      {
+        "type": "seed-state",
+        "value": {
+          "phase": "HANDED_OFF",
+          "reason": null,
+          "graphEpoch": 1,
+          "participantCredit": false
+        }
+      },
+      {
+        "type": "output-state",
+        "value": {
+          "phase": "PREPARING",
+          "reason": null,
+          "message": "同じキューの音楽・映像と再生証跡を確認中です。",
+          "role": "output",
+          "playbackRevision": 0,
+          "pendingRevision": 1,
+          "cueId": "cue-fixture",
+          "audioStarted": false,
+          "videoPresented": false,
+          "sourceCount": 1,
+          "cloudRole": "output",
+          "activationEnabled": true,
+          "fixtureMode": true
+        }
+      },
+      {
+        "type": "output-state",
+        "value": {
+          "phase": "STARTING",
+          "reason": null,
+          "message": "音声の実再生と映像の提示を確認中です。",
+          "role": "output",
+          "playbackRevision": 0,
+          "pendingRevision": 1,
+          "cueId": "cue-fixture",
+          "audioStarted": false,
+          "videoPresented": false,
+          "sourceCount": 1,
+          "cloudRole": "output",
+          "activationEnabled": true,
+          "fixtureMode": true
+        }
+      },
+      {
+        "type": "output-state",
+        "value": {
+          "phase": "PLAYING",
+          "reason": null,
+          "message": "音楽と映像を再生中です。",
+          "role": "output",
+          "playbackRevision": 1,
+          "pendingRevision": 1,
+          "cueId": "cue-fixture",
+          "audioStarted": true,
+          "videoPresented": true,
+          "sourceCount": 1,
+          "cloudRole": "output",
+          "activationEnabled": true,
+          "fixtureMode": true
+        }
+      },
+      {
+        "type": "output-state",
+        "value": {
+          "phase": "PREPARING",
+          "reason": null,
+          "message": "同じキューの音楽・映像と再生証跡を確認中です。",
+          "role": "output",
+          "playbackRevision": 1,
+          "pendingRevision": 2,
+          "cueId": "cue-fixture-2",
+          "audioStarted": false,
+          "videoPresented": false,
+          "sourceCount": 1,
+          "cloudRole": "output",
+          "activationEnabled": true,
+          "fixtureMode": true
+        }
+      },
+      {
+        "type": "output-state",
+        "value": {
+          "phase": "STARTING",
+          "reason": null,
+          "message": "音声の実再生と映像の提示を確認中です。",
+          "role": "output",
+          "playbackRevision": 1,
+          "pendingRevision": 2,
+          "cueId": "cue-fixture-2",
+          "audioStarted": false,
+          "videoPresented": false,
+          "sourceCount": 1,
+          "cloudRole": "output",
+          "activationEnabled": true,
+          "fixtureMode": true
+        }
+      },
+      {
+        "type": "output-state",
+        "value": {
+          "phase": "PLAYING",
+          "reason": null,
+          "message": "音楽と映像を再生中です。",
+          "role": "output",
+          "playbackRevision": 2,
+          "pendingRevision": 2,
+          "cueId": "cue-fixture-2",
+          "audioStarted": true,
+          "videoPresented": true,
+          "sourceCount": 1,
+          "cloudRole": "output",
+          "activationEnabled": true,
+          "fixtureMode": true
+        }
+      },
+      {
+        "type": "output-state",
+        "value": {
+          "phase": "PREPARING",
+          "reason": null,
+          "message": "同じキューの音楽・映像と再生証跡を確認中です。",
+          "role": "output",
+          "playbackRevision": 2,
+          "pendingRevision": 3,
+          "cueId": "cue-fixture-3",
+          "audioStarted": false,
+          "videoPresented": false,
+          "sourceCount": 1,
+          "cloudRole": "output",
+          "activationEnabled": true,
+          "fixtureMode": true
+        }
+      },
+      {
+        "type": "output-state",
+        "value": {
+          "phase": "STARTING",
+          "reason": null,
+          "message": "音声の実再生と映像の提示を確認中です。",
+          "role": "output",
+          "playbackRevision": 2,
+          "pendingRevision": 3,
+          "cueId": "cue-fixture-3",
+          "audioStarted": false,
+          "videoPresented": false,
+          "sourceCount": 1,
+          "cloudRole": "output",
+          "activationEnabled": true,
+          "fixtureMode": true
+        }
+      },
+      {
+        "type": "output-state",
+        "value": {
+          "phase": "PLAYING",
+          "reason": null,
+          "message": "音楽と映像を再生中です。",
+          "role": "output",
+          "playbackRevision": 3,
+          "pendingRevision": 3,
+          "cueId": "cue-fixture-3",
+          "audioStarted": true,
+          "videoPresented": true,
+          "sourceCount": 1,
+          "cloudRole": "output",
+          "activationEnabled": true,
+          "fixtureMode": true
+        }
+      },
+      {
+        "type": "output-state",
+        "value": {
+          "phase": "STOPPED",
+          "reason": "CUE_DURATION_END",
+          "message": "停止しました。再開するには、この画面で音声を再度有効にしてください。",
+          "role": "output",
+          "playbackRevision": 3,
+          "pendingRevision": null,
+          "cueId": null,
+          "audioStarted": false,
+          "videoPresented": false,
+          "sourceCount": 1,
+          "cloudRole": "output",
+          "activationEnabled": true,
+          "fixtureMode": true
+        }
+      },
+      {
+        "type": "output-state",
+        "value": {
+          "phase": "STOPPED",
+          "reason": "DISPOSE",
+          "message": "停止しました。再開するには、この画面で音声を再度有効にしてください。",
+          "role": "output",
+          "playbackRevision": 3,
+          "pendingRevision": null,
+          "cueId": null,
+          "audioStarted": false,
+          "videoPresented": false,
+          "sourceCount": 0,
+          "cloudRole": "output",
+          "activationEnabled": true,
+          "fixtureMode": true
+        }
+      },
+      {
+        "type": "output-state",
+        "value": {
+          "phase": "IDLE",
+          "reason": null,
+          "message": "再生を開始すると、この画面が音声出力を担当します。",
+          "role": "output",
+          "playbackRevision": 3,
+          "pendingRevision": null,
+          "cueId": null,
+          "audioStarted": false,
+          "videoPresented": false,
+          "sourceCount": 1,
+          "cloudRole": "output",
+          "activationEnabled": true,
+          "fixtureMode": true
+        }
+      },
+      {
+        "type": "seed-state",
+        "value": {
+          "phase": "STARTING",
+          "reason": null,
+          "graphEpoch": 2,
+          "participantCredit": false
+        }
+      },
+      {
+        "type": "seed-state",
+        "value": {
+          "phase": "SOURCE_PLAYING",
+          "reason": null,
+          "graphEpoch": 2,
+          "participantCredit": false
+        }
+      },
+      {
+        "type": "output-state",
+        "value": {
+          "phase": "GESTURE_REQUIRED",
+          "reason": null,
+          "message": "音声を有効にするには、この画面で「再生を有効にする」を押してください。",
+          "role": "output",
+          "playbackRevision": 3,
+          "pendingRevision": null,
+          "cueId": null,
+          "audioStarted": false,
+          "videoPresented": false,
+          "sourceCount": 1,
+          "cloudRole": "output",
+          "activationEnabled": true,
+          "fixtureMode": true
+        }
+      },
+      {
+        "type": "output-state",
+        "value": {
+          "phase": "READY",
+          "reason": null,
+          "message": "音声出力の準備ができました。完成済みの音楽・映像を待っています。",
+          "role": "output",
+          "playbackRevision": 3,
+          "pendingRevision": null,
+          "cueId": null,
+          "audioStarted": false,
+          "videoPresented": false,
+          "sourceCount": 1,
+          "cloudRole": "output",
+          "activationEnabled": true,
+          "fixtureMode": true
+        }
+      },
+      {
+        "type": "seed-state",
+        "value": {
+          "phase": "HANDED_OFF",
+          "reason": null,
+          "graphEpoch": 2,
+          "participantCredit": false
+        }
+      },
+      {
+        "type": "output-state",
+        "value": {
+          "phase": "HOLD",
+          "reason": "ACTUAL_AUDIO_CLOCK_REQUIRED",
+          "message": "再生を保留しました。音声出力・映像・準備状態を確認してください。",
+          "role": "output",
+          "playbackRevision": 3,
+          "pendingRevision": null,
+          "cueId": null,
+          "audioStarted": false,
+          "videoPresented": false,
+          "sourceCount": 1,
+          "cloudRole": "output",
+          "activationEnabled": true,
+          "fixtureMode": true
+        }
+      },
+      {
+        "type": "output-state",
+        "value": {
+          "phase": "STOPPED",
+          "reason": "OUTPUT_STOP",
+          "message": "停止しました。再開するには、この画面で音声を再度有効にしてください。",
+          "role": "output",
+          "playbackRevision": 3,
+          "pendingRevision": null,
+          "cueId": null,
+          "audioStarted": false,
+          "videoPresented": false,
+          "sourceCount": 0,
+          "cloudRole": "output",
+          "activationEnabled": true,
+          "fixtureMode": true
+        }
+      },
+      {
+        "type": "output-state",
+        "value": {
+          "phase": "STOPPED",
+          "reason": "DISPOSE",
+          "message": "停止しました。再開するには、この画面で音声を再度有効にしてください。",
+          "role": "output",
+          "playbackRevision": 3,
+          "pendingRevision": null,
+          "cueId": null,
+          "audioStarted": false,
+          "videoPresented": false,
+          "sourceCount": 0,
+          "cloudRole": "output",
+          "activationEnabled": true,
+          "fixtureMode": true
+        }
+      },
+      {
+        "type": "output-state",
+        "value": {
+          "phase": "IDLE",
+          "reason": null,
+          "message": "再生を開始すると、この画面が音声出力を担当します。",
+          "role": "output",
+          "playbackRevision": 3,
+          "pendingRevision": null,
+          "cueId": null,
+          "audioStarted": false,
+          "videoPresented": false,
+          "sourceCount": 1,
+          "cloudRole": "output",
+          "activationEnabled": true,
+          "fixtureMode": true
+        }
+      },
+      {
+        "type": "seed-state",
+        "value": {
+          "phase": "STARTING",
+          "reason": null,
+          "graphEpoch": 3,
+          "participantCredit": false
+        }
+      },
+      {
+        "type": "seed-state",
+        "value": {
+          "phase": "SOURCE_PLAYING",
+          "reason": null,
+          "graphEpoch": 3,
+          "participantCredit": false
+        }
+      },
+      {
+        "type": "output-state",
+        "value": {
+          "phase": "GESTURE_REQUIRED",
+          "reason": null,
+          "message": "音声を有効にするには、この画面で「再生を有効にする」を押してください。",
+          "role": "output",
+          "playbackRevision": 3,
+          "pendingRevision": null,
+          "cueId": null,
+          "audioStarted": false,
+          "videoPresented": false,
+          "sourceCount": 1,
+          "cloudRole": "output",
+          "activationEnabled": true,
+          "fixtureMode": true
+        }
+      },
+      {
+        "type": "output-state",
+        "value": {
+          "phase": "READY",
+          "reason": null,
+          "message": "音声出力の準備ができました。完成済みの音楽・映像を待っています。",
+          "role": "output",
+          "playbackRevision": 3,
+          "pendingRevision": null,
+          "cueId": null,
+          "audioStarted": false,
+          "videoPresented": false,
+          "sourceCount": 1,
+          "cloudRole": "output",
+          "activationEnabled": true,
+          "fixtureMode": true
+        }
+      },
+      {
+        "type": "seed-state",
+        "value": {
+          "phase": "HANDED_OFF",
+          "reason": null,
+          "graphEpoch": 3,
+          "participantCredit": false
+        }
+      },
+      {
+        "type": "output-state",
+        "value": {
+          "phase": "STOPPED",
+          "reason": "OWNER_STOP",
+          "message": "停止しました。再開するには、この画面で音声を再度有効にしてください。",
+          "role": "output",
+          "playbackRevision": 3,
+          "pendingRevision": null,
+          "cueId": null,
+          "audioStarted": false,
+          "videoPresented": false,
+          "sourceCount": 1,
+          "cloudRole": "output",
+          "activationEnabled": true,
+          "fixtureMode": true
+        }
+      }
+    ],
+    "seedAck": {
+      "kind": "cloud-source-playback-started-v1",
+      "graphEpoch": 1,
+      "sourceClipId": "seed-fixture",
+      "sourceSha256": "2c2a066ee5fcf7bb4be13b3c02e854724165dd053136440c3fed7a34ff440e35",
+      "sourceContextSha256": "57191c8b3cd09d39b52aa314284416fa2f83fbd5b14c34b88491257a8e5dae18",
+      "sourcePlaybackRevision": 0,
+      "sampleRate": 44100,
+      "playedUntilFrame": 11264,
+      "processedWindowSha256": "f0c3fdd185358dd8a745f447542d55309f73626d0a37df3a223af4080fe28050",
+      "actual": true,
+      "audioStarted": true,
+      "participantCredit": false
+    },
+    "ack": {
+      "roomId": "11111111-1111-4111-8111-111111111111",
+      "cueId": "cue-fixture-3",
+      "clipId": "music-fixture-3",
+      "playbackRevision": 3,
+      "audioTime": 72.2227664399093,
+      "actual": true,
+      "audioStarted": true,
+      "videoPresented": true
+    },
+    "processedWindows": [
+      {
+        "startFrame": 0,
+        "byteLength": 2048,
+        "sha256": "f0c3fdd185358dd8a745f447542d55309f73626d0a37df3a223af4080fe28050",
+        "expectedSha256": null
+      },
+      {
+        "startFrame": 1058400,
+        "byteLength": 2048,
+        "sha256": "60c77e34cf5f032de927b363ab6f3669869a576980389f157969994c949951fb",
+        "expectedSha256": "60c77e34cf5f032de927b363ab6f3669869a576980389f157969994c949951fb"
+      },
+      {
+        "startFrame": 2116800,
+        "byteLength": 2048,
+        "sha256": "932a57c6e1a2d0f093bfd7fcb21446cc45cb30911a3aaf776713ad850ec025fd",
+        "expectedSha256": "932a57c6e1a2d0f093bfd7fcb21446cc45cb30911a3aaf776713ad850ec025fd"
+      },
+      {
+        "startFrame": 3175200,
+        "byteLength": 2048,
+        "sha256": "d45cb50b2fa50daf6b8d93d8ab318099cecc17e9d88ee6bed0d1a3ae848c1ccb",
+        "expectedSha256": "d45cb50b2fa50daf6b8d93d8ab318099cecc17e9d88ee6bed0d1a3ae848c1ccb"
+      }
+    ],
+    "commandCounts": {
+      "set-duration": 1,
+      "trace-frame": 4,
+      "chunk": 1,
+      "play": 4,
+      "replace-future": 3
+    },
+    "telemetry": {
+      "sampleRate": 44100,
+      "consumedFrames": 3185024,
+      "receivedFrames": 4233600,
+      "underrunFrames": 0,
+      "stopped": false
+    },
+    "cueAcks": [
+      {
+        "roomId": "11111111-1111-4111-8111-111111111111",
+        "cueId": "cue-fixture",
+        "clipId": "music-fixture",
+        "playbackRevision": 1,
+        "audioTime": 24.24453514739229,
+        "actual": true,
+        "audioStarted": true,
+        "videoPresented": true,
+        "processedWindow": {
+          "startFrame": 1058400,
+          "byteLength": 2048,
+          "sha256": "60c77e34cf5f032de927b363ab6f3669869a576980389f157969994c949951fb",
+          "expectedSha256": "60c77e34cf5f032de927b363ab6f3669869a576980389f157969994c949951fb"
+        }
+      },
+      {
+        "roomId": "11111111-1111-4111-8111-111111111111",
+        "cueId": "cue-fixture-2",
+        "clipId": "music-fixture-2",
+        "playbackRevision": 2,
+        "audioTime": 48.233650793650796,
+        "actual": true,
+        "audioStarted": true,
+        "videoPresented": true,
+        "processedWindow": {
+          "startFrame": 2116800,
+          "byteLength": 2048,
+          "sha256": "932a57c6e1a2d0f093bfd7fcb21446cc45cb30911a3aaf776713ad850ec025fd",
+          "expectedSha256": "932a57c6e1a2d0f093bfd7fcb21446cc45cb30911a3aaf776713ad850ec025fd"
+        }
+      },
+      {
+        "roomId": "11111111-1111-4111-8111-111111111111",
+        "cueId": "cue-fixture-3",
+        "clipId": "music-fixture-3",
+        "playbackRevision": 3,
+        "audioTime": 72.2227664399093,
+        "actual": true,
+        "audioStarted": true,
+        "videoPresented": true,
+        "processedWindow": {
+          "startFrame": 3175200,
+          "byteLength": 2048,
+          "sha256": "d45cb50b2fa50daf6b8d93d8ab318099cecc17e9d88ee6bed0d1a3ae848c1ccb",
+          "expectedSha256": "d45cb50b2fa50daf6b8d93d8ab318099cecc17e9d88ee6bed0d1a3ae848c1ccb"
+        }
+      }
+    ],
+    "visualContinuity": [
+      {
+        "phase": "PREPARING",
+        "currentRevision": 1,
+        "pendingRevision": 2,
+        "visibleCueIds": [
+          "cue-fixture"
+        ]
+      },
+      {
+        "phase": "STARTING",
+        "currentRevision": 1,
+        "pendingRevision": 2,
+        "visibleCueIds": [
+          "cue-fixture"
+        ]
+      },
+      {
+        "phase": "PREPARING",
+        "currentRevision": 2,
+        "pendingRevision": 3,
+        "visibleCueIds": [
+          "cue-fixture-2"
+        ]
+      },
+      {
+        "phase": "STARTING",
+        "currentRevision": 2,
+        "pendingRevision": 3,
+        "visibleCueIds": [
+          "cue-fixture-2"
+        ]
+      }
+    ],
+    "restartAck": {
+      "kind": "cloud-source-playback-started-v1",
+      "graphEpoch": 3,
+      "sourceClipId": "seed-fixture",
+      "sourceSha256": "2c2a066ee5fcf7bb4be13b3c02e854724165dd053136440c3fed7a34ff440e35",
+      "sourceContextSha256": "57191c8b3cd09d39b52aa314284416fa2f83fbd5b14c34b88491257a8e5dae18",
+      "sourcePlaybackRevision": 3,
+      "sampleRate": 44100,
+      "playedUntilFrame": 11264,
+      "processedWindowSha256": "f0c3fdd185358dd8a745f447542d55309f73626d0a37df3a223af4080fe28050",
+      "actual": true,
+      "audioStarted": true,
+      "participantCredit": false
+    }
+  },
+  "restartOutput": {
+    "fixture": "synthetic-browser-v1",
+    "physicalSpeakerVerified": false,
+    "browser": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36",
+    "secureContext": true,
+    "sampleRate": 44100,
+    "processedWindow": {
+      "startFrame": 0,
+      "byteLength": 2048,
+      "sha256": "f0c3fdd185358dd8a745f447542d55309f73626d0a37df3a223af4080fe28050",
+      "expectedSha256": null
+    },
+    "videoFrames": [
+      {
+        "nowMs": 38758.9,
+        "mediaTime": 0.291667,
+        "presentedFrames": 4,
+        "width": 320,
+        "height": 180,
+        "muted": true,
+        "volume": 0,
+        "cueId": "cue-fixture"
+      },
+      {
+        "nowMs": 62725.6,
+        "mediaTime": 0.25,
+        "presentedFrames": 3,
+        "width": 320,
+        "height": 180,
+        "muted": true,
+        "volume": 0,
+        "cueId": "cue-fixture-2"
+      },
+      {
+        "nowMs": 86709.5,
+        "mediaTime": 0.25,
+        "presentedFrames": 3,
+        "width": 320,
+        "height": 180,
+        "muted": true,
+        "volume": 0,
+        "cueId": "cue-fixture-3"
+      }
+    ],
+    "states": [
+      {
+        "phase": "IDLE",
+        "sourceCount": 1,
+        "playbackRevision": 0,
+        "audioStarted": false,
+        "videoPresented": false
+      },
+      {
+        "phase": "GESTURE_REQUIRED",
+        "sourceCount": 1,
+        "playbackRevision": 0,
+        "audioStarted": false,
+        "videoPresented": false
+      },
+      {
+        "phase": "READY",
+        "sourceCount": 1,
+        "playbackRevision": 0,
+        "audioStarted": false,
+        "videoPresented": false
+      },
+      {
+        "phase": "PREPARING",
+        "sourceCount": 1,
+        "playbackRevision": 0,
+        "audioStarted": false,
+        "videoPresented": false
+      },
+      {
+        "phase": "STARTING",
+        "sourceCount": 1,
+        "playbackRevision": 0,
+        "audioStarted": false,
+        "videoPresented": false
+      },
+      {
+        "phase": "PLAYING",
+        "sourceCount": 1,
+        "playbackRevision": 1,
+        "audioStarted": true,
+        "videoPresented": true
+      },
+      {
+        "phase": "PREPARING",
+        "sourceCount": 1,
+        "playbackRevision": 1,
+        "audioStarted": false,
+        "videoPresented": false
+      },
+      {
+        "phase": "STARTING",
+        "sourceCount": 1,
+        "playbackRevision": 1,
+        "audioStarted": false,
+        "videoPresented": false
+      },
+      {
+        "phase": "PLAYING",
+        "sourceCount": 1,
+        "playbackRevision": 2,
+        "audioStarted": true,
+        "videoPresented": true
+      },
+      {
+        "phase": "PREPARING",
+        "sourceCount": 1,
+        "playbackRevision": 2,
+        "audioStarted": false,
+        "videoPresented": false
+      },
+      {
+        "phase": "STARTING",
+        "sourceCount": 1,
+        "playbackRevision": 2,
+        "audioStarted": false,
+        "videoPresented": false
+      },
+      {
+        "phase": "PLAYING",
+        "sourceCount": 1,
+        "playbackRevision": 3,
+        "audioStarted": true,
+        "videoPresented": true
+      },
+      {
+        "phase": "STOPPED",
+        "sourceCount": 1,
+        "playbackRevision": 3,
+        "audioStarted": false,
+        "videoPresented": false
+      },
+      {
+        "phase": "STOPPED",
+        "sourceCount": 0,
+        "playbackRevision": 3,
+        "audioStarted": false,
+        "videoPresented": false
+      },
+      {
+        "phase": "IDLE",
+        "sourceCount": 1,
+        "playbackRevision": 3,
+        "audioStarted": false,
+        "videoPresented": false
+      },
+      {
+        "phase": "GESTURE_REQUIRED",
+        "sourceCount": 1,
+        "playbackRevision": 3,
+        "audioStarted": false,
+        "videoPresented": false
+      },
+      {
+        "phase": "READY",
+        "sourceCount": 1,
+        "playbackRevision": 3,
+        "audioStarted": false,
+        "videoPresented": false
+      },
+      {
+        "phase": "HOLD",
+        "sourceCount": 1,
+        "playbackRevision": 3,
+        "audioStarted": false,
+        "videoPresented": false
+      },
+      {
+        "phase": "STOPPED",
+        "sourceCount": 0,
+        "playbackRevision": 3,
+        "audioStarted": false,
+        "videoPresented": false
+      },
+      {
+        "phase": "STOPPED",
+        "sourceCount": 0,
+        "playbackRevision": 3,
+        "audioStarted": false,
+        "videoPresented": false
+      },
+      {
+        "phase": "IDLE",
+        "sourceCount": 1,
+        "playbackRevision": 3,
+        "audioStarted": false,
+        "videoPresented": false
+      },
+      {
+        "phase": "GESTURE_REQUIRED",
+        "sourceCount": 1,
+        "playbackRevision": 3,
+        "audioStarted": false,
+        "videoPresented": false
+      },
+      {
+        "phase": "READY",
+        "sourceCount": 1,
+        "playbackRevision": 3,
+        "audioStarted": false,
+        "videoPresented": false
+      },
+      {
+        "phase": "STOPPED",
+        "sourceCount": 1,
+        "playbackRevision": 3,
+        "audioStarted": false,
+        "videoPresented": false
+      }
+    ],
+    "guards": [],
+    "checks": [],
+    "events": [],
+    "commandCounts": {
+      "set-duration": 3,
+      "trace-frame": 6,
+      "chunk": 3,
+      "play": 6,
+      "replace-future": 3,
+      "stop": 2
+    },
+    "seedStates": [
+      {
+        "phase": "STARTING",
+        "reason": null,
+        "graphEpoch": 1,
+        "participantCredit": false
+      },
+      {
+        "phase": "SOURCE_PLAYING",
+        "reason": null,
+        "graphEpoch": 1,
+        "participantCredit": false
+      },
+      {
+        "phase": "HANDED_OFF",
+        "reason": null,
+        "graphEpoch": 1,
+        "participantCredit": false
+      },
+      {
+        "phase": "STARTING",
+        "reason": null,
+        "graphEpoch": 2,
+        "participantCredit": false
+      },
+      {
+        "phase": "SOURCE_PLAYING",
+        "reason": null,
+        "graphEpoch": 2,
+        "participantCredit": false
+      },
+      {
+        "phase": "HANDED_OFF",
+        "reason": null,
+        "graphEpoch": 2,
+        "participantCredit": false
+      },
+      {
+        "phase": "STARTING",
+        "reason": null,
+        "graphEpoch": 3,
+        "participantCredit": false
+      },
+      {
+        "phase": "SOURCE_PLAYING",
+        "reason": null,
+        "graphEpoch": 3,
+        "participantCredit": false
+      },
+      {
+        "phase": "HANDED_OFF",
+        "reason": null,
+        "graphEpoch": 3,
+        "participantCredit": false
+      }
+    ],
+    "telemetry": {
+      "sampleRate": 44100,
+      "consumedFrames": 534656,
+      "receivedFrames": 882000,
+      "underrunFrames": 0,
+      "stopped": false
+    },
+    "processedWindows": [
+      {
+        "startFrame": 0,
+        "byteLength": 2048,
+        "sha256": "f0c3fdd185358dd8a745f447542d55309f73626d0a37df3a223af4080fe28050",
+        "expectedSha256": null
+      },
+      {
+        "startFrame": 1058400,
+        "byteLength": 2048,
+        "sha256": "60c77e34cf5f032de927b363ab6f3669869a576980389f157969994c949951fb",
+        "expectedSha256": "60c77e34cf5f032de927b363ab6f3669869a576980389f157969994c949951fb"
+      },
+      {
+        "startFrame": 2116800,
+        "byteLength": 2048,
+        "sha256": "932a57c6e1a2d0f093bfd7fcb21446cc45cb30911a3aaf776713ad850ec025fd",
+        "expectedSha256": "932a57c6e1a2d0f093bfd7fcb21446cc45cb30911a3aaf776713ad850ec025fd"
+      },
+      {
+        "startFrame": 3175200,
+        "byteLength": 2048,
+        "sha256": "d45cb50b2fa50daf6b8d93d8ab318099cecc17e9d88ee6bed0d1a3ae848c1ccb",
+        "expectedSha256": "d45cb50b2fa50daf6b8d93d8ab318099cecc17e9d88ee6bed0d1a3ae848c1ccb"
+      },
+      {
+        "startFrame": 0,
+        "byteLength": 2048,
+        "sha256": "f0c3fdd185358dd8a745f447542d55309f73626d0a37df3a223af4080fe28050",
+        "expectedSha256": null
+      },
+      {
+        "startFrame": 0,
+        "byteLength": 2048,
+        "sha256": "f0c3fdd185358dd8a745f447542d55309f73626d0a37df3a223af4080fe28050",
+        "expectedSha256": null
+      }
+    ],
+    "visualContinuity": [
+      {
+        "phase": "PREPARING",
+        "currentRevision": 1,
+        "pendingRevision": 2,
+        "visibleCueIds": [
+          "cue-fixture"
+        ]
+      },
+      {
+        "phase": "STARTING",
+        "currentRevision": 1,
+        "pendingRevision": 2,
+        "visibleCueIds": [
+          "cue-fixture"
+        ]
+      },
+      {
+        "phase": "PREPARING",
+        "currentRevision": 2,
+        "pendingRevision": 3,
+        "visibleCueIds": [
+          "cue-fixture-2"
+        ]
+      },
+      {
+        "phase": "STARTING",
+        "currentRevision": 2,
+        "pendingRevision": 3,
+        "visibleCueIds": [
+          "cue-fixture-2"
+        ]
+      }
+    ]
+  }
+}

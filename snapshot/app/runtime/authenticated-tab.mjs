@@ -1,0 +1,7 @@
+import {createTabFalClient} from './byok-browser.mjs';
+// Login token and fal candidate are tab-local. Neither is written to browser storage.
+export function createAuthenticatedByokTab({credentials,loginToken,origin,fetchImpl=globalThis.fetch,lifecycle=globalThis.window}={}){
+ const u=new URL(origin);if(u.protocol!=='https:'||typeof loginToken!=='string'||!loginToken||globalThis.window&&window.location.origin!==u.origin)throw Error('HTTPS_LOGIN_REQUIRED');let token=loginToken,epoch=0;
+ const authenticatedFetch=(url,init={})=>{if(typeof url==='string'&&url.startsWith('/')){if(!token)throw Error('OWNER_DISCONNECTED');const headers=new Headers(init.headers);headers.set('Authorization','Bearer '+token);return fetchImpl(url,{...init,headers});}return fetchImpl(url,init);};
+ const tab=createTabFalClient({credentials,fetchImpl:authenticatedFetch,lifecycle});const forget=()=>{tab.forget();token='';epoch++;lifecycle?.removeEventListener?.('pagehide',forget);};lifecycle?.addEventListener?.('pagehide',forget);return {request:tab.request,upload:tab.upload,validate:()=>tab.request({operation:'validate'}),async metadata(body){if(!token)throw Error('OWNER_DISCONNECTED');const revision=epoch;const r=await authenticatedFetch('/api/fal/proxy',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body),cache:'no-store'});const v=await r.json();if(revision!==epoch)throw Error('OWNER_DISCONNECTED');if(!r.ok)throw Error(v.code??'METADATA_FAILED');return v;},forget,read:tab.read};
+}

@@ -1,0 +1,52 @@
+{
+  "status": "FROZEN_UNMOUNTED_V3",
+  "publicMounted": false,
+  "files": [
+    {
+      "file": "room-ui.css",
+      "sourceSha256": "14cd7bfd97225c805ae92b6e38707135dda38e3ad5a01c6c6ebcefbfdc631230",
+      "repositorySha256": "14cd7bfd97225c805ae92b6e38707135dda38e3ad5a01c6c6ebcefbfdc631230",
+      "transformation": "none"
+    },
+    {
+      "file": "room-components.mjs",
+      "sourceSha256": "34f4ef00311c3d9454303c7eac74fa59fd8f13de050658c321a5a43cc9fc4db8",
+      "repositorySha256": "34f4ef00311c3d9454303c7eac74fa59fd8f13de050658c321a5a43cc9fc4db8",
+      "transformation": "none"
+    },
+    {
+      "file": "room-ui-model.mjs",
+      "sourceSha256": "df8dd5fedce47a8331d11ae4dfffa98f2f97faeae407309dae5d4c19ca939387",
+      "repositorySha256": "df8dd5fedce47a8331d11ae4dfffa98f2f97faeae407309dae5d4c19ca939387",
+      "transformation": "none"
+    },
+    {
+      "file": "room-api-client.mjs",
+      "sourceSha256": "1077b8eecd5c5733e72626efe73b9ccac68553edcf127d9261874696db3b9621",
+      "repositorySha256": "bd3e680c907dbbcf3df3692e9115cda583eb0421b7da2b6608c045f4a09e5f77",
+      "transformation": "Headers API"
+    },
+    {
+      "file": "room-model-port.mjs",
+      "sourceSha256": "49a6e8211b86dd9eb83a499580d4966ff6c9dcc705c863777494f6ab1d42302f",
+      "repositorySha256": "afb0dc3996849d53f11267981a0f3d6c7d9e9dced24af3d037bd26c9904c9bf9",
+      "transformation": "Local room epoch variable name; external sessionId field retained"
+    },
+    {
+      "file": "room-contract-view.mjs",
+      "sourceSha256": "db14c9c44d110ed8e91d05278f5d4bd986fdc33c961c671562503ed8868c32a6",
+      "repositorySha256": "db14c9c44d110ed8e91d05278f5d4bd986fdc33c961c671562503ed8868c32a6",
+      "transformation": "none"
+    },
+    {
+      "file": "join-projection.mjs",
+      "sourceSha256": "f64fb1f7be24861e85c1a4e1b5a4d7fbd251c152c3f8db414fee92e81d291970",
+      "repositorySha256": "f64fb1f7be24861e85c1a4e1b5a4d7fbd251c152c3f8db414fee92e81d291970",
+      "transformation": "none"
+    }
+  ],
+  "excluded": [
+    "design gallery",
+    "unmounted template"
+  ]
+}

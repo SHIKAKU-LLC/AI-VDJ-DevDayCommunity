@@ -1,0 +1,12 @@
+# Operator must supply a reviewed Node24 Debian image by immutable SHA digest.
+ARG VDJ_NODE_IMAGE
+FROM ${VDJ_NODE_IMAGE}
+RUN apt-get update && apt-get install -y --no-install-recommends python3 python3-venv ffmpeg ca-certificates && rm -rf /var/lib/apt/lists/*
+WORKDIR /app
+COPY . /app
+RUN npm ci --prefix snapshot --ignore-scripts --no-audit --no-fund
+RUN python3 -m venv /opt/vdj-python && /opt/vdj-python/bin/pip install --no-cache-dir -r qa-tools/runtime-requirements.txt
+ENV PATH="/opt/vdj-python/bin:${PATH}"
+# The default command remains deactivated. Approved host configuration is mounted
+# outside the image and passed with --activate --host-config=/run/approved-host.mjs.
+CMD ["node", "cloud/worker/node-entry.mjs"]

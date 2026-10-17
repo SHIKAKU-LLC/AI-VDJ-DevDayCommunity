@@ -1,0 +1,8 @@
+{
+  "package": "qrcode-generator",
+  "version": "2.0.4",
+  "license": "MIT",
+  "sourceSha256": "ea91d7118a5395289170da848b7c6758b996163bfbccf312591ab65a4911b7c0",
+  "repositorySha256": "55e19bd95d5ac004f978d06f9c93ae97ba3f9ce0755db955c290c882a49ff92f",
+  "adaptation": "Removed unused GIF data URL and image HTML exports; matrix/SVG core preserved"
+}

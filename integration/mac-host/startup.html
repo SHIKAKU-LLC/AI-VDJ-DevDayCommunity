@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>AI VDJ · このMacの一時接続</title><link rel="stylesheet" href="/startup.css"></head>
+<body><main>
+<header><p class="eyebrow">AI VDJ / MAC CONNECTION</p><h1>このMacを公開ルームにつなぐ</h1>
+<p>公開ルームにログイン済みなら、この画面から始めます。公開画面は開いたままにしてください。</p>
+<p id="host-health" role="status" aria-live="polite">Macホストの稼働を確認しています。</p></header>
+<div class="next" aria-live="polite"><strong>次の操作</strong><p id="next-action">Macホストの稼働確認を待ってください。</p></div>
+<section id="step-1" aria-labelledby="title-1"><h2 id="title-1"><span>1</span> Macで本人確認</h2>
+<p>下のボタンを押すと、Macの確認画面が開きます。本人確認を完了し、表示された<strong>ローカル画面用コード</strong>を手順2で使います。</p>
+<button id="start-session" type="button" disabled>Macで本人確認を始める</button>
+<p class="hint">一時セッションは30分。APIキーは入力しません。確認画面をキャンセルした場合も、このボタンからやり直せます。</p></section>
+<section id="step-2" aria-labelledby="title-2"><h2 id="title-2"><span>2</span> ローカル画面用コードをここに入力</h2>
+<p>Macの確認画面で表示されたコードを、ご本人がこの欄に入力してください。公開画面用コードとは別です。</p>
+<label for="pairing">ローカル画面用コード（2分以内・一回限り）</label>
+<input id="pairing" type="password" autocomplete="off" spellcheck="false" aria-describedby="local-code-help" disabled>
+<p id="local-code-help" class="hint">本人確認を完了すると入力できます。コードをチャットに送る必要はありません。</p>
+<button id="connect" type="button" disabled>コードを入力してMac画面を接続</button></section>
+<section id="step-3" aria-labelledby="title-3"><h2 id="title-3"><span>3</span> 公開ルームへ接続</h2>
+<p>先に公開owner画面の上部にある<strong>「このMacへ一時接続」</strong>の手順3を準備してください。準備できたら、この画面のボタンを押します。</p>
+<button id="pair-cloud" type="button" disabled>公開画面用コードをMacに表示</button>
+<ol><li>Macの確認画面を本人が操作し、<strong>公開画面用コード</strong>を確認。</li>
+<li>公開owner画面へ戻り、「Macアドレス」に <code id="mac-address">この画面のアドレス</code> を入力。</li>
+<li>「公開画面用コード」欄にコードを入力して<strong>「公開画面用コードでMacに接続」</strong>。</li></ol>
+<p class="hint">公開画面用コードも2分以内・一回限り。期限が切れたら上のボタンで公開画面用コードだけを再表示します。</p>
+<button id="cloud-status" type="button" disabled>公開ルームとの接続結果を確認</button></section>
+<p id="status" role="status" aria-live="polite">未接続。生成・自動DJ・再生は未実行です。</p>
+<details><summary>開始素材の準備状況・手動選択</summary>
+<p id="media-status">承認済み開始素材が設定されている場合は、本人確認後に自動で検証・準備されます。</p>
+<fieldset id="bootstrap" disabled><legend>開始素材を手動で選ぶ場合</legend>
+<label>24秒のステレオWAV <input id="audio" type="file" accept="audio/wav,.wav"></label>
+<label>PNG/JPEG参照画像 <input id="reference" type="file" accept="image/png,image/jpeg"></label>
+<button id="prepare" type="button">この素材を検証して準備する</button>
+<p>準備は再生・生成の実行ではありません。</p></fieldset></details>
+<details id="session-controls" hidden><summary>接続を終了・最初からやり直す</summary>
+<p>セッションをやり直すと、現在のMac・公開ルームとの接続が失効します。</p>
+<button id="restart-session" type="button" disabled>接続を失効して本人確認からやり直す</button>
+<button id="stop" type="button" disabled>終了して接続を失効</button></details>
+<footer>接続で投稿をMacへ渡せるようになります。音楽・映像の生成、自動DJ、再生は別途接続・実行が必要です。</footer>
+</main><script type="module" src="/startup.mjs"></script></body></html>
