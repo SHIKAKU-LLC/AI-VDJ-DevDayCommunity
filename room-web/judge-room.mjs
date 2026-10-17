@@ -170,7 +170,8 @@ $('prompt-form').onsubmit = async event => {
   try {
     if (!pendingSubmit || pendingSubmit.prompt !== prompt) pendingSubmit = {nonce: token(), prompt, ...(session.owner ? {nickname: 'オーナー'} : {})};
     await request(roomPath('submissions'), pendingSubmit); pendingSubmit = null;
-    $('prompt').value = ''; status(session.owner ? '受付完了。音楽と映像を生成しています。' : '受付完了。オーナーの画面で音楽と映像を準備します。'); await poll();
+    $('prompt').value = ''; status(session.owner ? autoGenerate ? '受付完了。音楽と映像を生成しています。' :
+      '受付完了。自動生成をONにすると音楽と映像を生成します。' : '受付完了。オーナーの画面で音楽と映像を準備します。'); await poll();
   } catch (e) { error(e); } finally { submitBusy = false; $('submit').disabled = false; }
 };
 $('generate').onclick = () => { autoGenerate = !autoGenerate; session.autoGenerate = autoGenerate; persist(); render(); if (autoGenerate) void poll(); };

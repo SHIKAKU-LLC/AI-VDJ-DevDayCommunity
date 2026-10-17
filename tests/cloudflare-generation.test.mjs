@@ -7,7 +7,7 @@ import {createD1RoomRpc} from '../cloud/cloudflare/room-api.mjs';
 import {createGenerationStore} from '../cloud/cloudflare/generation-store.mjs';
 import {createGenerationClass} from '../cloud/cloudflare/generation-runtime.mjs';
 import {generationHttp} from '../cloud/cloudflare/generation-http.mjs';
-import {MODELS, LEGACY_VIDEO, createFalProvider, sha256} from '../cloud/cloudflare/fal-provider.mjs';
+import {MODELS, createFalProvider, sha256} from '../cloud/cloudflare/fal-provider.mjs';
 import {createContinuousPlayer} from '../room-web/judge-player.mjs';
 
 async function fixture() {
@@ -19,6 +19,11 @@ async function fixture() {
     return {async first() { return s.get(...args) ?? null; }, async all() { return {results: s.all(...args)}; },
       async run() { return {meta: {changes: Number(s.run(...args).changes)}}; }};
   }})};
+  db.batch = async statements => {
+    sqlite.exec('BEGIN');
+    try { const result = []; for (const s of statements) result.push(await s.run()); sqlite.exec('COMMIT'); return result; }
+    catch (error) { sqlite.exec('ROLLBACK'); throw error; }
+  };
   const owner = 'a'.repeat(64), join = 'b'.repeat(64);
   const room = await createD1JudgeStore({db, eventId: 'judge-test'}).create({nonce: crypto.randomUUID(), ownerToken: owner, joinCode: join});
   const rpc = createD1RoomRpc({db, eventId: 'judge-test'});
@@ -29,15 +34,19 @@ async function fixture() {
   const storage = {async get(k) { return structuredClone(values.get(k)); }, async put(k, v) { values.set(k, structuredClone(v)); },
     async setAlarm(t) { values.set('alarm', t); }, async getAlarm() { return values.get('alarm') ?? null; },
     async deleteAlarm() { values.delete('alarm'); }};
+  storage.deleteAll = async () => { values.clear(); };
   const media = {async head(k) { return objects.get(k); }, async put(k, bytes, options) {
     objects.set(k, {size: bytes.length, etag: 'test-etag', bytes, httpMetadata: options.httpMetadata, customMetadata: options.customMetadata});
   }, async get(k) { const o = objects.get(k); return o ? {...o, body: new Blob([o.bytes]).stream()} : null; }};
+  media.list = async ({prefix}) => ({objects: [...objects.keys()].filter(k => k.startsWith(prefix)).map(key => ({key})), truncated: false});
+  media.delete = async keys => { for (const key of keys) objects.delete(key); };
   let posted = 0, unknown = false;
   const fetchImpl = async (url, options) => {
     requests.push({url: String(url), method: options?.method ?? 'GET'});
-    if (String(url).includes('/models/pricing')) return Response.json({prices: [...Object.entries(MODELS), ['video', LEGACY_VIDEO]].map(([k, endpoint_id]) =>
+    if (String(url).includes('/models/pricing')) return Response.json({prices: Object.entries(MODELS).map(([k, endpoint_id]) =>
       ({endpoint_id, unit: k === 'video' ? 'seconds' : 'audios', unit_price: k === 'video' ? .05 : .04, currency: 'USD'}))});
     if (String(url).includes('/account/billing')) return Response.json({credits: {currency: 'USD', current_balance: 10}});
+    if (options?.method === 'DELETE') return Response.json({cdn_delete_results: []});
     if (options?.method === 'POST') {
       posted++; if (unknown) throw Error('lost receipt');
       const id = crypto.randomUUID();
@@ -158,9 +167,9 @@ test('deployment imports a legacy video receipt and uncertain markers without re
     const jobs = f.values.get('jobs'), id = crypto.randomUUID();
     jobs[0] = {...jobs[0], duration: undefined, state: 'VIDEO_WAIT', submittedAtMs: Date.now(),
       assets: {audio: {duration: 24}, context: {duration: 16}},
-      videoHandle: {id, endpoint: LEGACY_VIDEO, statusUrl: `https://queue.fal.run/test/requests/${id}/status`,
+      videoHandle: {id, endpoint: 'retired/video-model', statusUrl: `https://queue.fal.run/test/requests/${id}/status`,
         responseUrl: `https://queue.fal.run/test/requests/${id}`},
-      providerReceipts: [{kind: 'video', endpoint: LEGACY_VIDEO, requestId: id}]};
+      providerReceipts: [{kind: 'video', endpoint: 'retired/video-model', requestId: id}]};
     jobs[1].state = 'AUDIO_SUBMITTING'; f.values.set('jobs', structuredClone(jobs));
     const restarted = new (createGenerationClass(class {}))(f.runtime.ctx, f.env);
     await restarted.alarm();
@@ -223,19 +232,12 @@ test('provider rejects price changes and private-network media without making a 
   await assert.rejects(provider.download('http://127.0.0.1/secret'), /PROVIDER_RESPONSE_INVALID/);
   assert.equal(requests, 0); await assert.rejects(provider.preflight(), /PROVIDER_PRICE_CHANGED/);
 });
-test('Wan receives one explicit 24-second video request with bounded output settings', async () => {
-  let submitted;
-  const provider = createFalProvider({key: 'synthetic-only', fetchImpl: async (url, options) => {
-    assert.equal(options.redirect, 'manual');
-    submitted = {url, input: JSON.parse(options.body)};
-    const id = crypto.randomUUID();
-    return Response.json({request_id: id, status_url: `https://queue.fal.run/model/requests/${id}/status`, response_url: `https://queue.fal.run/model/requests/${id}`});
-  }});
-  await provider.submit('video', '青い波', undefined, {duration: 24});
-  assert.equal(submitted.url, 'https://queue.fal.run/alibaba/wan-3.0/text-to-video');
-  assert.deepEqual(submitted.input, {prompt: 'Large-screen music visual, smooth continuous movement, no flashing or strobing, no text. 青い波',
-    duration: 24, resolution: '480p', aspect_ratio: '16:9', audio: false,
-    enable_prompt_expansion: false, enable_thinking: false, enable_safety_checker: true});
+test('retired 24-second generation cannot submit or preflight any provider request', async () => {
+  let requests = 0;
+  const provider = createFalProvider({key: 'synthetic-only', fetchImpl: async () => { requests++; }});
+  await assert.rejects(provider.submit('video', '旧方式', undefined, {duration: 24}), /PROVIDER_DURATION_INVALID/);
+  await assert.rejects(provider.preflight({duration: 24}), /PROVIDER_DURATION_INVALID/);
+  assert.equal(requests, 0);
 });
 test('generation-only credentials need no billing access and still enforce live model prices', async () => {
   const provider = createFalProvider({key: 'synthetic-only', fetchImpl: async (url, options) => {
@@ -260,6 +262,41 @@ test('H3 Max receives a single 12-second visual request and matching music durat
   assert.equal(submitted[0].input.enable_safety_checker, true);
   assert.equal(submitted[1].input.duration, 12);
   await assert.rejects(provider.submit('video', 'invalid', undefined, {duration: 30}), /PROVIDER_DURATION_INVALID/);
+});
+test('purging a server-revoked room removes media and durable jobs while preserving spent budget', async () => {
+  const f = await fixture();
+  try {
+    const s = await f.submit(); await f.runtime.enqueue(f.room.roomId, [s.submissionId]);
+    await f.runtime.alarm(); await f.runtime.alarm();
+    await assert.rejects(f.runtime.purgeClosedRoom(f.room.roomId), /ACTOR_DENIED/);
+    f.sqlite.prepare("update vdj_rooms set document=json_set(document,'$.closed',json('true'),'$.purgeGeneratedMedia',json('true')) where id=?").run(f.room.roomId);
+    const response = await generationHttp(new Request(`https://test.example/api/rooms/${f.room.roomId}/generation`,
+      {method: 'DELETE', headers: {origin: f.env.PUBLIC_ORIGIN}}), f.env);
+    assert.deepEqual(await response.json(), {purged: true, providerDeleted: 2, providerPending: 0});
+    assert.equal((await f.store.records(f.room.roomId)).length, 0);
+    assert.equal((await f.env.MEDIA.list({prefix: 'rooms/'})).objects.length, 0);
+    assert.equal(f.values.size, 0);
+    assert.equal(f.sqlite.prepare('select sum(cents) n from vdj_budget_reservations').get().n, 100);
+    await assert.rejects(f.runtime.enqueue(f.room.roomId, [s.submissionId]), /ROOM_NOT_FOUND/);
+    await f.runtime.alarm(); assert.equal(f.posted(), 2);
+  } finally { f.sqlite.close(); }
+});
+test('provider deletion permission failures do not retain playable local media or expose URLs', async () => {
+  const f = await fixture();
+  try {
+    const s = await f.submit(); await f.runtime.enqueue(f.room.roomId, [s.submissionId]);
+    await f.runtime.alarm(); await f.runtime.alarm();
+    const base = f.env.testFetch;
+    f.env.testFetch = (url, options) => options?.method === 'DELETE' ? Promise.resolve(new Response(null, {status: 403})) : base(url, options);
+    f.sqlite.prepare("update vdj_rooms set document=json_set(document,'$.closed',json('true'),'$.purgeGeneratedMedia',json('true')) where id=?").run(f.room.roomId);
+    const result = await f.runtime.purgeClosedRoom(f.room.roomId);
+    assert.equal(result.providerPurge.pending.length, 2);
+    assert.ok(result.providerPurge.pending.every(item => item.reason === 'PROVIDER_PERMISSION_REQUIRED'));
+    assert.equal((await f.store.records(f.room.roomId)).length, 0);
+    assert.equal((await f.env.MEDIA.list({prefix: 'rooms/'})).objects.length, 0);
+    assert.equal(f.values.size, 0);
+    assert.ok(!JSON.stringify(result).includes('https://'));
+  } finally { f.sqlite.close(); }
 });
 test('budget schema migration preserves existing reservations and permits the new per-set limit', async () => {
   const f = await fixture();

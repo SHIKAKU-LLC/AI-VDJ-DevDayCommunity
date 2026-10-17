@@ -11,6 +11,14 @@ export async function generationHttp(request, env) {
   const store = createGenerationStore({db: env.DB, eventId: env.EVENT_ID});
   let phase = 'authorize';
   try {
+    if (route === 'generation' && !jobId && request.method === 'DELETE' &&
+        request.headers.get('origin') === env.PUBLIC_ORIGIN && await store.purgeRequested(roomId)) {
+      // Only a server-side administrative tombstone can authorize erasure.
+      // Owner/participant payloads cannot set this flag through the room API.
+      const result = await env.GENERATION.getByName(roomId).purgeClosedRoom(roomId);
+      return answer({purged: result.purged, providerDeleted: result.providerPurge.deleted,
+        providerPending: result.providerPurge.pending.length});
+    }
     const room = await store.authorize(roomId, owner ?? member, request.method === 'POST' || route === 'generated-media');
     if (route === 'generation' && request.method === 'GET' && !jobId) {
       let jobs = await store.records(roomId);

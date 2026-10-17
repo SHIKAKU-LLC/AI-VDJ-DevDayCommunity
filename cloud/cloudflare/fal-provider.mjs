@@ -1,6 +1,5 @@
 export const MODELS = Object.freeze({initial: 'fal-ai/stable-audio-3/medium/text-to-audio',
   continuation: 'fal-ai/stable-audio-3/medium/audio-outpainting', video: 'minimax/h3-max/text-to-video'});
-export const LEGACY_VIDEO = 'alibaba/wan-3.0/text-to-video';
 const deny = () => { throw Error('PROVIDER_RESPONSE_INVALID'); };
 export const sha256 = async value => Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',
   typeof value === 'string' ? new TextEncoder().encode(value) : value)), v => v.toString(16).padStart(2, '0')).join('');
@@ -54,27 +53,24 @@ export function createFalProvider({key, fetchImpl = fetch} = {}) {
   }
   return {
     async preflight({duration = 12} = {}) {
-      if (![12, 24].includes(duration)) throw Error('PROVIDER_DURATION_INVALID');
-      const models = {...MODELS, ...(duration === 24 ? {video: LEGACY_VIDEO} : {})};
+      if (duration !== 12) throw Error('PROVIDER_DURATION_INVALID');
+      const models = MODELS;
       // The runtime uses a generation-only key. Billing is verified by the
       // operator; D1 reserves the event and room ceilings before paid requests.
       const price = await json('https://api.fal.ai/v1/models/pricing?endpoint_id=' + encodeURIComponent(Object.values(models).join(',')));
       for (const [kind, endpoint] of Object.entries(models)) {
         const rate = price.prices?.find(p => p.endpoint_id === endpoint);
         if (!rate || rate.currency !== 'USD' || rate.unit !== (kind === 'video' ? 'seconds' : 'audios') ||
-            !Number.isFinite(rate.unit_price) || rate.unit_price <= 0 || rate.unit_price > (kind === 'video' ? duration === 12 ? 0.065 : 0.0525 : 0.10)) throw Error('PROVIDER_PRICE_CHANGED');
+            !Number.isFinite(rate.unit_price) || rate.unit_price <= 0 || rate.unit_price > (kind === 'video' ? 0.065 : 0.10)) throw Error('PROVIDER_PRICE_CHANGED');
       }
-      return {maximumCents: duration === 12 ? 100 : 150};
+      return {maximumCents: 100};
     },
     async submit(kind, prompt, contextUrl, {duration = 12} = {}) {
-      if (![12, 24].includes(duration)) throw Error('PROVIDER_DURATION_INVALID');
-      const endpoint = kind === 'audio' ? contextUrl ? MODELS.continuation : MODELS.initial : duration === 24 ? LEGACY_VIDEO : MODELS.video;
+      if (duration !== 12) throw Error('PROVIDER_DURATION_INVALID');
+      const endpoint = kind === 'audio' ? contextUrl ? MODELS.continuation : MODELS.initial : MODELS.video;
       const input = kind === 'audio' ? {prompt: `Instrumental electronic dance music, steady beat, no speech. ${prompt}`,
         output_format: 'wav', enable_prompt_expansion: false, enable_safety_checker: true,
-        ...(contextUrl ? {audio_url: contextUrl, extend_seconds_before: 0, extend_seconds_after: duration} : {duration})} : duration === 24 ?
-        {prompt: `Large-screen music visual, smooth continuous movement, no flashing or strobing, no text. ${prompt}`,
-          duration: 24, resolution: '480p', aspect_ratio: '16:9', audio: false,
-          enable_prompt_expansion: false, enable_thinking: false, enable_safety_checker: true} :
+        ...(contextUrl ? {audio_url: contextUrl, extend_seconds_before: 0, extend_seconds_after: duration} : {duration})} :
         {prompt: `Large-screen music visual, cinematic detail, smooth continuous movement, no flashing or strobing, no text. ${prompt}`,
           duration, resolution: '480P', aspect_ratio: '16:9', prompt_expansion_mode: 'disabled', enable_safety_checker: true};
       const result = await json('https://queue.fal.run/' + endpoint, 'POST', input);
@@ -83,6 +79,12 @@ export function createFalProvider({key, fetchImpl = fetch} = {}) {
     },
     async status(handle) { return json(queueUrl(handle.statusUrl, handle.id)); },
     async result(handle) { return json(queueUrl(handle.responseUrl, handle.id)); },
+    async deleteOutputs(requestId) {
+      if (!/^[a-f0-9-]{36}$/.test(requestId)) deny();
+      const result = await json('https://api.fal.ai/v1/models/requests/' + requestId + '/payloads', 'DELETE');
+      if (!Array.isArray(result.cdn_delete_results)) deny();
+      return {deleted: result.cdn_delete_results.every(item => item.exception == null), files: result.cdn_delete_results.length};
+    },
     async download(value) {
       let url = new URL(value);
       for (let redirects = 0; redirects < 3; redirects++) {

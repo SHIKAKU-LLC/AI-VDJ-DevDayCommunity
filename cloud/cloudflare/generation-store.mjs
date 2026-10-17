@@ -15,6 +15,19 @@ export function createGenerationStore({db, eventId}) {
   }
   return {
     active,
+    async purgeRequested(roomId) {
+      return await query(`select json_extract(document,'$.purged') as purged,
+        json_extract(document,'$.providerPurge') as providerPurge from vdj_rooms
+        where id=? and event_id=? and json_extract(document,'$.closed')=1
+        and json_extract(document,'$.purgeGeneratedMedia')=1`, roomId, eventId).first();
+    },
+    async finishPurge(roomId, providerPurge) {
+      await db.batch([query(`update vdj_rooms set document=json_object('closed',json('true'),
+        'purgeGeneratedMedia',json('true'),'purged',json('true'),'providerPurge',json(?)),
+        owner_proof=?,join_proof=?,version=version+1 where id=? and event_id=?`,
+      JSON.stringify(providerPurge), '0'.repeat(64), '0'.repeat(64), roomId, eventId),
+      query('delete from vdj_runtime_records where room_id=?', roomId)]);
+    },
     async authorize(roomId, capability, ownerOnly = false) {
       if (!/^[a-f0-9]{64}$/.test(capability ?? '')) fail('ACTOR_DENIED');
       const row = await active(roomId), proof = await sha256(capability);

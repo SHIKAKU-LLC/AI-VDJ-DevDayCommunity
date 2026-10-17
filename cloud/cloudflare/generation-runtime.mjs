@@ -47,7 +47,41 @@ export function createGenerationClass(Base) {
     constructor(ctx, env) { super(ctx, env); this.ctx = ctx; this.env = env; this.serial = Promise.resolve(); }
     locked(fn) { const task = this.serial.then(fn); this.serial = task.catch(() => {}); return task; }
     store() { return createGenerationStore({db: this.env.DB, eventId: this.env.EVENT_ID}); }
+    async purgeClosedRoom(roomId) {
+      return this.locked(async () => {
+        const requested = await this.store().purgeRequested(roomId);
+        if (!requested) throw Error('ACTOR_DENIED');
+        const prior = await this.ctx.storage.get('room');
+        if (prior && prior !== roomId) throw Error('ACTOR_DENIED');
+        if (requested.purged) {
+          await this.ctx.storage.deleteAll();
+          return {purged: true, providerPurge: JSON.parse(requested.providerPurge)};
+        }
+        const jobs = await this.store().records(roomId);
+        const receipts = [...new Set(jobs.flatMap(j => j.providerReceipts ?? []).map(r => r.requestId))];
+        const providerPurge = {deleted: 0, pending: []};
+        const provider = createFalProvider({key: this.env.FAL_KEY, fetchImpl: this.env.testFetch ?? fetch});
+        for (const id of receipts) {
+          try {
+            const result = await provider.deleteOutputs(id);
+            if (result.deleted) providerPurge.deleted++;
+            else providerPurge.pending.push({id, reason: 'PROVIDER_DELETE_INCOMPLETE'});
+          } catch (error) { providerPurge.pending.push({id, reason: error.message === 'PROVIDER_PERMISSION_REQUIRED' ? error.message : 'PROVIDER_DELETE_FAILED'}); }
+        }
+        const prefix = 'rooms/' + await sha256(JSON.stringify(roomId)) + '/';
+        let cursor;
+        do {
+          const page = await this.env.MEDIA.list({prefix, cursor, limit: 100});
+          if (page.objects.length) await this.env.MEDIA.delete(page.objects.map(object => object.key));
+          cursor = page.truncated ? page.cursor : undefined;
+        } while (cursor);
+        await this.store().finishPurge(roomId, providerPurge);
+        await this.ctx.storage.deleteAll();
+        return {purged: true, providerPurge};
+      });
+    }
     async saveAsset(job, name, artifact, duration) {
+      await this.store().active(job.roomId);
       const limit = name === 'video' ? 16 : 5;
       const decoded = decodeArtifact(artifact, limit * 1024 * 1024), hash = await sha256(decoded);
       if (hash !== artifact.sha256) throw Error('NATIVE_RESULT_INVALID');
@@ -99,6 +133,8 @@ export function createGenerationClass(Base) {
     async alarm() {
       return this.locked(async () => {
         const jobs = (await this.ctx.storage.get('jobs') ?? []).map(upgrade);
+        const roomId = await this.ctx.storage.get('room');
+        if (roomId && await this.store().purgeRequested(roomId)) { await this.ctx.storage.deleteAlarm(); return; }
         const active = jobs.filter(pending).slice(0, 5);
         if (!active.length) return;
         // Persist a recovery alarm before any external I/O. Cloudflare runs only
