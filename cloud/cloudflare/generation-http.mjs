@@ -9,6 +9,7 @@ export async function generationHttp(request, env) {
   const owner = request.headers.get('x-room-owner'), member = request.headers.get('authorization')?.match(/^Bearer ([a-f0-9]{64})$/)?.[1];
   if (owner && member) return answer({error: 'DENIED'}, 403);
   const store = createGenerationStore({db: env.DB, eventId: env.EVENT_ID});
+  let phase = 'authorize';
   try {
     const room = await store.authorize(roomId, owner ?? member, request.method === 'POST' || route === 'generated-media');
     if (route === 'generation' && request.method === 'GET' && !jobId) {
@@ -31,7 +32,9 @@ export async function generationHttp(request, env) {
       if (env.GENERATION_ENABLED !== 'true') throw Error('GENERATION_DISABLED');
       // Configuration/price/balance errors must not consume one of the five
       // reservations. Recheck inside the durable job immediately before POST.
+      phase = 'provider-preflight';
       await createFalProvider({key: env.FAL_KEY, fetchImpl: env.testFetch ?? fetch}).preflight();
+      phase = 'enqueue';
       const result = await env.GENERATION.getByName(roomId).enqueue(roomId, input.submissionIds);
       return answer(result, 202);
     }
@@ -46,7 +49,8 @@ export async function generationHttp(request, env) {
     return answer({error: 'METHOD_NOT_ALLOWED'}, 405);
   } catch (error) {
     const code = ['ACTOR_DENIED', 'ROOM_NOT_FOUND', 'JUDGE_BUDGET', 'GENERATION_DISABLED', 'SUBMISSION_NOT_FOUND',
-      'PROVIDER_NOT_CONNECTED', 'PROVIDER_PERMISSION_REQUIRED', 'PROVIDER_BALANCE_REQUIRED', 'PROVIDER_PRICE_CHANGED'].includes(error.message) ? error.message : 'GENERATION_UNAVAILABLE';
-    return answer({error: code}, code === 'ACTOR_DENIED' ? 403 : code === 'JUDGE_BUDGET' ? 429 : 503);
+      'PROVIDER_NOT_CONNECTED', 'PROVIDER_PERMISSION_REQUIRED', 'PROVIDER_BALANCE_REQUIRED', 'PROVIDER_PRICE_CHANGED',
+      'PROVIDER_AUTHENTICATION_FAILED', 'PROVIDER_ENDPOINT_UNAVAILABLE', 'PROVIDER_RATE_LIMITED', 'PROVIDER_UNAVAILABLE'].includes(error.message) ? error.message : 'GENERATION_UNAVAILABLE';
+    return answer({error: code, phase}, code === 'ACTOR_DENIED' ? 403 : code === 'JUDGE_BUDGET' ? 429 : 503);
   }
 }

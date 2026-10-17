@@ -35,7 +35,11 @@ export function createFalProvider({key, fetchImpl = fetch} = {}) {
         headers: new Headers([['authorization', ['Key', key].join(' ')], ['content-type', 'application/json'], ['x-fal-store-io', '0']]),
         ...(input ? {body: JSON.stringify(input)} : {})});
     } catch { throw Error('PROVIDER_UNAVAILABLE'); }
-    if (!response.ok) { await response.body?.cancel(); throw Error(response.status === 403 ? 'PROVIDER_PERMISSION_REQUIRED' : 'PROVIDER_UNAVAILABLE'); }
+    if (!response.ok) {
+      await response.body?.cancel();
+      throw Error(({401: 'PROVIDER_AUTHENTICATION_FAILED', 403: 'PROVIDER_PERMISSION_REQUIRED',
+        404: 'PROVIDER_ENDPOINT_UNAVAILABLE', 429: 'PROVIDER_RATE_LIMITED'})[response.status] ?? 'PROVIDER_UNAVAILABLE');
+    }
     return JSON.parse(new TextDecoder().decode(await boundedBytes(response, 262144)));
   }
   function queueUrl(value, id) {

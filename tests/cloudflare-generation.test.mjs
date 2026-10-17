@@ -96,16 +96,19 @@ test('an unknown paid submission is never retried after object recreation', asyn
     assert.equal(f.posted(), 1); assert.equal((await f.store.records(f.room.roomId))[0].state, 'NEEDS_REVIEW');
   } finally { f.sqlite.close(); }
 });
-test('preflight permission failure reserves no budget and submits no paid request', async () => {
+test('preflight authentication, permission and rate failures reserve no budget or paid request', async () => {
   const f = await fixture();
   try {
     const s = await f.submit();
-    f.env.testFetch = async () => new Response(null, {status: 403});
-    const response = await generationHttp(new Request(`https://test.example/api/rooms/${f.room.roomId}/generation`, {
-      method: 'POST', headers: {origin: f.env.PUBLIC_ORIGIN, 'content-type': 'application/json', 'x-room-owner': f.owner},
-      body: JSON.stringify({submissionIds: [s.submissionId]}),
-    }), f.env);
-    assert.equal(response.status, 503); assert.equal((await response.json()).error, 'PROVIDER_PERMISSION_REQUIRED');
+    for (const [status, error] of [[401, 'PROVIDER_AUTHENTICATION_FAILED'], [403, 'PROVIDER_PERMISSION_REQUIRED'], [429, 'PROVIDER_RATE_LIMITED']]) {
+      f.env.testFetch = async () => new Response(null, {status});
+      const response = await generationHttp(new Request(`https://test.example/api/rooms/${f.room.roomId}/generation`, {
+        method: 'POST', headers: {origin: f.env.PUBLIC_ORIGIN, 'content-type': 'application/json', 'x-room-owner': f.owner},
+        body: JSON.stringify({submissionIds: [s.submissionId]}),
+      }), f.env);
+      assert.equal(response.status, 503);
+      assert.deepEqual(await response.json(), {error, phase: 'provider-preflight'});
+    }
     assert.equal(f.sqlite.prepare('select count(*) n from vdj_budget_reservations').get().n, 0);
     assert.equal(f.posted(), 0);
   } finally { f.sqlite.close(); }

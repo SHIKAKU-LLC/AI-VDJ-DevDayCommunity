@@ -10,11 +10,14 @@ const messages = {JUDGE_CLOSED: '現在はルームの受付期間外です。',
   JUDGE_BUDGET: 'このルームまたはイベントの生成上限に達しました。', GENERATION_DISABLED: '生成サービスを準備しています。',
   PROVIDER_BALANCE_REQUIRED: '運営側の生成残高を確認しています。', ACTOR_DENIED: '接続情報を確認できません。ページを開き直してください。',
   PROVIDER_PERMISSION_REQUIRED: '運営側で生成サービスの接続権限を確認する必要があります。',
+  PROVIDER_AUTHENTICATION_FAILED: '運営側で生成サービスの接続設定を確認する必要があります。',
+  PROVIDER_RATE_LIMITED: '生成サービスが混み合っています。しばらく待ってから再確認します。',
   ROOM_NOT_FOUND: 'このルームは終了したか、利用期限を過ぎています。', ACCEPTANCE_OFF: '現在は新しいアイデアの受付を閉じています。',
   RATE_LIMITED: '少し時間をおいてから送信してください。'};
 let session, snapshot, jobs = [], capabilities, context, player, autoGenerate = true, polling = false, pendingSubmit, submitBusy = false;
 const loaded = new Map(), loadPending = new Set(), videos = new Map();
 let decodeFailures = 0, meter = {}, meterNode, playerInit;
+let generationRetryAfterMs = 0;
 const route = /^\/join\/([a-f0-9-]{36})$/.exec(location.pathname);
 let invitation = new URLSearchParams(location.search).get('code');
 if (location.search || location.hash) history.replaceState(null, '', location.pathname);
@@ -61,9 +64,10 @@ function render() {
   $('budget').textContent = `生成枠 ${jobs.length} / 5 セット。運営負担は1セット上限 $1.50、ルーム合計上限 $7.50。`;
 }
 async function queuePending() {
-  if (!session.owner || !autoGenerate || !capabilities.generation || jobs.length >= 5) return;
+  if (!session.owner || !autoGenerate || !capabilities.generation || jobs.length >= 5 || Date.now() < generationRetryAfterMs) return;
   const ids = snapshot.submissions.filter(s => !jobs.some(j => j.id === s.submissionId)).slice(0, 5 - jobs.length).map(s => s.submissionId);
-  if (ids.length) await request(roomPath('generation'), {submissionIds: ids});
+  if (ids.length) try { await request(roomPath('generation'), {submissionIds: ids}); }
+  catch (e) { generationRetryAfterMs = Date.now() + 30000; throw e; }
 }
 function ensurePlayer() {
   if (playerInit) return playerInit;
