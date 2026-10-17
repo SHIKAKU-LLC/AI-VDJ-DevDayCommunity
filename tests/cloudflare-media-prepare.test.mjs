@@ -8,7 +8,44 @@ import {join} from 'node:path';
 import {prepareMedia} from '../cloud/cloudflare/media-prepare.mjs';
 import {createNativeService} from '../cloud/cloudflare/native-service.mjs';
 import {createPortableNativeRuntime} from '../cloud/worker/native-runtime.mjs';
+import {decodeCompleteWave} from '../integration/runtime/bootstrap.mjs';
 const exec = promisify(execFile);
+
+test('club profile preserves 1080P detail and raises bass relative to the midrange', {skip: !process.env.VDJ_QC_PYTHON}, async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'vdj-club-test-'));
+  const service = createNativeService({authorize: async () => true,
+    createRuntime: () => createPortableNativeRuntime({python: process.env.VDJ_QC_PYTHON})});
+  try {
+    const audio = join(dir, 'source.wav'), video = join(dir, 'source.mp4');
+    await exec('ffmpeg', ['-nostdin', '-v', 'error', '-f', 'lavfi', '-i',
+      'aevalsrc=0.15*sin(2*PI*60*t)+0.15*sin(2*PI*1000*t):s=48000:d=12', '-ac', '2', audio]);
+    const bytes = await readFile(audio);
+    const legacy = await prepareMedia(bytes, 'audio', {seconds: 12});
+    const club = await prepareMedia(bytes, 'audio', {seconds: 12, mediaProfile: 'club-hd-v1'});
+    function bandRatio(result) {
+      const wave = decodeCompleteWave(Buffer.from(result.audio.data, 'base64'));
+      const amplitude = frequency => {
+        let re = 0, im = 0;
+        for (let i = 44100; i < 88200; i++) {
+          re += wave.pcm[i * 2] * Math.cos(2 * Math.PI * frequency * i / 44100);
+          im += wave.pcm[i * 2] * Math.sin(2 * Math.PI * frequency * i / 44100);
+        }
+        return Math.hypot(re, im);
+      };
+      return amplitude(60) / amplitude(1000);
+    }
+    assert.ok(bandRatio(club) > bandRatio(legacy) * 1.15);
+    await exec('ffmpeg', ['-nostdin', '-v', 'error', '-f', 'lavfi', '-i', 'testsrc2=size=1920x1080:rate=24:duration=12',
+      '-c:v', 'libx264', '-preset', 'ultrafast', '-threads', '1', video]);
+    const response = await service.fetch(new Request('http://native.internal/prepare/video', {method: 'POST',
+      headers: {'content-type': 'application/octet-stream', 'x-vdj-duration-seconds': '12', 'x-vdj-media-profile': 'club-hd-v1'},
+      body: await readFile(video)}));
+    assert.equal(response.status, 200);
+    const result = await response.json();
+    assert.equal(result.width, 1920); assert.equal(result.height, 1080);
+    assert.equal(result.quality.decodedFrames, 288); assert.equal(result.quality.passed, true);
+  } finally { await service.close(); await rm(dir, {recursive: true, force: true}); }
+});
 
 test('native preparation produces a playable stereo tail, context and silent 480P video from synthetic media', {skip: !process.env.VDJ_QC_PYTHON}, async () => {
   const dir = await mkdtemp(join(tmpdir(), 'vdj-media-test-'));

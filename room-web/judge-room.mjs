@@ -72,7 +72,7 @@ function render() {
     }
     return li;
   }));
-  const maximum = Math.max(100, ...jobs.map(job => job.maximumCents ?? 100)) / 100;
+  const maximum = Math.max(250, ...jobs.map(job => job.maximumCents ?? 250)) / 100;
   $('budget').textContent = `生成枠 ${jobs.length} / 5 セット。運営負担は1セット上限 $${maximum.toFixed(2)}、ルーム合計上限 $${(maximum * 5).toFixed(2)}。`;
 }
 async function queuePending() {
@@ -135,7 +135,8 @@ async function load(job) {
       video.addEventListener('loadeddata', () => { clearTimeout(timeout); resolve(); }, {once: true});
       video.addEventListener('error', () => { clearTimeout(timeout); reject(Error('VIDEO_INVALID')); }, {once: true});
     });
-    if (Math.abs(video.duration - videoDuration) > .1 || video.videoWidth !== 854 || video.videoHeight !== 480) throw Error('VIDEO_INVALID');
+    if (Math.abs(video.duration - videoDuration) > .1 || ![[854, 480], [1920, 1080]].some(([w, h]) => video.videoWidth === w && video.videoHeight === h) ||
+        video.videoWidth !== (job.assets.video.width ?? 854) || video.videoHeight !== (job.assets.video.height ?? 480)) throw Error('VIDEO_INVALID');
     videos.set(job.id, video); loaded.set(job.id, {...job, buffer, blobUrl});
     // Publish to the audio scheduler in submission order even if a later fetch
     // finishes first. Each audio/video pair must be decoded before adoption.

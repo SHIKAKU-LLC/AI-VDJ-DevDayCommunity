@@ -30,7 +30,7 @@ export async function generationHttp(request, env) {
       }
       return answer({jobs: jobs.map(({id, prompt, nickname, state, reason, maximumCents, assets, progress}) => ({id, prompt, nickname, state, reason, maximumCents, progress,
         ...(state === 'READY' ? {assets: Object.fromEntries(['audio', 'video'].map(k => [k, {sha256: assets[k].sha256, duration: assets[k].duration,
-          byteLength: assets[k].byteLength, contentType: assets[k].contentType}]))} : {})}))});
+          byteLength: assets[k].byteLength, contentType: assets[k].contentType, ...(k === 'video' ? {width: assets[k].width ?? 854, height: assets[k].height ?? 480} : {})}]))} : {})}))});
     }
     if (route === 'generation' && request.method === 'POST' && !jobId) {
       if (request.headers.get('origin') !== env.PUBLIC_ORIGIN || request.headers.get('content-type') !== 'application/json') return answer({error: 'DENIED'}, 403);

@@ -82,8 +82,10 @@ export function createNativeService({authorize, createRuntime} = {}) {
           }
           const seconds = Number(request.headers.get('x-vdj-duration-seconds') ?? 24);
           const contextSeconds = Number(request.headers.get('x-vdj-context-seconds') ?? 16);
+          const mediaProfile = request.headers.get('x-vdj-media-profile') ?? 'legacy';
+          if (!['legacy', 'club-hd-v1'].includes(mediaProfile)) failure('INPUT_INVALID');
           if (!(prepare[1] === 'audio' ? [12, 24, 60] : [12, 24]).includes(seconds) || ![0, 12, 16].includes(contextSeconds)) failure('INPUT_INVALID');
-          const prepared = await prepareMedia(Buffer.concat(parts, size), prepare[1], {seconds, contextSeconds});
+          const prepared = await prepareMedia(Buffer.concat(parts, size), prepare[1], {seconds, contextSeconds, mediaProfile});
           if (prepare[1] === 'audio') {
             runtime ??= await createRuntime();
             const profile = await runtime.inspectBootstrap(Buffer.from(prepared.audio.data, 'base64'));
@@ -95,7 +97,7 @@ export function createNativeService({authorize, createRuntime} = {}) {
             runtime ??= await createRuntime();
             const bytes = Buffer.from(prepared.video.data, 'base64');
             const measured = await runtime.native.inspectVideo({bytes, inputDigest: digest(bytes)});
-            if (!measured.fullyDecoded || measured.hasAudioTrack || measured.width !== 854 || measured.height !== 480 ||
+            if (!measured.fullyDecoded || measured.hasAudioTrack || measured.width !== prepared.width || measured.height !== prepared.height ||
                 Math.abs(measured.durationSeconds - seconds) > .05 || measured.decodedFrames !== seconds * 24) failure('VIDEO_FORMAT_INVALID');
             const verdict = assessTechnicalVisual(measured);
             if (!verdict.passed) return output({error: verdict.reasons[0] ?? 'VIDEO_QC_HOLD'}, 422);

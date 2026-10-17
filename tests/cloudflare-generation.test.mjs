@@ -14,7 +14,7 @@ import {MUSIC_NEGATIVE_PROMPT} from '../cloud/cloudflare/creative-direction.mjs'
 async function fixture() {
   const sqlite = new DatabaseSync(':memory:');
   sqlite.exec(await readFile(new URL('../cloud/cloudflare/schema.sql', import.meta.url), 'utf8'));
-  sqlite.prepare('insert into vdj_events values(?,1,?,10,1000)').run('judge-test', Date.now() + 3600000);
+  sqlite.prepare('insert into vdj_events values(?,1,?,10,5000)').run('judge-test', Date.now() + 3600000);
   const db = {prepare: sql => ({bind(...args) {
     const s = sqlite.prepare(sql);
     return {async first() { return s.get(...args) ?? null; }, async all() { return {results: s.all(...args)}; },
@@ -45,7 +45,7 @@ async function fixture() {
   const fetchImpl = async (url, options) => {
     requests.push({url: String(url), method: options?.method ?? 'GET'});
     if (String(url).includes('/models/pricing')) return Response.json({prices: Object.entries(MODELS).map(([k, endpoint_id]) =>
-      ({endpoint_id, unit: k === 'video' ? 'seconds' : 'audios', unit_price: k === 'video' ? .05 : .04, currency: 'USD'}))});
+      ({endpoint_id, unit: k === 'video' ? 'seconds' : 'audios', unit_price: k === 'video' ? .04 : .04, currency: 'USD'}))});
     if (String(url).includes('/account/billing')) return Response.json({credits: {currency: 'USD', current_balance: 10}});
     if (options?.method === 'DELETE') return Response.json({cdn_delete_results: []});
     if (options?.method === 'POST') {
@@ -61,7 +61,9 @@ async function fixture() {
   const env = {DB: db, MEDIA: media, EVENT_ID: 'judge-test', PUBLIC_ORIGIN: 'https://test.example', GENERATION_ENABLED: 'true', FAL_KEY: 'synthetic-test-value', testFetch: fetchImpl,
     NATIVE_PROCESSOR: {getByName: () => ({fetch: async request => Response.json(request.url.endsWith('audio') ?
       {audio: await artifact(), context: await artifact(), duration: Number(request.headers.get('x-vdj-duration-seconds')), quality: {passed: true}} :
-      {video: await artifact(), duration: Number(request.headers.get('x-vdj-duration-seconds')), quality: {passed: true}})})}};
+      {video: await artifact(), duration: Number(request.headers.get('x-vdj-duration-seconds')),
+        width: request.headers.get('x-vdj-media-profile') === 'club-hd-v1' ? 1920 : 854,
+        height: request.headers.get('x-vdj-media-profile') === 'club-hd-v1' ? 1080 : 480, quality: {passed: true}})})}};
   const Class = createGenerationClass(class {}), runtime = new Class({storage}, env);
   env.GENERATION = {getByName: () => runtime};
   return {sqlite, db, room, owner, join, rpc, submit, store, env, runtime, values, requests, posted: () => posted, uncertain: () => { unknown = true; }};
@@ -75,7 +77,7 @@ test('generation reserves at most five sets, is idempotent and enforces global b
     for (const s of submissions.slice(0, 5)) await f.store.enqueue(f.room.roomId, s.submissionId);
     await f.store.enqueue(f.room.roomId, submissions[0].submissionId);
     await assert.rejects(f.store.enqueue(f.room.roomId, submissions[5].submissionId), /JUDGE_BUDGET/);
-    assert.equal(f.sqlite.prepare('select sum(cents) n from vdj_budget_reservations').get().n, 500);
+    assert.equal(f.sqlite.prepare('select sum(cents) n from vdj_budget_reservations').get().n, 1250);
     assert.equal((await f.store.records(f.room.roomId)).length, 5);
   } finally { f.sqlite.close(); }
 });
@@ -290,9 +292,9 @@ test('generation-only credentials need no billing access and still enforce live 
     assert.ok(url.includes('/models/pricing'));
     assert.equal(options.redirect, 'manual');
     return Response.json({prices: Object.entries(MODELS).map(([kind, endpoint_id]) =>
-      ({endpoint_id, unit: kind === 'video' ? 'seconds' : 'audios', unit_price: kind === 'video' ? .05 : .04, currency: 'USD'}))});
+      ({endpoint_id, unit: kind === 'video' ? 'seconds' : 'audios', unit_price: kind === 'video' ? .04 : .04, currency: 'USD'}))});
   }});
-  assert.deepEqual(await provider.preflight(), {maximumCents: 100});
+  assert.deepEqual(await provider.preflight(), {maximumCents: 250});
 });
 test('H3 Max receives twelve seconds while the music keeps sixty seconds for a full build and peak', async () => {
   const submitted = [];
@@ -303,8 +305,8 @@ test('H3 Max receives twelve seconds while the music keeps sixty seconds for a f
   }});
   await provider.submit('video', '光の海'); await provider.submit('audio', '光の海');
   assert.equal(submitted[0].url, 'https://queue.fal.run/minimax/h3-max/text-to-video');
-  assert.equal(submitted[0].input.duration, 12); assert.equal(submitted[0].input.resolution, '480P');
-  assert.equal(submitted[0].input.prompt_expansion_mode, 'disabled');
+  assert.equal(submitted[0].input.duration, 12); assert.equal(submitted[0].input.resolution, '1080P');
+  assert.equal(submitted[0].input.prompt_expansion_mode, 'quality');
   assert.equal(submitted[0].input.enable_safety_checker, true);
   assert.equal(submitted[1].input.duration, 60);
   assert.ok(submitted[1].input.prompt.includes('sustain its full energy through seconds 36-60'));
@@ -333,8 +335,8 @@ test('every audio and video request includes the fixed DJ brief and treats audie
   const visual = submitted[2].input.prompt;
   assert.ok(visual.startsWith('Create abstract psychedelic VJ visuals'));
   assert.ok(visual.includes('never a nature film or literal scenery'));
-  assert.ok(visual.includes('angular laser lattice'));
-  assert.ok(visual.includes('Avoid an unchanged centred mandala or slow screensaver drift'));
+  assert.ok(visual.includes('intricately engineered three-dimensional kinetic sculpture'));
+  assert.ok(visual.includes('microgeometry'));
   assert.ok(visual.includes('no full-screen white/black flashes'));
 });
 test('purging a server-revoked room removes media and durable jobs while preserving spent budget', async () => {
@@ -350,7 +352,7 @@ test('purging a server-revoked room removes media and durable jobs while preserv
     assert.equal((await f.store.records(f.room.roomId)).length, 0);
     assert.equal((await f.env.MEDIA.list({prefix: 'rooms/'})).objects.length, 0);
     assert.equal(f.values.size, 0);
-    assert.equal(f.sqlite.prepare('select sum(cents) n from vdj_budget_reservations').get().n, 100);
+    assert.equal(f.sqlite.prepare('select sum(cents) n from vdj_budget_reservations').get().n, 250);
     await assert.rejects(f.runtime.enqueue(f.room.roomId, [s.submissionId]), /ROOM_NOT_FOUND/);
     await f.runtime.alarm(); assert.equal(f.posted(), 2);
   } finally { f.sqlite.close(); }
@@ -384,7 +386,7 @@ test('budget schema migration preserves existing reservations and permits the ne
     f.sqlite.prepare('insert into vdj_budget_reservations values(?,?,?,?,?)').run('judge-test', f.room.roomId, 'prior', 100, Date.now());
     f.sqlite.exec(await readFile(new URL('../cloud/cloudflare/generation-budget-migration.sql', import.meta.url), 'utf8'));
     const submission = await f.submit(); await f.store.enqueue(f.room.roomId, submission.submissionId);
-    assert.equal(f.sqlite.prepare('select sum(cents) n from vdj_budget_reservations').get().n, 200);
+    assert.equal(f.sqlite.prepare('select sum(cents) n from vdj_budget_reservations').get().n, 350);
     assert.equal(f.sqlite.prepare('select cents from vdj_budget_reservations where plan_id=?').get('prior').cents, 100);
     assert.deepEqual(f.sqlite.prepare('pragma foreign_key_check').all(), []);
   } finally { f.sqlite.close(); }

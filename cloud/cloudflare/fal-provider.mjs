@@ -1,4 +1,4 @@
-import {musicPrompt, visualPrompt, MUSIC_NEGATIVE_PROMPT} from './creative-direction.mjs';
+import {musicPrompt, visualPrompt, MUSIC_NEGATIVE_PROMPT, DJ_DIRECTION} from './creative-direction.mjs';
 
 export const MODELS = Object.freeze({initial: 'fal-ai/stable-audio-3/medium/text-to-audio',
   continuation: 'fal-ai/stable-audio-3/medium/audio-outpainting', video: 'minimax/h3-max/text-to-video'});
@@ -63,18 +63,19 @@ export function createFalProvider({key, fetchImpl = fetch} = {}) {
       for (const [kind, endpoint] of Object.entries(models)) {
         const rate = price.prices?.find(p => p.endpoint_id === endpoint);
         if (!rate || rate.currency !== 'USD' || rate.unit !== (kind === 'video' ? 'seconds' : 'audios') ||
-            !Number.isFinite(rate.unit_price) || rate.unit_price <= 0 || rate.unit_price > (kind === 'video' ? 0.065 : 0.10)) throw Error('PROVIDER_PRICE_CHANGED');
+            !Number.isFinite(rate.unit_price) || rate.unit_price <= 0 || rate.unit_price > (kind === 'video' ? 0.045 : 0.10)) throw Error('PROVIDER_PRICE_CHANGED');
       }
-      return {maximumCents: 100};
+      return {maximumCents: DJ_DIRECTION.maximumCents};
     },
-    async submit(kind, prompt, contextUrl, {duration = kind === 'audio' ? 60 : 12} = {}) {
+    async submit(kind, prompt, contextUrl, {duration = kind === 'audio' ? 60 : 12, mediaProfile = DJ_DIRECTION.mediaProfile} = {}) {
       if (!(kind === 'audio' ? [12, 60] : [12]).includes(duration)) throw Error('PROVIDER_DURATION_INVALID');
       const endpoint = kind === 'audio' ? contextUrl ? MODELS.continuation : MODELS.initial : MODELS.video;
       const input = kind === 'audio' ? {prompt: musicPrompt(prompt, {duration}), negative_prompt: MUSIC_NEGATIVE_PROMPT,
         output_format: 'wav', enable_prompt_expansion: false, enable_safety_checker: true,
         ...(contextUrl ? {audio_url: contextUrl, extend_seconds_before: 0, extend_seconds_after: duration} : {duration})} :
         {prompt: visualPrompt(prompt),
-          duration, resolution: '480P', aspect_ratio: '16:9', prompt_expansion_mode: 'disabled', enable_safety_checker: true};
+          duration, resolution: mediaProfile === DJ_DIRECTION.mediaProfile ? '1080P' : '480P', aspect_ratio: '16:9',
+          prompt_expansion_mode: mediaProfile === DJ_DIRECTION.mediaProfile ? 'quality' : 'disabled', enable_safety_checker: true};
       const result = await json('https://queue.fal.run/' + endpoint, 'POST', input);
       const id = result.request_id;
       return {id, endpoint, statusUrl: queueUrl(result.status_url, id), responseUrl: queueUrl(result.response_url, id)};

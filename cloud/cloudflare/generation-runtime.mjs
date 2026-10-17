@@ -96,7 +96,7 @@ export function createGenerationClass(Base) {
       if (!await this.env.MEDIA.head(path)) await this.env.MEDIA.put(path, decoded,
         {onlyIf: {etagDoesNotMatch: '*'}, httpMetadata: {contentType}, customMetadata: {sha256: hash}});
       job.assets ??= {};
-      job.assets[name] = {path, sha256: hash, byteLength: decoded.length, contentType, duration};
+      job.assets[name] = {...(name === 'video' ? {width: job.mediaProfile === 'club-hd-v1' ? 1920 : 854, height: job.mediaProfile === 'club-hd-v1' ? 1080 : 480} : {}), path, sha256: hash, byteLength: decoded.length, contentType, duration};
     }
     async enqueue(roomId, submissionIds) {
       return this.locked(async () => {
@@ -141,14 +141,16 @@ export function createGenerationClass(Base) {
       // URLs stay transient. Only vetted bytes and hashes enter R2.
       const bytes = await provider.download(result[kind]?.url);
       const duration = kind === 'audio' ? job.duration : job.videoDuration;
-      const native = this.env.NATIVE_PROCESSOR.getByName('cloud-media-v6');
+      const native = this.env.NATIVE_PROCESSOR.getByName('cloud-media-v7');
       const response = await native.fetch(new Request('http://native.internal/prepare/' + kind,
         {method: 'POST', headers: {'content-type': 'application/octet-stream', 'x-vdj-duration-seconds': String(duration),
-          'x-vdj-context-seconds': String(part.contextSeconds ?? 0)}, body: bytes, signal: AbortSignal.timeout(150000)}));
+          'x-vdj-context-seconds': String(part.contextSeconds ?? 0), 'x-vdj-media-profile': job.mediaProfile ?? 'legacy'}, body: bytes, signal: AbortSignal.timeout(150000)}));
       if (response.status === 409 || response.status === 503) { await response.body?.cancel(); return false; }
       if (!response.ok) { const problem = await response.json().catch(() => ({})); throw Error(safeReason({message: problem.error})); }
       const prepared = JSON.parse(new TextDecoder().decode(await boundedBytes(response, 24 * 1024 * 1024)));
       if (prepared.duration !== duration || prepared.quality?.passed !== true) throw Error('NATIVE_RESULT_INVALID');
+      if (kind === 'video' && ((prepared.width ?? 854) !== (job.mediaProfile === 'club-hd-v1' ? 1920 : 854) ||
+          (prepared.height ?? 480) !== (job.mediaProfile === 'club-hd-v1' ? 1080 : 480))) throw Error('NATIVE_RESULT_INVALID');
       job.quality ??= {};
       job.quality[kind] = prepared.quality;
       await this.saveAsset(job, kind, prepared[kind], duration);
@@ -215,7 +217,7 @@ export function createGenerationClass(Base) {
                 part.contextSeconds = contextUrl ? context.duration : 0;
                 part.state = 'SUBMITTING'; await persist(job);
                 // Never automatically retry this POST: a lost receipt is held.
-                part.handle = await provider.submit(kind, job.prompt, contextUrl, {duration: kind === 'audio' ? job.duration : job.videoDuration});
+                part.handle = await provider.submit(kind, job.prompt, contextUrl, {duration: kind === 'audio' ? job.duration : job.videoDuration, mediaProfile: job.mediaProfile ?? 'legacy'});
                 part.state = 'WAIT'; part.submittedAtMs = Date.now();
                 job.providerReceipts ??= [];
                 job.providerReceipts.push({kind, endpoint: part.handle.endpoint, requestId: part.handle.id});

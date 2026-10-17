@@ -46,8 +46,10 @@ export function createNativeContainerClass(Container) {
         if (url.pathname.startsWith('/prepare/')) {
           const duration = request.headers.get('x-vdj-duration-seconds') ?? '24';
           const context = request.headers.get('x-vdj-context-seconds') ?? '16';
+          const profile = request.headers.get('x-vdj-media-profile') ?? 'legacy';
+          if (!['legacy', 'club-hd-v1'].includes(profile)) return fail('INPUT_INVALID', 400);
           if (!(url.pathname === '/prepare/audio' ? ['12', '24', '60'] : ['12', '24']).includes(duration) || !['0', '12', '16'].includes(context)) return fail('INPUT_INVALID', 400);
-          headers.set('x-vdj-duration-seconds', duration); headers.set('x-vdj-context-seconds', context);
+          headers.set('x-vdj-duration-seconds', duration); headers.set('x-vdj-context-seconds', context); headers.set('x-vdj-media-profile', profile);
         }
         const outgoing = new Request('http://container.internal' + url.pathname, {method: 'POST', headers,
           body: request.body, signal: request.signal, duplex: 'half'});
