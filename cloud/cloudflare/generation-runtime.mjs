@@ -155,7 +155,7 @@ export function createGenerationClass(Base) {
       part.stage = 'download';
       const bytes = await provider.download(result[kind]?.url);
       const duration = kind === 'audio' ? job.duration : job.videoDuration;
-      const native = this.env.NATIVE_PROCESSOR.getByName('cloud-media-v8');
+      const native = this.env.NATIVE_PROCESSOR.getByName('cloud-media-v9');
       part.stage = 'native';
       const response = await native.fetch(new Request('http://native.internal/prepare/' + kind,
         {method: 'POST', headers: {'content-type': 'application/octet-stream', 'x-vdj-duration-seconds': String(duration),
