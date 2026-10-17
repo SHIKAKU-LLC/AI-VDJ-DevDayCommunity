@@ -16,6 +16,7 @@ test('private native service checks authorization, typed inputs and digests befo
     createRuntime: async () => ({inspectBootstrap: async bytes => { calls++; return {frameCount: bytes.length}; }})});
   const headers = {'x-test-permit': 'approved'};
   assert.equal((await service.fetch(call(input()))).status, 403);
+  assert.equal((await service.fetch(new Request('http://container.internal/self-check', {method: 'POST'}))).status, 403);
   const invalid = input(); invalid.files.bytes.sha256 = '0'.repeat(64);
   assert.equal((await service.fetch(call(invalid, {headers}))).status, 400);
   assert.equal((await service.fetch(call({...input(), input: {url: 'https://example.com/'}}, {headers}))).status, 400);
@@ -60,5 +61,9 @@ test('native service performs actual Python DSP from synthetic WAV bytes', {skip
     assert.equal(measurements.assetSha256, encode(bytes).sha256);
     assert.equal(measurements.frameCount, 24 * 44100);
     assert.equal(measurements.nonfiniteSamples, 0);
+    const check = await service.fetch(new Request('http://container.internal/self-check', {method: 'POST'}));
+    assert.equal(check.status, 200);
+    assert.deepEqual(await check.json(), {kind: 'synthetic-bootstrap-check-v1', passed: true,
+      frameCount: 24 * 44100, sampleRate: 44100, channels: 2});
   } finally { await service.close(); }
 });

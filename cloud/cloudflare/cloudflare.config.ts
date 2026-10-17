@@ -34,6 +34,7 @@ export default defineConfig(({mode}) => {
         MEDIA: bindings.r2({name: local ? 'ai-vdj-local-media' : 'ai-vdj-media'}),
         PUBLIC_ORIGIN: bindings.text(origin),
         EVENT_ID: bindings.text(eventId!),
+        ...(mode === 'staging' ? {STAGING_NATIVE_CHECK: bindings.text('enabled')} : {}),
         ...(!local ? {NATIVE_PROCESSOR: bindings.durableObject({worker: name, exportName: 'NativeProcessor'})} : {}),
       },
       observability: {enabled: false},

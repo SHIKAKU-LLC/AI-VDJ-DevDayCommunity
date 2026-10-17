@@ -10,6 +10,19 @@ const digest = bytes => createHash('sha256').update(bytes).digest('hex');
 const output = (value, status = 200) => Response.json(value, {status, headers: {'cache-control': 'no-store'}});
 const failure = code => { throw Error(code); };
 
+function syntheticWave() {
+  const rate = 44100, frames = 24 * rate, bytes = Buffer.alloc(44 + frames * 4);
+  bytes.write('RIFF'); bytes.writeUInt32LE(bytes.length - 8, 4); bytes.write('WAVEfmt ', 8);
+  bytes.writeUInt32LE(16, 16); bytes.writeUInt16LE(1, 20); bytes.writeUInt16LE(2, 22);
+  bytes.writeUInt32LE(rate, 24); bytes.writeUInt32LE(rate * 4, 28); bytes.writeUInt16LE(4, 32); bytes.writeUInt16LE(16, 34);
+  bytes.write('data', 36); bytes.writeUInt32LE(frames * 4, 40);
+  for (let i = 0; i < frames; i++) {
+    const sample = Math.round(0.1 * Math.sin(2 * Math.PI * 220 * i / rate) * 32768);
+    bytes.writeInt16LE(sample, 44 + i * 4); bytes.writeInt16LE(sample, 46 + i * 4);
+  }
+  return bytes;
+}
+
 async function decode(request) {
   if (request.headers.get('content-type') !== 'application/json') failure('JSON_REQUIRED');
   const parts = []; let size = 0;
@@ -50,11 +63,20 @@ export function createNativeService({authorize, createRuntime} = {}) {
     async fetch(request) {
       const path = new URL(request.url).pathname;
       if (path === '/health' && request.method === 'GET') return output({service: 'ai-vdj-native', alive: true, processorInitialized: runtime !== undefined, busy: active});
-      if (path !== '/inspect' || request.method !== 'POST') return output({error: 'NOT_FOUND'}, 404);
+      const selfCheck = path === '/self-check';
+      if ((!selfCheck && path !== '/inspect') || request.method !== 'POST') return output({error: 'NOT_FOUND'}, 404);
       if (!await authorize(request)) return output({error: 'DENIED'}, 403);
       if (active) return output({error: 'BUSY'}, 409);
       active = true;
       try {
+        if (selfCheck) {
+          runtime ??= await createRuntime();
+          const bytes = syntheticWave(), result = await runtime.inspectBootstrap(bytes);
+          if (result.assetSha256 !== digest(bytes) || result.frameCount !== 24 * 44100 || result.sampleRate !== 44100 ||
+              result.channels !== 2 || result.nonfiniteSamples !== 0) failure('RESULT_INVALID');
+          return output({kind: 'synthetic-bootstrap-check-v1', passed: true, frameCount: result.frameCount,
+            sampleRate: result.sampleRate, channels: result.channels});
+        }
         const {action, input, files, requestId} = await decode(request);
         runtime ??= await createRuntime();
         const data = {...input, ...files};

@@ -22,7 +22,7 @@ Workers Buildsの設定（検証用は保存済み、本番用は案）:
 | GitHub | `SHIKAKU-LLC/AI-VDJ-DevDayCommunity` のみ |
 | ルート | リポジトリのルート |
 | Node.js | `NODE_VERSION=24.22.0` |
-| 検証用ビルド | `npm ci --prefix cloud/cloudflare && npm run build --prefix cloud/cloudflare -- --mode staging` |
+| 検証用ビルド | `npm ci --prefix cloud/cloudflare --no-audit --no-fund && npm run build --prefix cloud/cloudflare -- --mode staging` |
 | 検証用配備 | `cd cloud/cloudflare && npx cf deploy --prebuilt --mode staging` |
 | 本番用ビルド | `npm ci --prefix cloud/cloudflare && npm run build --prefix cloud/cloudflare` |
 | 本番用配備 | `cd cloud/cloudflare && npx cf deploy --prebuilt --mode production` |
@@ -43,6 +43,12 @@ ContainersのDockerfileもWorkers Builds内で組み立てる。Containersは独
 Containerは最大1台・同時処理1件・未使用3分で停止し、外部通信とSSHは無効にする。
 サーバー間の認証値は実行時に生成してDurable Object内に保持する。利用者の入力やMacのKeychainは使わない。
 再起動時の認証継続・不正な経路の拒否・同時処理制限・内部エラーの非公開化は単体テスト済み。
+
+検証環境だけに `/api/staging/native-check` を設ける。同一オリジンから空のPOSTを1回受けると、
+Container内で固定の合成音声を作り、既存のPython・ffmpeg検査へ渡す。GETはその結果の確認だけを行う。
+開始記録は新規の検証用Durable Objectに先に保存し、再送・再起動・失敗による再実行を防ぐ。
+入力素材・URL・コマンドは指定できず、D1・R2や生成サービスには書込み・要求を行わない。
+本番モードではこの経路を有効にしない。
 
 `staging` モードは `ai-vdj-devdaycommunity-staging`、本番モードは `ai-vdj-devdaycommunity` を対象にする。
 それぞれにContainerを定義するため、通常のWorkerのプレビューだけでContainerの検証を済ませない。

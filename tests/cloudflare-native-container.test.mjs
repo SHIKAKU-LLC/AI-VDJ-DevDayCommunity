@@ -3,8 +3,27 @@ import assert from 'node:assert/strict';
 import {createNativeContainerClass} from '../cloud/cloudflare/native-container.mjs';
 
 const context = (values = new Map()) => ({
+  pending: [],
+  waitUntil(promise) { this.pending.push(promise); },
   storage: {get: async key => values.get(key), put: async (key, value) => values.set(key, value)},
   blockConcurrencyWhile: callback => callback(),
+});
+
+test('synthetic validation is started once and its result survives object recreation', async () => {
+  class Measured extends FakeContainer {
+    async containerFetch() { return Response.json({kind: 'synthetic-bootstrap-check-v1', passed: true,
+      frameCount: 24 * 44100, sampleRate: 44100, channels: 2}); }
+  }
+  const NativeProcessor = createNativeContainerClass(Measured);
+  const state = context(), native = new NativeProcessor(state, {});
+  assert.equal((await native.syntheticStatus()).state, 'not-started');
+  await Promise.all([native.startSyntheticCheck(), native.startSyntheticCheck()]);
+  await Promise.all(state.pending);
+  assert.equal(native.starts.length, 1);
+  assert.deepEqual(await native.syntheticStatus(), {state: 'passed', frames: 24 * 44100, sampleRate: 44100, channels: 2});
+  const recreated = new NativeProcessor(state, {});
+  assert.equal((await recreated.startSyntheticCheck()).state, 'passed');
+  assert.equal(recreated.starts.length, 0);
 });
 const request = (headers = {}) => new Request('http://native.internal/inspect', {
   method: 'POST', headers: {'content-type': 'application/json', ...headers}, body: '{"synthetic":true}',
@@ -82,4 +101,18 @@ test('native binding recovers after a failed start without exposing underlying e
     assert.equal(response.status, 503);
     assert.deepEqual(await response.json(), {error: 'NATIVE_PROCESSOR_UNAVAILABLE'});
   }
+});
+
+test('a failed synthetic check is not retried after object recreation', async () => {
+  class Failed extends FakeContainer {
+    async startAndWaitForPorts() { throw Error('unavailable'); }
+  }
+  const NativeProcessor = createNativeContainerClass(Failed);
+  const state = context(), first = new NativeProcessor(state, {});
+  await first.startSyntheticCheck();
+  await Promise.all(state.pending);
+  assert.deepEqual(await first.syntheticStatus(), {state: 'failed'});
+  const second = new NativeProcessor(state, {});
+  assert.deepEqual(await second.startSyntheticCheck(), {state: 'failed'});
+  assert.equal(second.starts.length, 0);
 });

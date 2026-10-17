@@ -11,9 +11,12 @@ export function createNativeContainerClass(Container) {
     #auth;
     #ready;
     #busy = false;
+    #context;
+    #checkStart;
 
     constructor(ctx, env) {
       super(ctx, env);
+      this.#context = ctx;
       this.#ready = ctx.blockConcurrencyWhile(async () => {
         let value = await ctx.storage.get('native-auth-v1');
         if (!value) {
@@ -26,7 +29,7 @@ export function createNativeContainerClass(Container) {
 
     async fetch(request) {
       const url = new URL(request.url);
-      if (url.origin !== 'http://native.internal' || url.pathname !== '/inspect' || url.search || request.method !== 'POST') return fail('NOT_FOUND', 404);
+      if (url.origin !== 'http://native.internal' || !['/inspect', '/self-check'].includes(url.pathname) || url.search || request.method !== 'POST') return fail('NOT_FOUND', 404);
       if (request.headers.get('content-type') !== 'application/json') return fail('JSON_REQUIRED', 415);
       if (this.#busy) return fail('BUSY', 409);
       this.#busy = true;
@@ -39,7 +42,7 @@ export function createNativeContainerClass(Container) {
         });
         // Neither browser headers nor provider credentials cross this boundary.
         const headers = new Headers([['content-type', 'application/json'], ['x-vdj-runtime-auth', this.#auth]]);
-        const outgoing = new Request('http://container.internal/inspect', {method: 'POST', headers,
+        const outgoing = new Request('http://container.internal' + url.pathname, {method: 'POST', headers,
           body: request.body, signal: request.signal, duplex: 'half'});
         const response = await this.containerFetch(outgoing);
         if (response.status !== 200) {
@@ -50,6 +53,40 @@ export function createNativeContainerClass(Container) {
       } catch {
         return fail('NATIVE_PROCESSOR_UNAVAILABLE', 503);
       } finally { this.#busy = false; }
+    }
+
+    async syntheticStatus() {
+      await this.#ready;
+      return await this.#context.storage.get('synthetic-check-v1') ?? {state: 'not-started'};
+    }
+
+    async startSyntheticCheck() {
+      // Set the durable marker before starting work. Repeated HTTP calls and
+      // eviction cannot turn the staging check into repeated paid CPU jobs.
+      this.#checkStart ??= (async () => {
+        await this.#ready;
+        const previous = await this.#context.storage.get('synthetic-check-v1');
+        if (previous) return;
+        await this.#context.storage.put('synthetic-check-v1', {state: 'running'});
+        this.#context.waitUntil(this.#runSyntheticCheck());
+      })();
+      await this.#checkStart;
+      return this.syntheticStatus();
+    }
+
+    async #runSyntheticCheck() {
+      let result = {state: 'failed'};
+      try {
+        const response = await this.fetch(new Request('http://native.internal/self-check', {
+          method: 'POST', headers: {'content-type': 'application/json'}, body: '{}', signal: AbortSignal.timeout(150000),
+        }));
+        const value = await response.json();
+        if (response.ok && value.kind === 'synthetic-bootstrap-check-v1' && value.passed === true &&
+            value.frameCount === 24 * 44100 && value.sampleRate === 44100 && value.channels === 2) {
+          result = {state: 'passed', frames: value.frameCount, sampleRate: value.sampleRate, channels: value.channels};
+        }
+      } catch { /* Return no credentials, internal paths, provider data or errors. */ }
+      await this.#context.storage.put('synthetic-check-v1', result);
     }
 
     // The SDK's default error hook logs the underlying error. Keep this surface
