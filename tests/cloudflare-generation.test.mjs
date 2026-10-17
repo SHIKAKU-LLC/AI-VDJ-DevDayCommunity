@@ -197,6 +197,50 @@ test('temporary native contention reuses completed results without resubmitting 
     assert.equal((await f.store.records(f.room.roomId))[0].state, 'READY'); assert.equal(f.posted(), 2);
   } finally { f.sqlite.close(); }
 });
+test('owner can retry failed preparation from existing provider results without another paid request', async () => {
+  const f = await fixture();
+  try {
+    const s = await f.submit(); await f.runtime.enqueue(f.room.roomId, [s.submissionId]);
+    await f.runtime.alarm();
+    const native = f.env.NATIVE_PROCESSOR.getByName();
+    f.env.NATIVE_PROCESSOR.getByName = () => ({fetch: async () => Response.json({error: 'MEDIA_INPUT_INVALID'}, {status: 422})});
+    await f.runtime.alarm();
+    assert.equal((await f.store.records(f.room.roomId))[0].reason, 'MEDIA_INPUT_INVALID');
+    f.env.NATIVE_PROCESSOR.getByName = () => native;
+    const response = await generationHttp(new Request(`https://test.example/api/rooms/${f.room.roomId}/generation`, {
+      method: 'POST', headers: {origin: f.env.PUBLIC_ORIGIN, 'content-type': 'application/json', 'x-room-owner': f.owner},
+      body: JSON.stringify({retryPreparation: [s.submissionId]})}), f.env);
+    assert.deepEqual(await response.json(), {resumed: 2});
+    await f.runtime.alarm();
+    assert.equal((await f.store.records(f.room.roomId))[0].state, 'READY');
+    assert.equal(f.posted(), 2);
+    assert.equal(f.sqlite.prepare('select count(*) n from vdj_budget_reservations').get().n, 1);
+  } finally { f.sqlite.close(); }
+});
+test('preparation retries are bounded, owner-only and never reset uncertain submissions', async () => {
+  const f = await fixture();
+  try {
+    const s = await f.submit(); await f.runtime.enqueue(f.room.roomId, [s.submissionId]);
+    await f.runtime.alarm();
+    f.env.NATIVE_PROCESSOR.getByName = () => ({fetch: async () => Response.json({error: 'AUDIO_QC_HOLD'}, {status: 422})});
+    await f.runtime.alarm();
+    const denied = await generationHttp(new Request(`https://test.example/api/rooms/${f.room.roomId}/generation`, {
+      method: 'POST', headers: {origin: f.env.PUBLIC_ORIGIN, 'content-type': 'application/json', 'x-room-owner': 'c'.repeat(64)},
+      body: JSON.stringify({retryPreparation: [s.submissionId]})}), f.env);
+    assert.equal(denied.status, 403);
+    await assert.rejects(f.runtime.retryPreparation(crypto.randomUUID(), [s.submissionId]), /ROOM_NOT_FOUND/);
+    for (let i = 0; i < 2; i++) {
+      assert.deepEqual(await f.runtime.retryPreparation(f.room.roomId, [s.submissionId]), {resumed: 2});
+      await f.runtime.alarm();
+    }
+    assert.deepEqual(await f.runtime.retryPreparation(f.room.roomId, [s.submissionId]), {resumed: 0});
+    assert.equal(f.posted(), 2);
+    const jobs = f.values.get('jobs'); jobs[0].parts.audio.state = 'NEEDS_REVIEW'; jobs[0].parts.video.state = 'SUBMITTING';
+    f.values.set('jobs', jobs);
+    assert.deepEqual(await f.runtime.retryPreparation(f.room.roomId, [s.submissionId]), {resumed: 0});
+    assert.equal(f.posted(), 2);
+  } finally { f.sqlite.close(); }
+});
 test('preflight authentication, permission and rate failures reserve no budget or paid request', async () => {
   const f = await fixture();
   try {

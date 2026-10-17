@@ -53,8 +53,12 @@ export function createNativeContainerClass(Container) {
           body: request.body, signal: request.signal, duplex: 'half'});
         const response = await this.containerFetch(outgoing);
         if (response.status !== 200) {
-          await response.body?.cancel();
-          return fail('NATIVE_MEASUREMENT_FAILED', [400, 413, 415, 422, 409].includes(response.status) ? response.status : 502);
+          const data = await response.json().catch(() => ({}));
+          const known = ['AUDIO_FORMAT_INVALID', 'AUDIO_QC_HOLD', 'VIDEO_FORMAT_INVALID', 'VIDEO_QC_HOLD',
+            'UNIFORM_BLACK_OR_WHITE_VIDEO', 'STATIC_VIDEO_HOLD', 'RAPID_LUMA_TRANSITIONS_HOLD',
+            'MEDIA_INPUT_INVALID', 'MEDIA_RESULT_INVALID', 'MEDIA_PROCESS_FAILED', 'BOOTSTRAP_MEASUREMENT_FAILED'];
+          return fail(known.includes(data.error) ? data.error : 'NATIVE_MEASUREMENT_FAILED',
+            [400, 413, 415, 422, 409].includes(response.status) ? response.status : 502);
         }
         return new Response(response.body, {headers: {'content-type': 'application/json', 'cache-control': 'no-store'}});
       } catch {

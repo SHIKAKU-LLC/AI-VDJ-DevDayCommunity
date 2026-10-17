@@ -35,6 +35,11 @@ export async function generationHttp(request, env) {
     if (route === 'generation' && request.method === 'POST' && !jobId) {
       if (request.headers.get('origin') !== env.PUBLIC_ORIGIN || request.headers.get('content-type') !== 'application/json') return answer({error: 'DENIED'}, 403);
       const input = JSON.parse(new TextDecoder().decode(await boundedBytes(new Response(request.body), 1024)));
+      if (Array.isArray(input.retryPreparation) && Object.keys(input).join() === 'retryPreparation' &&
+          input.retryPreparation.length >= 1 && input.retryPreparation.length <= 5 &&
+          input.retryPreparation.every(v => /^[a-f0-9-]{36}$/.test(v))) {
+        return answer(await env.GENERATION.getByName(roomId).retryPreparation(roomId, input.retryPreparation), 202);
+      }
       if (!Array.isArray(input.submissionIds) || Object.keys(input).join() !== 'submissionIds' || input.submissionIds.length < 1 || input.submissionIds.length > 5 ||
           input.submissionIds.some(v => !/^[a-f0-9-]{36}$/.test(v))) return answer({error: 'INPUT_INVALID'}, 400);
       if (env.GENERATION_ENABLED !== 'true') throw Error('GENERATION_DISABLED');

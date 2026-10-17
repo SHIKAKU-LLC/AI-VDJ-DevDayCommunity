@@ -87,17 +87,18 @@ export function createNativeService({authorize, createRuntime} = {}) {
           if (prepare[1] === 'audio') {
             runtime ??= await createRuntime();
             const profile = await runtime.inspectBootstrap(Buffer.from(prepared.audio.data, 'base64'));
-            if (profile.frameCount !== seconds * 44100 || profile.sampleRate !== 44100 || profile.channels !== 2 ||
-                profile.nonfiniteSamples !== 0 || !Number.isFinite(profile.loudness?.truePeakDbtp) || profile.loudness.truePeakDbtp > -.3 ||
-                profile.clippedFraction > .001 || profile.activity?.effectiveSilence !== false) failure('RESULT_INVALID');
+            if (profile.frameCount !== seconds * 44100 || profile.sampleRate !== 44100 || profile.channels !== 2) failure('AUDIO_FORMAT_INVALID');
+            if (profile.nonfiniteSamples !== 0 || !Number.isFinite(profile.loudness?.truePeakDbtp) || profile.loudness.truePeakDbtp > -.3 ||
+                profile.clippedFraction > .001 || profile.activity?.effectiveSilence !== false) failure('AUDIO_QC_HOLD');
             prepared.quality = {passed: true, truePeakDbtp: profile.loudness.truePeakDbtp, nonfiniteSamples: profile.nonfiniteSamples};
           } else {
             runtime ??= await createRuntime();
             const bytes = Buffer.from(prepared.video.data, 'base64');
             const measured = await runtime.native.inspectVideo({bytes, inputDigest: digest(bytes)});
             if (!measured.fullyDecoded || measured.hasAudioTrack || measured.width !== 854 || measured.height !== 480 ||
-                Math.abs(measured.durationSeconds - seconds) > .05 || measured.decodedFrames !== seconds * 24 ||
-                !assessTechnicalVisual(measured).passed) failure('RESULT_INVALID');
+                Math.abs(measured.durationSeconds - seconds) > .05 || measured.decodedFrames !== seconds * 24) failure('VIDEO_FORMAT_INVALID');
+            const verdict = assessTechnicalVisual(measured);
+            if (!verdict.passed) return output({error: verdict.reasons[0] ?? 'VIDEO_QC_HOLD'}, 422);
             prepared.quality = {passed: true, decodedFrames: measured.decodedFrames};
           }
           return output(prepared);
@@ -127,7 +128,9 @@ export function createNativeService({authorize, createRuntime} = {}) {
         return output({requestId, measurements, artifacts});
       } catch (error) {
         const status = {JSON_REQUIRED: 415, INPUT_INVALID: 400, BODY_TOO_LARGE: 413}[error.message];
-        return output({error: status ? error.message : 'NATIVE_MEASUREMENT_FAILED'}, status ?? 422);
+        const known = ['AUDIO_FORMAT_INVALID', 'AUDIO_QC_HOLD', 'VIDEO_FORMAT_INVALID', 'MEDIA_INPUT_INVALID',
+          'MEDIA_RESULT_INVALID', 'MEDIA_PROCESS_FAILED', 'BOOTSTRAP_MEASUREMENT_FAILED'];
+        return output({error: status || known.includes(error.message) ? error.message : 'NATIVE_MEASUREMENT_FAILED'}, status ?? 422);
       } finally { active = false; }
     },
     async close() { await runtime?.close(); },

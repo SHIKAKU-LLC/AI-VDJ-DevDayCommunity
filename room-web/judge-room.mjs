@@ -60,7 +60,17 @@ function render() {
     const job = jobs.find(j => j.id === submission.submissionId);
     name.textContent = submission.nickname; prompt.textContent = submission.prompt;
     state.textContent = job ? labels[job.state] ?? '処理中' : jobs.length >= 5 ? '生成枠の上限に達しました' : '受付済み';
-    li.append(name, prompt, state); return li;
+    li.append(name, prompt, state);
+    if (session.owner && job?.state === 'FAILED') {
+      const retry = document.createElement('button'); retry.textContent = '生成済み素材の検査を再試行';
+      retry.onclick = async () => {
+        retry.disabled = true;
+        try { await request(roomPath('generation'), {retryPreparation: [job.id]}); await poll(); }
+        catch (e) { error(e); } finally { retry.disabled = false; }
+      };
+      li.append(retry);
+    }
+    return li;
   }));
   const maximum = Math.max(100, ...jobs.map(job => job.maximumCents ?? 100)) / 100;
   $('budget').textContent = `生成枠 ${jobs.length} / 5 セット。運営負担は1セット上限 $${maximum.toFixed(2)}、ルーム合計上限 $${(maximum * 5).toFixed(2)}。`;

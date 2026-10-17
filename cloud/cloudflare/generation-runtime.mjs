@@ -6,6 +6,9 @@ const kinds = ['audio', 'video'];
 const terminal = part => ['READY', 'FAILED', 'NEEDS_REVIEW', 'CANCELLED'].includes(part.state);
 const retryable = error => ['PROVIDER_UNAVAILABLE', 'PROVIDER_NETWORK_FAILED', 'PROVIDER_TIMEOUT', 'PROVIDER_RATE_LIMITED'].includes(error?.message);
 const safeReason = error => ['PROVIDER_PRICE_CHANGED', 'PROVIDER_BALANCE_REQUIRED', 'PROVIDER_PERMISSION_REQUIRED',
+  'AUDIO_FORMAT_INVALID', 'AUDIO_QC_HOLD', 'VIDEO_FORMAT_INVALID', 'VIDEO_QC_HOLD',
+  'UNIFORM_BLACK_OR_WHITE_VIDEO', 'STATIC_VIDEO_HOLD', 'RAPID_LUMA_TRANSITIONS_HOLD',
+  'MEDIA_INPUT_INVALID', 'MEDIA_RESULT_INVALID', 'MEDIA_PROCESS_FAILED', 'BOOTSTRAP_MEASUREMENT_FAILED',
   'ROOM_NOT_FOUND', 'PROVIDER_NOT_CONNECTED', 'GENERATION_DISABLED'].includes(error?.message) ? error.message : 'GENERATION_FAILED';
 
 // Import earlier serial jobs without resubmitting a paid request. Handles and
@@ -113,18 +116,37 @@ export function createGenerationClass(Base) {
         return {accepted: jobs.length};
       });
     }
+    async retryPreparation(roomId, ids) {
+      return this.locked(async () => {
+        await this.store().active(roomId);
+        if (await this.ctx.storage.get('room') !== roomId) throw Error('ROOM_NOT_FOUND');
+        const jobs = await this.ctx.storage.get('jobs') ?? [];
+        let resumed = 0;
+        for (const job of jobs.filter(j => ids.includes(j.id))) {
+          for (const part of Object.values(job.parts ?? {})) {
+            if (part.state !== 'FAILED' || !part.handle || !part.completedAtMs || (part.preparationRetries ?? 0) >= 2) continue;
+            part.state = 'PREPARING'; part.preparationRetries = (part.preparationRetries ?? 0) + 1;
+            delete part.reason; resumed++;
+          }
+          delete job.reason; summarize(job); await this.store().save(job);
+        }
+        await this.ctx.storage.put('jobs', jobs);
+        if (resumed) await this.ctx.storage.setAlarm(Date.now() + 100);
+        return {resumed};
+      });
+    }
     async prepare(job, kind, provider) {
       const part = job.parts[kind];
       const result = await provider.result(part.handle);
       // URLs stay transient. Only vetted bytes and hashes enter R2.
       const bytes = await provider.download(result[kind]?.url);
       const duration = kind === 'audio' ? job.duration : job.videoDuration;
-      const native = this.env.NATIVE_PROCESSOR.getByName('cloud-media-v5');
+      const native = this.env.NATIVE_PROCESSOR.getByName('cloud-media-v6');
       const response = await native.fetch(new Request('http://native.internal/prepare/' + kind,
         {method: 'POST', headers: {'content-type': 'application/octet-stream', 'x-vdj-duration-seconds': String(duration),
           'x-vdj-context-seconds': String(part.contextSeconds ?? 0)}, body: bytes, signal: AbortSignal.timeout(150000)}));
       if (response.status === 409 || response.status === 503) { await response.body?.cancel(); return false; }
-      if (!response.ok) { await response.body?.cancel(); throw Error('NATIVE_PREPARE_FAILED'); }
+      if (!response.ok) { const problem = await response.json().catch(() => ({})); throw Error(safeReason({message: problem.error})); }
       const prepared = JSON.parse(new TextDecoder().decode(await boundedBytes(response, 24 * 1024 * 1024)));
       if (prepared.duration !== duration || prepared.quality?.passed !== true) throw Error('NATIVE_RESULT_INVALID');
       job.quality ??= {};
