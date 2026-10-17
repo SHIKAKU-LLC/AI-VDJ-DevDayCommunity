@@ -65,6 +65,18 @@ test('reuses extra valid colour and feature observations within bounded prompt l
   assert.deepEqual(result.features,rich.features.slice(0,6));
   assert.throws(()=>parseImageDirection({answer:JSON.stringify({...rich,palette:[...rich.palette,'https://example.invalid']})}),/IMAGE_DIRECTION_INVALID/);
 });
+test('normalises string, keyed and descriptive palettes without discarding unsafe text', () => {
+  for (const palette of ['black, brown, ivory', {hair:'black',shirt:'dark brown'},
+    ['deep black and dark brown across the hair and clothing']]) {
+    const result=parseImageDirection({result:{answer:JSON.stringify({...observed,palette})}});
+    assert.ok(result.palette.length>0 && result.palette.length<=5);
+    assert.ok(result.palette.every(colour=>colour.length<=40));
+  }
+  assert.throws(()=>parseImageDirection({answer:JSON.stringify({...observed,
+    palette:['black '.repeat(10)+'https://example.invalid']})}),/IMAGE_DIRECTION_INVALID/);
+  assert.throws(()=>parseImageDirection({answer:JSON.stringify({...observed,palette:[null]})}),
+    error=>error.diagnostic==='PALETTE' && error.responseShape.palette.type==='array');
+});
 test('each image scene keeps common VJ direction and recognisable source traits', () => {
   const prompts = Array.from({length: 6}, (_, sceneIndex) => visualPrompt('ネオンの猫', {sceneIndex, reference: observed}));
   assert.equal(new Set(prompts).size, 6);
