@@ -3,6 +3,7 @@ import {createGenerationStore} from './generation-store.mjs';
 import {createProviderDelivery} from './provider-delivery.mjs';
 
 import {partKeys, sceneKeys, mediaKind} from './generation-parts.mjs';
+import {observeImage, parseImageDirection} from './image-direction.mjs';
 const terminal = part => ['READY', 'FAILED', 'NEEDS_REVIEW', 'CANCELLED'].includes(part.state);
 const retryable = error => ['PROVIDER_UNAVAILABLE', 'PROVIDER_NETWORK_FAILED', 'PROVIDER_TIMEOUT', 'PROVIDER_RATE_LIMITED'].includes(error?.message);
 const safeReason = error => ['PROVIDER_PRICE_CHANGED', 'PROVIDER_BALANCE_REQUIRED', 'PROVIDER_PERMISSION_REQUIRED',
@@ -10,7 +11,8 @@ const safeReason = error => ['PROVIDER_PRICE_CHANGED', 'PROVIDER_BALANCE_REQUIRE
   'AUDIO_FORMAT_INVALID', 'AUDIO_QC_HOLD', 'VIDEO_FORMAT_INVALID', 'VIDEO_QC_HOLD',
   'UNIFORM_BLACK_OR_WHITE_VIDEO', 'STATIC_VIDEO_HOLD', 'RAPID_LUMA_TRANSITIONS_HOLD',
   'MEDIA_INPUT_INVALID', 'MEDIA_RESULT_INVALID', 'MEDIA_PROCESS_FAILED', 'MEDIA_PROCESS_TIMEOUT', 'MEDIA_PROCESS_RESOURCES', 'MEDIA_DECODE_FAILED', 'BOOTSTRAP_MEASUREMENT_FAILED',
-  'ROOM_NOT_FOUND', 'PROVIDER_NOT_CONNECTED', 'GENERATION_DISABLED'].includes(error?.message) ? error.message : 'GENERATION_FAILED';
+  'ROOM_NOT_FOUND', 'PROVIDER_NOT_CONNECTED', 'GENERATION_DISABLED', 'IMAGE_DIRECTION_DISABLED', 'IMAGE_DIRECTION_INVALID',
+  'IMAGE_DIRECTION_TIMEOUT', 'IMAGE_REFERENCE_INVALID', 'IMAGE_DIRECTION_UNCERTAIN'].includes(error?.message) ? error.message : 'GENERATION_FAILED';
 
 // Import earlier serial jobs without resubmitting a paid request. Handles and
 // SUBMITTING markers remain private and survive code deployment/object eviction.
@@ -39,6 +41,11 @@ function summarize(job) {
       .map(k => [k, job.parts[key][k]]))]));
   job.failures = Object.fromEntries(keys.filter(key => ['FAILED', 'NEEDS_REVIEW'].includes(job.parts[key].state))
     .map(key => [key, {reason: job.parts[key].reason, stage: job.parts[key].stage}]));
+  if (job.direction && job.direction.state !== 'READY') {
+    job.state = job.direction.state === 'QUEUED' || job.direction.state === 'ANALYZING' ? 'DIRECTING' : job.direction.state;
+    if (job.direction.reason) job.reason = job.direction.reason;
+    return;
+  }
   const videos = sceneKeys(job).map(key => job.parts[key]);
   if (job.parts.audio.state === 'READY' && videos.some(p => p.state === 'READY')) {
     job.state = 'READY'; delete job.reason;
@@ -111,7 +118,7 @@ export function createGenerationClass(Base) {
         await this.ctx.storage.put('room', roomId);
         const jobs = await this.ctx.storage.get('jobs') ?? [];
         for (const id of submissionIds.slice(0, 5)) {
-          const job = await this.store().enqueue(roomId, id);
+          const job = await this.store().enqueue(roomId, id, {imageDirectionEnabled: this.env.IMAGE_DIRECTION_ENABLED === 'true' && !!this.env.AI?.run});
           if (!jobs.some(j => j.id === id)) {
             jobs.push(job);
             await this.ctx.storage.put('jobs', jobs);
@@ -128,6 +135,14 @@ export function createGenerationClass(Base) {
         const jobs = await this.ctx.storage.get('jobs') ?? [];
         let resumed = 0;
         for (const job of jobs.filter(j => ids.includes(j.id))) {
+          if (job.direction?.state === 'FAILED' && job.direction.reason === 'IMAGE_DIRECTION_INVALID' &&
+              (job.imageResponse || (job.direction.attempts ?? 1) < 3) && !job.providerReceipts?.length &&
+              Object.values(job.parts ?? {}).every(part => part.state === 'CANCELLED')) {
+            job.direction = {state: 'QUEUED', attempts: job.direction.attempts ?? 1};
+            for (const part of Object.values(job.parts)) part.state = 'QUEUED';
+            delete job.reason; summarize(job); await this.store().save(job); resumed++;
+            continue;
+          }
           let resumedAudio = false;
           for (const part of Object.values(job.parts ?? {})) {
             if (part.state !== 'FAILED' || !part.handle || !part.completedAtMs || (part.preparationRetries ?? 0) >= 2) continue;
@@ -174,6 +189,37 @@ export function createGenerationClass(Base) {
       part.state = 'READY'; part.readyAtMs = Date.now(); delete part.handle;
       return true;
     }
+    async directImage(job, persist) {
+      if (!job.reference || job.direction?.state === 'READY') return;
+      job.direction ??= {state: 'QUEUED'};
+      if (job.direction.state === 'ANALYZING') {
+        // A lost response may already have been charged. Never buy it again.
+        job.direction = {state: 'NEEDS_REVIEW', reason: 'IMAGE_DIRECTION_UNCERTAIN'};
+      } else if (job.direction.state === 'QUEUED') {
+        const attempts = (job.direction.attempts ?? 0) + (job.imageResponse ? 0 : 1);
+        try {
+          if (this.env.IMAGE_DIRECTION_ENABLED !== 'true' || !this.env.AI?.run) throw Error('IMAGE_DIRECTION_DISABLED');
+          const object = await this.env.MEDIA.get(job.reference.path);
+          if (!object?.body || object.size !== job.reference.byteLength || object.customMetadata?.sha256 !== job.reference.sha256) throw Error('IMAGE_REFERENCE_INVALID');
+          const bytes = await boundedBytes(new Response(object.body), 2 * 1024 * 1024);
+          if (await sha256(bytes) !== job.reference.sha256) throw Error('IMAGE_REFERENCE_INVALID');
+          job.direction = {state: 'ANALYZING', attempts}; await persist(job);
+          const plan = job.imageResponse ? parseImageDirection(job.imageResponse) : await observeImage(this.env.AI, bytes,
+            async result => {job.imageResponse=result; await persist(job);});
+          job.direction = {state: 'READY', plan, attempts};
+          delete job.imageResponse;
+        } catch (error) {
+          const uncertain = job.direction.state === 'ANALYZING' && error.message !== 'IMAGE_DIRECTION_INVALID';
+          job.direction = {state: uncertain ? 'NEEDS_REVIEW' : 'FAILED',
+            reason: uncertain ? 'IMAGE_DIRECTION_UNCERTAIN' : safeReason(error), attempts,
+            ...(['ANSWER_TYPE','JSON_SYNTAX','OBJECT','FIELDS','KIND','SUBJECT','SUMMARY','FEATURES','PALETTE'].includes(error.diagnostic) ? {diagnostic:error.diagnostic,responseShape:error.responseShape} : {})};
+        }
+      }
+      if (job.direction.state !== 'READY') {
+        for (const part of Object.values(job.parts)) if (!terminal(part)) part.state = 'CANCELLED';
+      }
+      await persist(job);
+    }
     async alarm() {
       return this.locked(async () => {
         const jobs = (await this.ctx.storage.get('jobs') ?? []).map(upgrade);
@@ -212,28 +258,48 @@ export function createGenerationClass(Base) {
           }
           return;
         }
+        // Optional image interpretation runs once per reserved set. Text-only
+        // jobs skip it entirely and keep the original parallel generation path.
+        const directing = active.filter(job => job.reference && ['QUEUED', 'ANALYZING'].includes(job.direction?.state)).slice(0, 2);
+        await Promise.all(directing.map(async job => {
+          if (job.reference && job.direction?.state === 'QUEUED') {
+            try {
+              if (!preflights.has('reference')) preflights.set('reference', provider.preflight({duration: job.duration, reference: true}));
+              await preflights.get('reference');
+            } catch (error) { job.direction = {state: 'FAILED', reason: safeReason(error)}; }
+          }
+          await this.directImage(job, persist);
+        }));
         // A batch shares the most recent completed musical context. Waiting for
         // each new song's context would serialize the entire batch again.
         const context = jobs.filter(j => j.assets?.context && j.state === 'READY').at(-1)?.assets.context;
         const advance = async (job, key) => {
           const kind = mediaKind(key), part = job.parts[key];
           if (terminal(part)) return;
+          if (job.reference && job.direction?.state !== 'READY') return;
           try {
             if (part.state === 'SUBMITTING') {
               part.state = 'NEEDS_REVIEW'; part.reason = 'PROVIDER_SUBMISSION_UNCERTAIN';
             } else if (part.state === 'QUEUED') {
               if (['FAILED', 'NEEDS_REVIEW'].includes(job.parts.audio.state)) { part.state = 'CANCELLED'; }
               else {
-                if (!preflights.has(job.duration)) preflights.set(job.duration, provider.preflight({duration: job.duration}));
-                await preflights.get(job.duration);
+                const preflightKey = `${job.duration}:${!!job.reference}`;
+                if (!preflights.has(preflightKey)) preflights.set(preflightKey, provider.preflight({duration: job.duration, reference: !!job.reference}));
+                await preflights.get(preflightKey);
                 let contextUrl;
                 if (kind === 'audio' && context) contextUrl = (await createProviderDelivery({db: this.env.DB,
                   bucket: this.env.MEDIA, eventId: this.env.EVENT_ID, origin: this.env.PUBLIC_ORIGIN})
                   .issue({roomId: job.roomId, path: context.path, expiresIn: 3600})).url;
                 part.contextSeconds = contextUrl ? context.duration : 0;
+                let referenceUrl;
+                if (kind === 'video' && job.reference) referenceUrl = (await createProviderDelivery({db: this.env.DB,
+                  bucket: this.env.MEDIA, eventId: this.env.EVENT_ID, origin: this.env.PUBLIC_ORIGIN})
+                  .issue({roomId: job.roomId, path: job.reference.path, expiresIn: 3600})).url;
                 part.state = 'SUBMITTING'; await persist(job);
+                await this.store().active(job.roomId);
                 // Never automatically retry this POST: a lost receipt is held.
-                part.handle = await provider.submit(kind, job.prompt, contextUrl, {duration: kind === 'audio' ? job.duration : job.videoDuration, mediaProfile: job.mediaProfile ?? 'legacy', sceneIndex: sceneKeys(job).indexOf(key)});
+                part.handle = await provider.submit(kind, job.prompt, contextUrl, {duration: kind === 'audio' ? job.duration : job.videoDuration, mediaProfile: job.mediaProfile ?? 'legacy', sceneIndex: sceneKeys(job).indexOf(key),
+                  ...(referenceUrl ? {referenceUrl, reference: job.direction.plan} : {})});
                 part.state = 'WAIT'; part.submittedAtMs = Date.now();
                 job.providerReceipts ??= [];
                 job.providerReceipts.push({kind, endpoint: part.handle.endpoint, requestId: part.handle.id});
@@ -251,7 +317,7 @@ export function createGenerationClass(Base) {
         const waiting = all.filter(({job, key}) => ['WAIT', 'SUBMITTING'].includes(job.parts[key].state));
         await Promise.all(waiting.map(({job, key}) => advance(job, key)));
         const inFlight = all.filter(({job, key}) => ['WAIT', 'SUBMITTING'].includes(job.parts[key].state)).length;
-        const queued = all.filter(({job, key}) => job.parts[key].state === 'QUEUED')
+        const queued = all.filter(({job, key}) => job.parts[key].state === 'QUEUED' && (!job.reference || job.direction?.state === 'READY'))
           .sort((a, b) => partKeys(a.job).indexOf(a.key) - partKeys(b.job).indexOf(b.key));
         await Promise.all(queued.slice(0, Math.max(0, 8 - inFlight)).map(({job, key}) => advance(job, key)));
         // No provider POST is held behind a media download or native QC request.

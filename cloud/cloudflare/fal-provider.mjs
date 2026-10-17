@@ -2,6 +2,7 @@ import {musicPrompt, visualPrompt, MUSIC_NEGATIVE_PROMPT, DJ_DIRECTION} from './
 
 export const MODELS = Object.freeze({initial: 'fal-ai/stable-audio-3/medium/text-to-audio',
   continuation: 'fal-ai/stable-audio-3/medium/audio-outpainting', video: 'minimax/h3-max/text-to-video'});
+export const REFERENCE_VIDEO_MODEL = 'minimax/h3-max/reference-to-video';
 const deny = () => { throw Error('PROVIDER_RESPONSE_INVALID'); };
 export const sha256 = async value => Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',
   typeof value === 'string' ? new TextEncoder().encode(value) : value)), v => v.toString(16).padStart(2, '0')).join('');
@@ -63,27 +64,33 @@ export function createFalProvider({key, fetchImpl = fetch} = {}) {
     return url.href;
   }
   return {
-    async preflight({duration = 60} = {}) {
+    async preflight({duration = 60, reference = false} = {}) {
       if (![12, 60].includes(duration)) throw Error('PROVIDER_DURATION_INVALID');
-      const models = MODELS;
+      const models = reference ? {...MODELS, video: REFERENCE_VIDEO_MODEL} : MODELS;
       // The runtime uses a generation-only key. Billing is verified by the
       // operator; D1 reserves the event and room ceilings before paid requests.
       const price = await json('https://api.fal.ai/v1/models/pricing?endpoint_id=' + encodeURIComponent(Object.values(models).join(',')));
       for (const [kind, endpoint] of Object.entries(models)) {
         const rate = price.prices?.find(p => p.endpoint_id === endpoint);
         if (!rate || rate.currency !== 'USD' || rate.unit !== (kind === 'video' ? 'seconds' : 'audios') ||
-            !Number.isFinite(rate.unit_price) || rate.unit_price <= 0 || rate.unit_price > (kind === 'video' ? 0.045 : 0.10)) throw Error('PROVIDER_PRICE_CHANGED');
+            !Number.isFinite(rate.unit_price) || rate.unit_price <= 0 || rate.unit_price > (kind === 'video' ? reference ? 0.05 : 0.045 : 0.10)) throw Error('PROVIDER_PRICE_CHANGED');
       }
       return {maximumCents: DJ_DIRECTION.maximumCents};
     },
-    async submit(kind, prompt, contextUrl, {duration = kind === 'audio' ? 60 : 12, mediaProfile = DJ_DIRECTION.mediaProfile, sceneIndex = 0} = {}) {
+    async submit(kind, prompt, contextUrl, {duration = kind === 'audio' ? 60 : 12, mediaProfile = DJ_DIRECTION.mediaProfile, sceneIndex = 0, referenceUrl, reference} = {}) {
       if (!(kind === 'audio' ? [12, 60] : [12]).includes(duration)) throw Error('PROVIDER_DURATION_INVALID');
       if (kind === 'video' && (!Number.isInteger(sceneIndex) || sceneIndex < 0 || sceneIndex >= DJ_DIRECTION.sceneCount)) throw Error('PROVIDER_SCENE_INVALID');
-      const endpoint = kind === 'audio' ? contextUrl ? MODELS.continuation : MODELS.initial : MODELS.video;
+      if (kind === 'video' && (!!referenceUrl !== !!reference)) throw Error('PROVIDER_REFERENCE_INVALID');
+      if (referenceUrl) {
+        const url = new URL(referenceUrl);
+        if (url.protocol !== 'https:' || url.username || url.password || url.search || url.hash ||
+            !/^\/provider-media\/[a-f0-9]{64}$/.test(url.pathname)) throw Error('PROVIDER_REFERENCE_INVALID');
+      }
+      const endpoint = kind === 'audio' ? contextUrl ? MODELS.continuation : MODELS.initial : referenceUrl ? REFERENCE_VIDEO_MODEL : MODELS.video;
       const input = kind === 'audio' ? {prompt: musicPrompt(prompt, {duration}), negative_prompt: MUSIC_NEGATIVE_PROMPT,
         output_format: 'wav', enable_prompt_expansion: false, enable_safety_checker: true,
         ...(contextUrl ? {audio_url: contextUrl, extend_seconds_before: 0, extend_seconds_after: duration} : {duration})} :
-        {prompt: visualPrompt(prompt, {sceneIndex}),
+        {prompt: visualPrompt(prompt, {sceneIndex, reference}), ...(referenceUrl ? {reference_image_urls: [referenceUrl]} : {}),
           duration, resolution: ['club-hd-v1', 'club-flow-v1'].includes(mediaProfile) ? '1080P' : '480P', aspect_ratio: '16:9',
           prompt_expansion_mode: mediaProfile === 'club-flow-v1' ? 'balanced' : mediaProfile === 'club-hd-v1' ? 'quality' : 'disabled', enable_safety_checker: true};
       const result = await json('https://queue.fal.run/' + endpoint, 'POST', input);

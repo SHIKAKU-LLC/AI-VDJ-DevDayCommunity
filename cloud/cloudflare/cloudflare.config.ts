@@ -39,6 +39,8 @@ export default defineConfig(({mode}) => {
         ...(!local ? {NATIVE_PROCESSOR: bindings.durableObject({worker: name, exportName: 'NativeProcessor'})} : {}),
         ...(!local ? {GENERATION: bindings.durableObject({worker: name, exportName: 'GenerationRoom'})} : {}),
         GENERATION_ENABLED: bindings.text(process.env.VDJ_GENERATION_ENABLED === 'true' ? 'true' : 'false'),
+        IMAGE_DIRECTION_ENABLED: bindings.text(process.env.VDJ_IMAGE_DIRECTION_ENABLED === 'true' ? 'true' : 'false'),
+        ...(process.env.VDJ_IMAGE_DIRECTION_ENABLED === 'true' ? {AI: bindings.ai()} : {}),
       },
       observability: {enabled: false},
       // Large validated media responses require more than a tiny API budget.

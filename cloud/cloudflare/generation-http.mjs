@@ -1,6 +1,7 @@
 import {publicAssets, sceneKeys} from './generation-parts.mjs';
 import {createGenerationStore} from './generation-store.mjs';
 import {boundedBytes, sha256, createFalProvider} from './fal-provider.mjs';
+import {imageDirectionSummary} from './image-direction.mjs';
 const answer = (value, status = 200) => Response.json(value, {status, headers: {'cache-control': 'no-store'}});
 export async function generationHttp(request, env) {
   const url = new URL(request.url), match = /^\/api\/rooms\/([a-f0-9-]{36})\/(generation|generated-media)(?:\/([a-f0-9-]{36})\/(audio|video(?:-[1-5])?))?$/.exec(url.pathname);
@@ -20,7 +21,7 @@ export async function generationHttp(request, env) {
       return answer({purged: result.purged, providerDeleted: result.providerPurge.deleted,
         providerPending: result.providerPurge.pending.length});
     }
-    const room = await store.authorize(roomId, owner ?? member, request.method === 'POST' || route === 'generated-media');
+    const room = await store.authorize(roomId, owner ?? member, !!owner || request.method === 'POST' || route === 'generated-media');
     if (route === 'generation' && request.method === 'GET' && !jobId) {
       let jobs = await store.records(roomId);
       if (!owner) {
@@ -31,7 +32,9 @@ export async function generationHttp(request, env) {
       }
       return answer({jobs: jobs.map(job => {
         const {id, prompt, nickname, state, reason, maximumCents, progress, sceneCount = 1} = job;
-        return {id, prompt, nickname, state, reason, maximumCents, progress, sceneCount, assets: publicAssets(job)};
+        return {id, prompt, nickname, state, reason, maximumCents, progress, sceneCount, assets: publicAssets(job),
+          ...(job.direction ? {direction: {state: job.direction.state,
+            ...(job.direction.plan ? {summary: imageDirectionSummary(job.direction.plan)} : {})}} : {})};
       })});
     }
     if (route === 'generation' && request.method === 'POST' && !jobId) {
@@ -66,7 +69,7 @@ export async function generationHttp(request, env) {
     const code = ['ACTOR_DENIED', 'ROOM_NOT_FOUND', 'JUDGE_BUDGET', 'GENERATION_DISABLED', 'SUBMISSION_NOT_FOUND',
       'PROVIDER_NOT_CONNECTED', 'PROVIDER_PERMISSION_REQUIRED', 'PROVIDER_BALANCE_REQUIRED', 'PROVIDER_PRICE_CHANGED',
       'PROVIDER_AUTHENTICATION_FAILED', 'PROVIDER_ENDPOINT_UNAVAILABLE', 'PROVIDER_RATE_LIMITED', 'PROVIDER_UNAVAILABLE',
-      'PROVIDER_TIMEOUT', 'PROVIDER_NETWORK_FAILED', 'PROVIDER_KEY_FORMAT'].includes(error.message) ? error.message : 'GENERATION_UNAVAILABLE';
+      'PROVIDER_TIMEOUT', 'PROVIDER_NETWORK_FAILED', 'PROVIDER_KEY_FORMAT', 'IMAGE_DIRECTION_DISABLED', 'IMAGE_REFERENCE_INVALID'].includes(error.message) ? error.message : 'GENERATION_UNAVAILABLE';
     return answer({error: code, phase,
       ...(['pricing', 'billing', 'generation'].includes(error.providerPhase) ? {providerPhase: error.providerPhase} : {}),
       ...(Number.isInteger(error.providerStatus) ? {providerStatus: error.providerStatus} : {}),
@@ -89,6 +92,9 @@ export async function sceneLibraryHttp(request, env) {
       where s.event_id=? and g.kind='cloud-generation' and coalesce(json_extract(r.document,'$.purged'),0)=0`).bind(env.EVENT_ID).all();
     const files = result.results.flatMap(row => {
       const job = JSON.parse(row.document);
+      // An approved stock room must never promote later audience images into
+      // other rooms' fallback library.
+      if (job.reference || job.direction) return [];
       return sceneKeys(job).filter(key => job.assets?.[key]).map(key => job.assets[key]);
     }).slice(0, 50);
     if (match[2] === 'scene-library' && !match[3]) return answer({scenes: files.map(({sha256, duration, byteLength, contentType, width, height}) =>
