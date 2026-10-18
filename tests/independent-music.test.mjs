@@ -185,3 +185,22 @@ test('resuming a waiting video restarts polling without repeating the paid reque
     assert.equal(f.posts.length,1);
   }finally{f.sqlite.close();}
 });
+test('approved shared club tracks replace old background music without buying new tracks',async()=>{
+  const f=await fixture();try{
+    const id=crypto.randomUUID(),bytes=Uint8Array.of(1,2,3),path='curated/test/audio';
+    f.sqlite.prepare("insert into vdj_runtime_records values(?,'curated-soundtrack',?,0,?)").run(f.room,id,JSON.stringify({id,state:'READY',assets:{audio:{duration:60,sha256:await sha256(bytes),byteLength:3,contentType:'audio/wav',path}}}));
+    await f.env.MEDIA.put(path,bytes,{});
+    const media=await generationHttp(new Request(`https://test.example/api/rooms/${f.room}/generated-media/${id}/audio`,{headers:{'x-room-owner':f.owner}}),f.env);
+    assert.equal(media.status,200);assert.equal((await media.arrayBuffer()).byteLength,3);
+    const denied=await generationHttp(new Request(`https://test.example/api/rooms/${f.room}/generated-media/${id}/audio`),f.env);
+    assert.equal(denied.status,403);
+    const clientId=crypto.randomUUID(),runId=crypto.randomUUID();
+    const initial=await f.runtime.soundtrack(f.room,{action:'start',clientId,runId});
+    assert.equal(initial.songs[0].id,id);
+    await f.runtime.alarm();assert.equal(f.posts.length,0);
+    const after=await f.runtime.soundtrack(f.room,{action:'played',clientId,runId,id});
+    assert.equal(after.songs[0].id,id);
+    assert.equal((await f.runtime.soundtrack(f.room,{action:'view'})).songs[0].id,id);
+    assert.equal(f.sqlite.prepare('select count(*) n from vdj_budget_reservations').get().n,0);
+  }finally{f.sqlite.close();}
+});
