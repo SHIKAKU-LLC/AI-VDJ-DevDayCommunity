@@ -34,6 +34,7 @@ export interface RoomView {
   imageError?: boolean;
   retryBusy?: string | null;
   ready: boolean;
+  playBusy?: boolean;
   running: boolean;
   credit: string;
   currentId?: string;

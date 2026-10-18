@@ -70,6 +70,17 @@ test('a malformed display summary does not discard valid visual observations', (
   assert.equal(result.summary, '眼鏡と巻き髪を残し、 映像へ展開します。');
   assert.throws(() => parseImageDirection({answer:JSON.stringify({...observed, summary:null, subject:'https://example.invalid'})}), /IMAGE_DIRECTION_INVALID/);
 });
+test('bounds verbose subject observations after validating the complete text', () => {
+  const subject='A stylised character with round glasses and curly hair. '.repeat(8);
+  const result=parseImageDirection({answer:JSON.stringify({...observed,subject})});
+  assert.equal(result.subject.length,180);
+  assert.match(result.subject,/round glasses/);
+  assert.equal(parseImageDirection({answer:JSON.stringify({...observed,subject:'A character\n  with glasses'})}).subject,'A character with glasses');
+  for(const unsafe of [subject+'https://example.invalid',subject+'<script>', 'x'.repeat(1025), null, {}]) {
+    assert.throws(()=>parseImageDirection({answer:JSON.stringify({...observed,subject:unsafe})}),
+      e=>e.diagnostic==='SUBJECT' && typeof e.responseShape.subject.type==='string' && !JSON.stringify(e.responseShape).includes('example.invalid'));
+  }
+});
 test('reuses extra valid colour and feature observations within bounded prompt limits', () => {
   const rich={...observed,palette:['black','brown','ivory','pink','cyan','silver'],
     features:['curly hair','round glasses','smile','black shirt','raised arm','standing pose','figurine base']};

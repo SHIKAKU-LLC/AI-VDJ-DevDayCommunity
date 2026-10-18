@@ -85,7 +85,8 @@ async function attach(f, {capability = f.owner, nonce = 'd'.repeat(64), prompt =
 }
 const imagePlan = {kind: 'figure', subject: 'a stylised figurine', features: ['round glasses'], palette: ['cyan'], summary: '丸い眼鏡の特徴を残します。'};
 
-test('image upload is optional, authorised, bounded, immutable and matched to its submitter and text', async () => {
+test('image upload is optional, authorised, bounded, immutable and matched to its submitter and text', async t => {
+  t.mock.method(console,'info',()=>{});
   const f = await fixture({flow: true});
   try {
     assert.equal((await attach(f)).status, 503);
@@ -101,6 +102,21 @@ test('image upload is optional, authorised, bounded, immutable and matched to it
     await f.runtime.enqueue(f.room.roomId, [receipt.submissionId]);
     assert.ok(f.values.get('jobs')[0].reference);
   } finally { f.sqlite.close(); }
+});
+
+test('upload diagnostics contain only allowlisted format, status and reason', async t => {
+  const logs=[];t.mock.method(console,'info',(...args)=>logs.push(args));
+  const f=await fixture();
+  try {
+    f.env.IMAGE_DIRECTION_ENABLED='true';f.env.AI={run(){}};
+    const request=new Request(`https://test.example/api/rooms/${f.room.roomId}/reference-image/${'d'.repeat(64)}`,{
+      method:'PUT',headers:{origin:'https://test.example','x-room-owner':f.owner,
+        'content-type':'image/jpeg','x-vdj-source-format':'untrusted-private-value'},body:Uint8Array.of(1)});
+    assert.equal((await referenceImageHttp(request,f.env)).status,415);
+    assert.deepEqual(logs,[['vdj.reference-image',{status:415,sourceFormat:'unknown',reason:'IMAGE_FORMAT_INVALID'}]]);
+    assert.ok(!JSON.stringify(logs).includes(f.owner));
+    assert.ok(!JSON.stringify(logs).includes(f.room.roomId));
+  } finally {f.sqlite.close();}
 });
 
 test('short text alone does not call vision; attached image is interpreted once then used for six distinct H3 requests', async () => {

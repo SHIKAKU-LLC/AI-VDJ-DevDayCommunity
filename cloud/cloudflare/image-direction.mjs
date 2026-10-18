@@ -58,6 +58,10 @@ export function parseImageDirection(result) {
     // Never truncate and retain unvalidated model text in the video prompt.
     const summary = typeof value.summary === 'string' ? value.summary.replace(/\s+/g, ' ').trim() : '';
     value.summary = text(summary, 180) ? summary : imageDirectionSummary({kind:value.kind});
+    const subject = typeof value.subject === 'string' ? value.subject.replace(/\s+/g, ' ').trim() : value.subject;
+    // Validate the whole observation before shortening it; never hide an unsafe
+    // suffix merely because it falls beyond the prompt's display limit.
+    if (text(subject, 1024)) value.subject = Array.from(subject).slice(0, 180).join('');
     // Some vision responses use a comma-separated palette or keyed colour
     // descriptions rather than the requested list. This is display metadata,
     // never an instruction or a resource locator. Validate the full strings
@@ -83,6 +87,10 @@ export function parseImageDirection(result) {
       type: Array.isArray(value?.palette) ? 'array' : typeof value?.palette,
       count: Array.isArray(value?.palette) ? value.palette.length : 0,
       maximumLength: Array.isArray(value?.palette) ? Math.max(0,...value.palette.map(item=>typeof item==='string'?item.length:0)) : 0,
+    };
+    if (diagnostic === 'SUBJECT') error.responseShape.subject = {
+      type: Array.isArray(value?.subject) ? 'array' : typeof value?.subject,
+      length: typeof value?.subject === 'string' ? value.subject.length : 0,
     };
     throw error;
   }
