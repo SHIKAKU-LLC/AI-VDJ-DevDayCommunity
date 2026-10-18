@@ -166,3 +166,22 @@ test("stale result cannot pick a played or undecoded candidate", () => {
   assert.equal(single.lastSelection.source, "rules");
   assert.equal(decisionRequest(plan).questions.length, 1);
 });
+
+// Diagnostics are fixed codes only; never return provider bodies or credentials.
+test("HTTP failures expose only status and do not read the provider error body", async () => {
+  const plan = playbackPlan(jobs, afterFirst());
+  const result = await requestPlaybackDecision(plan, {key: "placeholder", fetchImpl: async () => ({
+    ok: false, status: 401, json() { throw Error("error body must not be read"); },
+  })});
+  assert.deepEqual(result, {status: "unavailable", httpStatus: 401});
+});
+
+test("request setup and transport failures return fixed phases without error messages", async () => {
+  const plan = playbackPlan(jobs, afterFirst());
+  let calls = 0;
+  const malformed = await requestPlaybackDecision(plan, {key: "placeholder\ninvalid", fetchImpl: async () => {calls++;}});
+  assert.deepEqual(malformed, {status: "unavailable", phase: "headers"});
+  assert.equal(calls, 0);
+  const network = await requestPlaybackDecision(plan, {key: "placeholder", fetchImpl: async () => {throw Error("private transport detail");}});
+  assert.deepEqual(network, {status: "unavailable", phase: "request"});
+});

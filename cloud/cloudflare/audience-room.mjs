@@ -210,6 +210,8 @@ export function createAudienceRoomClass(Base) {
               enabled: this.env.DECISIONS_ENABLED === "true" && !!this.env.OPENAI_API_KEY,
               calls: state.decisions?.calls ?? 0,
               status: state.decisions?.latest?.status ?? "idle",
+              ...(state.decisions?.latest?.httpStatus ? { httpStatus: state.decisions.latest.httpStatus } : {}),
+              ...(state.decisions?.latest?.phase ? { phase: state.decisions.latest.phase } : {}),
             },
           };
         else throw Error("PLAYBACK_INPUT_INVALID");
