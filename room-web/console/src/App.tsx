@@ -301,6 +301,8 @@ function Composer({
               )}
             </PromptInputActions>
             <PromptInputSubmit
+              size="sm"
+              className="h-8 w-auto px-3"
               status={busy ? "submitted" : "idle"}
               variant={primary ? "default" : "secondary"}
               disabled={busy || !prompt.trim() || full || !state.accepting}
