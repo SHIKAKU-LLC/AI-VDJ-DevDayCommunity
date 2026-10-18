@@ -446,19 +446,23 @@ export function createRoomController() {
     setDefinitions.set(job.id, { ...job, kind: "generated" });
   }
   async function loadLibrary() {
-    if (libraryLoaded) return;
+    if (Date.now() < libraryRefreshAt) return;
     try {
       const result = await request(roomPath("preset-library"));
+      const available = new Set(result.presets.map((p) => p.id));
+      for (const [id, set] of setDefinitions)
+        if (set.kind === "preset" && !available.has(id))
+          setDefinitions.delete(id);
       for (const preset of result.presets)
         setDefinitions.set(preset.id, {
           ...preset,
           kind: "preset",
           assets: { audio: preset.audio, video: preset.video },
         });
-      libraryLoaded = result.presets.length > 0;
+      libraryRefreshAt = Date.now() + 15000;
     } catch {}
   }
-  let libraryLoaded = false;
+  let libraryRefreshAt = 0;
   async function setBytes(set, kind) {
     if (set.kind !== "preset") return fetchAsset(set, kind);
     const response = await request(
@@ -520,7 +524,8 @@ export function createRoomController() {
       (s) => s.kind === "preset",
     );
     if (
-      !presetOrder.length ||
+      presetOrder.length !== presets.length ||
+      presetOrder.some((id) => !setDefinitions.has(id)) ||
       presets.every((s) => playbackView.presetsPlayed.includes(s.id))
     ) {
       presetOrder = presets.map((s) => s.id);

@@ -801,3 +801,27 @@ test("stopping during asynchronous selection cannot start late audio", async () 
   assert.equal(scheduled, 0);
   assert.equal(player.read().running, false);
 });
+
+test("a newly registered preset is used before repeating the completed initial library", () => {
+  const state = playbackState(),
+    clientId = crypto.randomUUID();
+  const presets = [{ id: "preset:one" }, { id: "preset:two" }];
+  for (const item of presets) {
+    const nonce = crypto.randomUUID();
+    claimNext(state, [], presets, {
+      clientId,
+      nonce,
+      readyIds: [item.id],
+      now: 1,
+    });
+    acknowledgeStart(state, { clientId, nonce, id: item.id, now: 2 });
+  }
+  presets.push({ id: "preset:three" });
+  const next = claimNext(state, [], presets, {
+    clientId,
+    nonce: crypto.randomUUID(),
+    readyIds: presets.map((p) => p.id),
+    now: 3,
+  });
+  assert.equal(next.id, "preset:three");
+});
