@@ -84,9 +84,11 @@ export function createRoomController() {
     ACCEPTANCE_OFF: "現在は新しいアイデアの受付を閉じています。",
     RATE_LIMITED: "少し時間をおいてから送信してください。",
     IMAGE_FORMAT_INVALID:
-      "画像を読み取れませんでした。JPEG・PNG・WebPの画像を選んでください。",
+      "対応していない画像形式です。JPEG・PNG・WebP・HEICの画像を選んでください。",
+    IMAGE_DECODE_FAILED:
+      "このブラウザで画像を読み込めませんでした。画像のスクリーンショットか、JPEG・PNG・WebP形式を選んでください。",
     IMAGE_TOO_LARGE:
-      "画像が大きすぎます。小さい画像を選んでください（元画像は8MBまで）。",
+      "画像が大きすぎます。小さい画像を選んでください（元画像は8MB・5,000万画素まで）。",
     IMAGE_REFERENCE_LIMIT:
       "このルームの画像投稿上限に達しました。画像を外すと文章だけで投稿できます。",
     IMAGE_DIRECTION_DISABLED:
