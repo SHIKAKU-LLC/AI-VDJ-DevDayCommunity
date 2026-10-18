@@ -27,6 +27,7 @@ export interface RoomView {
   generation: boolean;
   imageEnabled: boolean;
   image: { url: string; name: string } | null;
+  imageNotice: string;
   createBusy: boolean;
   joinBusy: boolean;
   submitBusy: boolean;

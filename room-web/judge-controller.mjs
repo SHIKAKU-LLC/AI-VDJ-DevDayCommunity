@@ -21,6 +21,7 @@ export function createRoomController() {
     generation: false,
     imageEnabled: false,
     image: null,
+    imageNotice: "",
     createBusy: false,
     joinBusy: false,
     submitBusy: false,
@@ -86,11 +87,9 @@ export function createRoomController() {
     ACCEPTANCE_OFF: "現在は新しいアイデアの受付を閉じています。",
     RATE_LIMITED: "少し時間をおいてから送信してください。",
     IMAGE_FORMAT_INVALID:
-      "対応していない画像形式です。JPEG・PNG・WebP・HEICの画像を選んでください。",
-    IMAGE_DECODE_FAILED:
-      "このブラウザで画像を読み込めませんでした。画像のスクリーンショットか、JPEG・PNG・WebP形式を選んでください。",
+      "画像を読み取れませんでした。JPEG・PNG・WebPの画像を選んでください。",
     IMAGE_TOO_LARGE:
-      "画像が大きすぎます。小さい画像を選んでください（元画像は8MB・5,000万画素まで）。",
+      "画像が大きすぎます。小さい画像を選んでください（元画像は8MBまで）。",
     IMAGE_REFERENCE_LIMIT:
       "このルームの画像投稿上限に達しました。画像を外すと文章だけで投稿できます。",
     IMAGE_DIRECTION_DISABLED:
@@ -759,7 +758,7 @@ export function createRoomController() {
     }
   }
   async function submit(value) {
-    if (submitBusy || imageBusy) return false;
+    if (submitBusy || imageBusy || view.imageNotice) return false;
     const prompt = value.trim();
     if (!prompt) return false;
     submitBusy = true;
@@ -838,7 +837,7 @@ export function createRoomController() {
     if (referenceImage) URL.revokeObjectURL(referenceImage.previewUrl);
     referenceImage = null;
     imageBusy = false;
-    update({ image: null, imageBusy: false });
+    update({ image: null, imageBusy: false, imageNotice: "" });
   }
   async function attach(file) {
     clearReference();
@@ -855,7 +854,12 @@ export function createRoomController() {
       referenceImage = image;
       update({ image: { url: image.previewUrl, name: file.name } });
     } catch (e) {
-      if (version === imageVersion) error(e);
+      if (version === imageVersion) {
+        update({
+          imageNotice:
+            "JPEG・PNG・WebP形式の画像（8MB以下・2,000万画素以下）を選び直すか、画像を外して送信してください。",
+        });
+      }
     } finally {
       if (version === imageVersion) {
         imageBusy = false;

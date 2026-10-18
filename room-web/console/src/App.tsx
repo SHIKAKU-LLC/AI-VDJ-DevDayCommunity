@@ -28,7 +28,6 @@ import {
   BroadcastIcon,
 } from "@phosphor-icons/react";
 import { createRoomController } from "../../judge-controller.mjs";
-import { REFERENCE_IMAGE_ACCEPT } from "../../judge-image.mjs";
 import { Button } from "./components/ui/button";
 import { CreditName } from "./components/credit-name";
 import {
@@ -310,7 +309,7 @@ function Composer({
               className="h-8 w-auto px-3"
               status={busy ? "submitted" : "idle"}
               variant={primary ? "default" : "secondary"}
-              disabled={busy || !prompt.trim() || full || !state.accepting}
+              disabled={busy || !!state.imageNotice || !prompt.trim() || full || !state.accepting}
               aria-label={
                 state.role === "owner"
                   ? "音楽・映像を生成する"
@@ -331,7 +330,7 @@ function Composer({
         className="sr-only"
         tabIndex={-1}
         type="file"
-        accept={REFERENCE_IMAGE_ACCEPT}
+        accept="image/jpeg,image/png,image/webp"
         aria-label="参考画像（任意）"
         onChange={(event) => {
           const selected = event.target.files?.[0];
@@ -339,6 +338,22 @@ function Composer({
           event.target.value = "";
         }}
       />
+      {state.imageNotice && (
+        <Note role="status">
+          <NoteContent>{state.imageNotice}</NoteContent>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              controller.clearReference();
+              if (file.current) file.current.value = "";
+            }}
+          >
+            画像を外す
+          </Button>
+        </Note>
+      )}
       {full && (
         <Note variant="warning">
           <NoteContent>
