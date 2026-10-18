@@ -49,15 +49,19 @@ export async function requestPlaybackDecision(plan, {
     }, timeoutMs);
   });
   const request = (async () => {
+    let phase = "headers";
     try {
+      const headers = new Headers([["authorization", ["Bearer", key].join(" ")], ["content-type", "application/json"]]);
+      phase = "request";
       const response = await fetchImpl("https://api.openai.com/v1/decisions", {
         method: "POST",
-        headers: new Headers([["authorization", ["Bearer", key].join(" ")], ["content-type", "application/json"]]),
+        headers,
         body: JSON.stringify(decisionRequest(plan)),
         signal: controller.signal,
         redirect: "error",
       });
-      if (!response.ok) return { status: "unavailable" };
+      if (!response.ok) return { status: "unavailable", httpStatus: response.status };
+      phase = "response";
       const payload = await response.json();
       const answers = payload?.answers;
       const answer = Array.isArray(answers) && answers.length === 1 ? answers[0] : null;
@@ -67,7 +71,7 @@ export async function requestPlaybackDecision(plan, {
       if (answer.choice !== plan.action) return { status: "rejected" };
       return { status: "ready", action: answer.choice };
     } catch {
-      return { status: "unavailable" };
+      return { status: "unavailable", phase };
     }
   })();
   try {
