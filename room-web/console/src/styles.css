@@ -859,12 +859,28 @@
     --credit-blue: #78d9ff;
     --credit-purple: #b89aff;
     --credit-pink: #f991e9;
-    @apply block truncate text-2xl leading-tight font-bold;
-    text-shadow: 0 0 calc(var(--spacing) / 2) color-mix(in srgb, var(--color-white) 15%, transparent),
-      0 0 calc(var(--spacing) * 2) color-mix(in srgb, var(--credit-purple) 20%, transparent);
+    @apply relative block text-xl leading-normal font-bold;
+    filter: drop-shadow(0 0 calc(var(--spacing) / 2) color-mix(in srgb, var(--color-white) 50%, transparent))
+      drop-shadow(0 0 calc(var(--spacing) * 1.25) color-mix(in srgb, var(--credit-blue) 75%, transparent))
+      drop-shadow(0 0 calc(var(--spacing) * 3) color-mix(in srgb, var(--credit-pink) 65%, transparent));
+  }
+  .stage-credit-text {
+    @apply block truncate;
+    -webkit-text-stroke: calc(var(--spacing) / 8) color-mix(in srgb, var(--color-white) 65%, transparent);
+    text-shadow: 0 0 calc(var(--spacing) * .75) color-mix(in srgb, var(--color-white) 50%, transparent);
+  }
+  .stage-credit-sparkle {
+    @apply pointer-events-none absolute inset-0 hidden truncate;
+    color: transparent;
+    -webkit-text-fill-color: transparent;
+    -webkit-text-stroke: calc(var(--spacing) / 4) var(--color-white);
+    mask-image: radial-gradient(circle, var(--color-white) 0, var(--color-white) calc(var(--spacing) / 4), transparent calc(var(--spacing) * .75)),
+      radial-gradient(circle, var(--color-white) 0, transparent calc(var(--spacing) * .75));
+    mask-size: calc(var(--spacing) * 4) calc(var(--spacing) * 5), calc(var(--spacing) * 7) calc(var(--spacing) * 6);
+    filter: drop-shadow(0 0 calc(var(--spacing) / 2) var(--color-white));
   }
   @supports (background-clip: text) or (-webkit-background-clip: text) {
-    .stage-credit-name {
+    .stage-credit-text {
       background-image:
         linear-gradient(115deg, transparent 42%, color-mix(in srgb, var(--color-white) 40%, transparent) 46%, var(--color-white) 48%, var(--color-white) 52%, color-mix(in srgb, var(--color-white) 40%, transparent) 54%, transparent 58%),
         linear-gradient(90deg, var(--credit-red), var(--credit-orange) 16%, var(--credit-yellow) 32%, var(--credit-green) 48%, var(--credit-blue) 64%, var(--credit-purple) 80%, var(--credit-pink));
@@ -908,14 +924,35 @@
 }
 @media (prefers-reduced-motion:reduce) { *,*::before,*::after { animation-duration:.01ms!important; transition-duration:.01ms!important; } }
 @media (prefers-reduced-motion: no-preference) {
-  .stage-credit-name { animation: credit-shimmer 4s linear infinite; }
+  .stage-credit-name { animation: credit-neon-glow 4s ease-in-out infinite; }
+  .stage-credit-text { animation: credit-shimmer 4s linear infinite; }
+  .stage-credit-sparkle { display: block; animation: credit-edge-sparkle 4s linear infinite; }
+}
+@keyframes credit-neon-glow {
+  0%, 100% {
+    filter: drop-shadow(0 0 calc(var(--spacing) / 2) color-mix(in srgb, var(--color-white) 50%, transparent))
+      drop-shadow(0 0 calc(var(--spacing) * 1.25) color-mix(in srgb, var(--credit-blue) 75%, transparent))
+      drop-shadow(0 0 calc(var(--spacing) * 3) color-mix(in srgb, var(--credit-pink) 65%, transparent));
+  }
+  50% {
+    filter: drop-shadow(0 0 calc(var(--spacing) / 2) color-mix(in srgb, var(--color-white) 85%, transparent))
+      drop-shadow(0 0 calc(var(--spacing) * 2) var(--credit-blue))
+      drop-shadow(0 0 calc(var(--spacing) * 4.5) color-mix(in srgb, var(--credit-pink) 90%, transparent));
+  }
 }
 @keyframes credit-shimmer {
   from { background-position: 0% 50%, 0% 50%; }
   to { background-position: 100% 50%, 0% 50%; }
 }
+@keyframes credit-edge-sparkle {
+  from { mask-position: 0 0, 0 0; opacity: .4; }
+  50% { opacity: 1; }
+  to { mask-position: calc(var(--spacing) * 4) calc(var(--spacing) * 5), calc(var(--spacing) * -7) calc(var(--spacing) * 6); opacity: .4; }
+}
 @media (forced-colors: active) {
-  .stage-credit-name { background: none; color: CanvasText; text-shadow: none; animation: none; }
+  .stage-credit-name { filter: none; animation: none; }
+  .stage-credit-text { background: none; color: CanvasText; text-shadow: none; -webkit-text-stroke: 0; animation: none; }
+  .stage-credit-sparkle { display: none; animation: none; }
 }
 
 @theme inline {
@@ -927,7 +964,7 @@
 /* Use the console width, not the viewport: the sidebar also takes space. */
 @container (min-width: 44rem) {
   .stage-credit { --credit-inset: calc(var(--spacing) * 5); }
-  .stage-credit-name { @apply text-3xl; }
+  .stage-credit-name { @apply text-2xl; }
   .transport-panel { @apply grid-cols-[minmax(0,1fr)_14rem]; }
   .master-output { @apply border-t-0 border-l border-border pt-0 pl-4; }
 }

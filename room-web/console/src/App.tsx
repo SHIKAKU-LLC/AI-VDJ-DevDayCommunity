@@ -786,7 +786,10 @@ export function App({
                   {state.credit && (
                     <aside className="stage-credit" aria-label="この曲のアイデア投稿者">
                       <strong className="stage-credit-name" title={state.credit}>
-                        {state.credit}
+                        <span className="stage-credit-text">{state.credit}</span>
+                        <span className="stage-credit-sparkle" aria-hidden="true">
+                          {state.credit}
+                        </span>
                       </strong>
                     </aside>
                   )}
