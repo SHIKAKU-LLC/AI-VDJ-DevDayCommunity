@@ -845,52 +845,23 @@
   .stage-empty .text-muted-foreground { @apply text-stone-400; }
   .stage-credit {
     --credit-inset: calc(var(--spacing) * 3);
-    @apply absolute w-max rounded-2xl border border-white/15 bg-black/70 px-4 py-3 text-white shadow-lg backdrop-blur-md;
+    @apply absolute w-max rounded-2xl border border-white/15 bg-black/80 px-4 py-3 text-white shadow-lg backdrop-blur-md;
     bottom: var(--credit-inset);
     left: var(--credit-inset);
     max-width: min(var(--container-xs), calc(100% - var(--credit-inset) * 2));
   }
-  .stage-credit-name {
-    /* Keep the spectrum vivid on the black caption in either UI theme. */
-    --credit-red: #ff7584;
-    --credit-orange: #ffa85c;
-    --credit-yellow: #ffdf70;
-    --credit-green: #7ce99b;
-    --credit-blue: #78d9ff;
-    --credit-purple: #b89aff;
-    --credit-pink: #f991e9;
-    @apply relative block text-xl leading-normal font-bold;
-    filter: drop-shadow(0 0 calc(var(--spacing) / 2) color-mix(in srgb, var(--color-white) 50%, transparent))
-      drop-shadow(0 0 calc(var(--spacing) * 1.25) color-mix(in srgb, var(--credit-blue) 75%, transparent))
-      drop-shadow(0 0 calc(var(--spacing) * 3) color-mix(in srgb, var(--credit-pink) 65%, transparent));
-  }
-  .stage-credit-text {
-    @apply block truncate;
-    -webkit-text-stroke: calc(var(--spacing) / 8) color-mix(in srgb, var(--color-white) 65%, transparent);
-    text-shadow: 0 0 calc(var(--spacing) * .75) color-mix(in srgb, var(--color-white) 50%, transparent);
-  }
-  .stage-credit-sparkle {
-    @apply pointer-events-none absolute inset-0 hidden truncate;
-    color: transparent;
-    -webkit-text-fill-color: transparent;
-    -webkit-text-stroke: calc(var(--spacing) / 4) var(--color-white);
-    mask-image: radial-gradient(circle, var(--color-white) 0, var(--color-white) calc(var(--spacing) / 4), transparent calc(var(--spacing) * .75)),
-      radial-gradient(circle, var(--color-white) 0, transparent calc(var(--spacing) * .75));
-    mask-size: calc(var(--spacing) * 4) calc(var(--spacing) * 5), calc(var(--spacing) * 7) calc(var(--spacing) * 6);
-    filter: drop-shadow(0 0 calc(var(--spacing) / 2) var(--color-white));
-  }
-  @supports (background-clip: text) or (-webkit-background-clip: text) {
-    .stage-credit-text {
-      background-image:
-        linear-gradient(115deg, transparent 42%, color-mix(in srgb, var(--color-white) 40%, transparent) 46%, var(--color-white) 48%, var(--color-white) 52%, color-mix(in srgb, var(--color-white) 40%, transparent) 54%, transparent 58%),
-        linear-gradient(90deg, var(--credit-red), var(--credit-orange) 16%, var(--credit-yellow) 32%, var(--credit-green) 48%, var(--credit-blue) 64%, var(--credit-purple) 80%, var(--credit-pink));
-      background-size: 240% 100%, 100% 100%;
-      background-position: 0% 50%, 0% 50%;
-      background-clip: text;
-      -webkit-background-clip: text;
-      color: transparent;
-    }
-  }
+  .stage-credit-name { @apply block text-xl leading-normal font-bold; }
+  .stage-credit-text { @apply block truncate; }
+  /* Claude Code's seven character colors, each with a brighter sweep color. */
+  .stage-credit-letter[data-tone="0"] { --credit-base: #eb5f57; --credit-highlight: #fa9b93; }
+  .stage-credit-letter[data-tone="1"] { --credit-base: #f58b57; --credit-highlight: #ffb989; }
+  .stage-credit-letter[data-tone="2"] { --credit-base: #fac35f; --credit-highlight: #ffe19b; }
+  .stage-credit-letter[data-tone="3"] { --credit-base: #91c882; --credit-highlight: #b9e6b4; }
+  .stage-credit-letter[data-tone="4"] { --credit-base: #82aadc; --credit-highlight: #b4cdf0; }
+  .stage-credit-letter[data-tone="5"] { --credit-base: #9b82c8; --credit-highlight: #c3b4e6; }
+  .stage-credit-letter[data-tone="6"] { --credit-base: #c882b4; --credit-highlight: #e6b4d2; }
+  .stage-credit-letter { color: var(--credit-base); }
+  .stage-credit-letter[data-highlighted="true"] { color: var(--credit-highlight); }
   .transport-panel { @apply surface-panel grid items-center gap-4 border-t border-border p-4; }
   .transport-main { @apply grid min-w-0 grid-cols-[1fr_auto] items-center gap-3; }
   .transport-buttons { @apply flex flex-wrap items-center gap-2; }
@@ -923,36 +894,9 @@
   .stage:fullscreen .stage-credit { top: var(--credit-inset); bottom: auto; }
 }
 @media (prefers-reduced-motion:reduce) { *,*::before,*::after { animation-duration:.01ms!important; transition-duration:.01ms!important; } }
-@media (prefers-reduced-motion: no-preference) {
-  .stage-credit-name { animation: credit-neon-glow 4s ease-in-out infinite; }
-  .stage-credit-text { animation: credit-shimmer 4s linear infinite; }
-  .stage-credit-sparkle { display: block; animation: credit-edge-sparkle 4s linear infinite; }
-}
-@keyframes credit-neon-glow {
-  0%, 100% {
-    filter: drop-shadow(0 0 calc(var(--spacing) / 2) color-mix(in srgb, var(--color-white) 50%, transparent))
-      drop-shadow(0 0 calc(var(--spacing) * 1.25) color-mix(in srgb, var(--credit-blue) 75%, transparent))
-      drop-shadow(0 0 calc(var(--spacing) * 3) color-mix(in srgb, var(--credit-pink) 65%, transparent));
-  }
-  50% {
-    filter: drop-shadow(0 0 calc(var(--spacing) / 2) color-mix(in srgb, var(--color-white) 85%, transparent))
-      drop-shadow(0 0 calc(var(--spacing) * 2) var(--credit-blue))
-      drop-shadow(0 0 calc(var(--spacing) * 4.5) color-mix(in srgb, var(--credit-pink) 90%, transparent));
-  }
-}
-@keyframes credit-shimmer {
-  from { background-position: 0% 50%, 0% 50%; }
-  to { background-position: 100% 50%, 0% 50%; }
-}
-@keyframes credit-edge-sparkle {
-  from { mask-position: 0 0, 0 0; opacity: .4; }
-  50% { opacity: 1; }
-  to { mask-position: calc(var(--spacing) * 4) calc(var(--spacing) * 5), calc(var(--spacing) * -7) calc(var(--spacing) * 6); opacity: .4; }
-}
 @media (forced-colors: active) {
-  .stage-credit-name { filter: none; animation: none; }
-  .stage-credit-text { background: none; color: CanvasText; text-shadow: none; -webkit-text-stroke: 0; animation: none; }
-  .stage-credit-sparkle { display: none; animation: none; }
+  .stage-credit-letter { color: CanvasText; }
+  .stage-credit-letter[data-highlighted="true"] { color: CanvasText; }
 }
 
 @theme inline {

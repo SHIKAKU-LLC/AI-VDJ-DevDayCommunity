@@ -28,6 +28,7 @@ import {
 } from "@phosphor-icons/react";
 import { createRoomController } from "../../judge-controller.mjs";
 import { Button } from "./components/ui/button";
+import { CreditName } from "./components/credit-name";
 import {
   Card,
   CardHeader,
@@ -785,12 +786,7 @@ export function App({
                   )}
                   {state.credit && (
                     <aside className="stage-credit" aria-label="この曲のアイデア投稿者">
-                      <strong className="stage-credit-name" title={state.credit}>
-                        <span className="stage-credit-text">{state.credit}</span>
-                        <span className="stage-credit-sparkle" aria-hidden="true">
-                          {state.credit}
-                        </span>
-                      </strong>
+                      <CreditName name={state.credit} />
                     </aside>
                   )}
                 </div>
