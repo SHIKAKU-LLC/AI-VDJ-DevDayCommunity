@@ -34,6 +34,10 @@ data/private/
 *.gif
 *.webp
 *.pdf
+# README images explicitly approved by the user and pinned in the policy check.
+!docs/readme-media/ai-vdj-live-demo.gif
+!docs/readme-media/ai-vdj-owner-console.png
+!docs/readme-media/ai-vdj-room-invitation.png
 *.zip
 *.tar
 *.gz

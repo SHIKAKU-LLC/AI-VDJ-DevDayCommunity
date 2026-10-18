@@ -4,6 +4,7 @@
 Default: inspect tracked working files (CI). --staged: inspect every index blob
 as it will be committed, including files unchanged by this commit. No file
 contents, detected values, Git error output, or untracked files are printed.
+User-approved README media is pinned by exact path, length and SHA-256.
 This conservative check complements human review; it cannot identify all PII.
 """
 
@@ -11,6 +12,7 @@ from __future__ import annotations
 
 import argparse
 from dataclasses import dataclass
+import hashlib
 import json
 import os
 from pathlib import Path, PurePosixPath
@@ -22,6 +24,19 @@ from urllib.parse import parse_qsl, unquote, urlsplit
 
 
 DEFAULT_MAX_BYTES = 1024 * 1024
+# These three user-supplied README images are the only binary exceptions.
+# Replacing a file at the same path still requires review of its new digest.
+APPROVED_README_MEDIA = {
+    "docs/readme-media/ai-vdj-live-demo.gif": (
+        37191072, "7d57c47ec9268a5cc3756a24d277edd435d590973cd125f9f8e0688b91a94290",
+    ),
+    "docs/readme-media/ai-vdj-owner-console.png": (
+        457981, "91dc44e1f0f825395b4faa3d23f0ff7b1f407e370b903d64f43e3558c2a2b202",
+    ),
+    "docs/readme-media/ai-vdj-room-invitation.png": (
+        1782596, "0d873ccdfd90bc350336fa740d39a0b23a7ff410bbd2c2153eabae274ca51d29",
+    ),
+}
 ALLOWED_SUFFIXES = frozenset({
     ".md", ".txt", ".rst", ".adoc", ".py", ".pyi", ".sh", ".bash", ".zsh",
     ".json", ".jsonl", ".csv", ".tsv", ".toml", ".yaml", ".yml", ".ini",
@@ -120,6 +135,8 @@ def path_rule(path: str, mode: str) -> str | None:
     if name != ".env.example" and BLOCKED_NAMES.search(name):
         return "credential-or-personal-data-filename"
     if path == ".githooks/pre-commit" or name in ALLOWED_NAMES:
+        return None
+    if path in APPROVED_README_MEDIA:
         return None
     if item.suffix.lower() not in ALLOWED_SUFFIXES:
         return "non-text-or-unapproved-extension"
@@ -255,16 +272,23 @@ def scan(root: Path, staged: bool = False, max_bytes: int = DEFAULT_MAX_BYTES) -
         if rule:
             findings.append(Finding(path, rule))
             continue
+        approved_media = APPROVED_README_MEDIA.get(path)
+        file_limit = approved_media[0] if approved_media else max_bytes
         if staged:
-            if int(git(root, "cat-file", "-s", oid)) > max_bytes:
+            if int(git(root, "cat-file", "-s", oid)) > file_limit:
                 findings.append(Finding(path, "over-size-limit"))
                 continue
             data = git(root, "cat-file", "blob", oid)
         else:
-            data, rule = worktree_bytes(root, path, max_bytes)
+            data, rule = worktree_bytes(root, path, file_limit)
             if rule:
                 findings.append(Finding(path, rule))
                 continue
+        if approved_media:
+            expected_size, expected_hash = approved_media
+            if len(data) != expected_size or hashlib.sha256(data).hexdigest() != expected_hash:
+                findings.append(Finding(path, "unapproved-readme-media"))
+            continue
         for rule in sorted(content_rules(data, path)):
             findings.append(Finding(path, rule))
     return sorted(set(findings), key=lambda finding: (finding.path, finding.rule)), len(paths)
@@ -276,7 +300,8 @@ def main() -> int:
     modes = parser.add_mutually_exclusive_group()
     modes.add_argument("--staged", action="store_true", help="Inspect all staged index blobs")
     modes.add_argument("--tracked", action="store_true", help="Inspect tracked working files (default)")
-    parser.add_argument("--max-bytes", type=int, default=DEFAULT_MAX_BYTES, help="Per-file byte limit")
+    parser.add_argument("--max-bytes", type=int, default=DEFAULT_MAX_BYTES,
+                        help="Per-text-file limit; approved README media uses exact pinned sizes")
     args = parser.parse_args()
     if args.max_bytes < 1:
         parser.error("--max-bytes must be positive")
@@ -294,7 +319,8 @@ def main() -> int:
     if findings:
         print(f"Repository policy failed: {len(findings)} finding(s), {count} file(s) checked.")
         return 1
-    print(f"Repository policy passed: {count} file(s), limit {args.max_bytes} bytes per file.")
+    print(f"Repository policy passed: {count} file(s), text limit {args.max_bytes} bytes; "
+          "approved README media checked by exact size and SHA-256.")
     return 0
 
 
