@@ -24,5 +24,5 @@ git diff --cached --stat
 git diff --cached
 ```
 
-1ファイル1MiBを超える出力、バイナリ、音源、動画は追跡しない。
+1ファイル1MiBを超える出力、バイナリ、音源、動画は追跡しない。ただし、ユーザーがREADME掲載を指定した `docs/readme-media/` の3点のみ例外とする。`scripts/check_repository.py` の `APPROVED_README_MEDIA` に記録したパス・バイト数・SHA-256との完全一致を検査する。画像の追加・差し替えには内容確認とユーザーの掲載指示が必要で、一般の生成素材・投稿画像は許可しない。
 報告には変更、検証結果、未完項目を記す。
