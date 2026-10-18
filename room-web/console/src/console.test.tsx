@@ -68,6 +68,7 @@ describe("console and stable runtime", () => {
       fireEvent.click(screen.getByRole("button", { name: "ルームを開く" }));
     });
     expect(calls.filter((c) => c.url === "/api/judge/rooms")).toHaveLength(1);
+    expect((screen.getByRole("button", {name:"再生する"}) as HTMLButtonElement).disabled).toBe(false);
     const invite = screen.getByRole("button", {name:"みんなを招待・受付設定"});
     expect(invite.closest("header")).not.toBeNull();
     expect(invite.compareDocumentPosition(screen.getByRole("radio", {name:"ライト"})) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();

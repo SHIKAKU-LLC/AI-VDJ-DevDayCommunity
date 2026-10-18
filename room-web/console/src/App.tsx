@@ -844,7 +844,7 @@ export function App({
                         次の熱狂は、あなたの言葉から。
                       </p>
                       <p className="text-copy-13 text-muted-foreground">
-                        音楽と映像が揃ったら、再生を始められます。
+                        再生するを押すと、準備でき次第プリセットが流れます。
                       </p>
                     </div>
                   )}
@@ -861,16 +861,17 @@ export function App({
                         id="play"
                         aria-label="再生する"
                         variant={!primary ? "default" : "secondary"}
-                        disabled={!state.ready || state.running}
+                        disabled={state.running}
+                        loading={state.playBusy}
                         onClick={() => controller.play()}
                       >
                         <PlayIcon weight="fill" />
-                        再生する
+                        {state.playBusy ? "再生準備中" : "再生する"}
                       </Button>
                       <Button
                         id="stop"
                         variant="outline"
-                        disabled={!state.running}
+                        disabled={!state.running && !state.playBusy}
                         onClick={() => controller.stop()}
                       >
                         <StopIcon weight="fill" />

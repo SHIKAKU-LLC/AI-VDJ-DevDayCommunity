@@ -78,7 +78,7 @@ export async function prepareReferenceImage(file) {
     if (blob.size > 2 * 1024 * 1024) throw Error('IMAGE_TOO_LARGE');
     const bytes = await blob.arrayBuffer();
     const hash = Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', bytes)), b => b.toString(16).padStart(2, '0')).join('');
-    return {blob, hash, previewUrl: URL.createObjectURL(blob)};
+    return {blob, hash, sourceFormat:type, previewUrl: URL.createObjectURL(blob)};
   } finally {
     image.close();
     if (canvas) { canvas.width = 0; canvas.height = 0; }

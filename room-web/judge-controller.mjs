@@ -29,6 +29,7 @@ export function createRoomController() {
     maximumSets: 100,
     remainingSets: null,
     ready: false,
+    playBusy: false,
     running: false,
     credit: "",
     playStatus: "音楽・映像の完成を待っています。",
@@ -70,7 +71,9 @@ export function createRoomController() {
     PLAYBACK_IN_USE:
       "別のオーナー画面で再生中です。その画面で停止してから開始してください。",
     PLAYBACK_NOT_READY:
-      "音楽と映像を読み込んでいます。少し待ってから再生してください。",
+      "プリセットの読み込みに時間がかかっています。再生するを押すと、もう一度確認します。",
+    PRESETS_UNAVAILABLE:
+      "プリセットを取得できませんでした。通信を確認して、再生するを押してください。",
     JUDGE_CLOSED: "現在はルームの受付期間外です。",
     JUDGE_CAPACITY: "ルーム数の上限に達しました。",
     JUDGE_BUDGET: "このルームまたはイベントの生成上限に達しました。",
@@ -143,8 +146,9 @@ export function createRoomController() {
   });
   let playbackView = { queue: [], counts: {}, played: [], presetsPlayed: [] };
   let remainingSets = null,
-    candidateLoading = false,
+    candidateLoading = null,
     heartbeatTimer;
+  let playRequest;
   const emergencySeen = new Set();
   const reservedForPlayback = new Set();
   const failedUntil = new Map();
@@ -209,6 +213,7 @@ export function createRoomController() {
     "/api/rooms/" + session.roomId + (suffix ? "/" + suffix : "");
   function showRoom() {
     update({ role: session.owner ? "owner" : "participant", joining: false });
+    if (session.owner) update({playStatus:"プリセットを読み込んでいます。再生するを押すと、準備でき次第始まります。"});
   }
   function render() {
     update({
@@ -259,7 +264,7 @@ export function createRoomController() {
       throw Error("STAGE_UNAVAILABLE");
     playerInit = (async () => {
       context = new AudioContext({ sampleRate: 44100 });
-      await context.suspend();
+      if (context.state === "running") await context.suspend();
       await context.audioWorklet.addModule("/judge-meter.mjs");
       meterNode = new AudioWorkletNode(context, "vdj-continuity-meter", {
         outputChannelCount: [2],
@@ -375,7 +380,7 @@ export function createRoomController() {
     player.setReady(loaded.size);
     const ready = loaded.size > 0;
     update({ ready, running: player.read().running });
-    if (ready && !player.read().running)
+    if (ready && !player.read().running && !view.playBusy)
       update({ playStatus: "音楽と映像の準備完了。再生できます。" });
   }
   async function loadScene(id, trackId, descriptor, fetchBytes) {
@@ -468,6 +473,8 @@ export function createRoomController() {
   }
   async function loadLibrary() {
     if (Date.now() < libraryRefreshAt) return;
+    if (libraryLoading) return libraryLoading;
+    libraryLoading = (async () => {
     try {
       const result = await request(roomPath("preset-library"));
       const available = new Set(result.presets.map((p) => p.id));
@@ -481,9 +488,12 @@ export function createRoomController() {
           assets: { audio: preset.audio, video: preset.video },
         });
       libraryRefreshAt = Date.now() + 15000;
-    } catch {}
+    } catch { throw Error("PRESETS_UNAVAILABLE"); }
+    finally { libraryLoading = null; }
+    })();
+    return libraryLoading;
   }
-  let libraryRefreshAt = 0;
+  let libraryRefreshAt = 0, libraryLoading;
   async function setBytes(set, kind) {
     if (set.kind !== "preset") return fetchAsset(set, kind);
     const response = await request(
@@ -524,7 +534,7 @@ export function createRoomController() {
         setBytes(set, "video"),
       );
       const [buffer] = await Promise.all([
-        context.decodeAudioData(await setBytes(set, "audio")),
+        setBytes(set, "audio").then(bytes => context.decodeAudioData(bytes)),
         prepareScene(set.id + ":video"),
       ]);
       if (
@@ -533,6 +543,7 @@ export function createRoomController() {
       )
         throw Error("MEDIA_INVALID");
       loaded.set(set.id, { ...set, buffer });
+      updatePlayButton();
     } catch {
       decodeFailures++;
       failedUntil.set(set.id, Date.now() + 30000);
@@ -566,17 +577,20 @@ export function createRoomController() {
       .map((id) => setDefinitions.get(id))
       .filter((s) => s && (failedUntil.get(s.id) ?? 0) < Date.now());
   }
-  async function refreshCandidates() {
-    if (candidateLoading || !session?.owner) return;
-    candidateLoading = true;
+  function refreshCandidates() {
+    if (!session?.owner) return Promise.resolve();
+    if (candidateLoading) return candidateLoading;
+    candidateLoading = (async () => {
     try {
       const preferred = playbackView.queue
         .map((j) => setDefinitions.get(j.id))
         .filter((s) => s && (failedUntil.get(s.id) ?? 0) < Date.now())
         .slice(0, 2);
       const presets = presetCandidates().slice(0, 2);
-      for (const pair of [preferred, presets])
-        await Promise.all(pair.map(prepareSet));
+      // Get one complete pair playable before spending bandwidth on the backup.
+      const first = preferred[0] ?? presets[0];
+      if (!view.ready && first) await prepareSet(first);
+      await Promise.all([...preferred, ...presets].map(prepareSet));
       const keep = new Set([
         ...reservedForPlayback,
         ...[...preferred, ...presets].map((s) => s.id),
@@ -600,8 +614,10 @@ export function createRoomController() {
       }
       updatePlayButton();
     } finally {
-      candidateLoading = false;
+      candidateLoading = null;
     }
+    })();
+    return candidateLoading;
   }
   async function chooseSet() {
     const eligible = new Set(playbackView.queue.map((j) => j.id));
@@ -682,9 +698,12 @@ export function createRoomController() {
   async function poll() {
     if (!session || polling) return;
     polling = true;
+    if (session.owner) void loadLibrary().then(refreshCandidates).catch(() => {
+      if (!view.ready && !view.playBusy) update({playStatus:messages.PRESETS_UNAVAILABLE});
+    });
     try {
-      snapshot = await request(roomPath());
-      const result = await request(roomPath("generation"));
+      const [nextSnapshot, result] = await Promise.all([request(roomPath()), request(roomPath("generation"))]);
+      snapshot = nextSnapshot;
       jobs = result.jobs;
       remainingSets = result.remainingSets ?? null;
       update({ presetBatchId: result.presetBatchId });
@@ -692,7 +711,6 @@ export function createRoomController() {
       render();
       if (session.owner) {
         for (const job of jobs) void load(job);
-        await loadLibrary();
         void refreshCandidates();
       }
     } catch (e) {
@@ -794,6 +812,7 @@ export function createRoomController() {
         const headers = {
           "content-type": "image/png",
           "x-vdj-prompt-sha256": promptHash,
+          "x-vdj-source-format": referenceImage.sourceFormat,
         };
         headers[session.owner ? "x-room-owner" : "authorization"] =
           session.owner ? session.capability : "Bearer " + session.capability;
@@ -916,9 +935,41 @@ export function createRoomController() {
       svg: code.createSvgTag({ cellSize: 3, margin: 4, scalable: true }),
     };
   }
+  function waitForPlayableSet(signal) {
+    if (view.ready) return Promise.resolve();
+    return new Promise((resolve, reject) => {
+      let timer;
+      const finish = error => {
+        clearTimeout(timer);
+        unsubscribe();
+        signal.removeEventListener("abort", cancel);
+        error ? reject(error) : resolve();
+      };
+      const cancel = () => finish(new DOMException("Playback cancelled", "AbortError"));
+      const unsubscribe = subscribe(() => { if (view.ready) finish(); });
+      timer = setTimeout(() => finish(Error("PLAYBACK_NOT_READY")), 30000);
+      signal.addEventListener("abort", cancel, {once:true});
+      if (signal.aborted) cancel();
+    });
+  }
   async function play() {
+    if (!session?.owner || view.playBusy || view.running) return;
+    const attempt = new AbortController();
+    playRequest = attempt;
+    update({playBusy:true, error:"", playStatus:"プリセットを準備しています。準備でき次第、再生を始めます。"});
     try {
-      await ensurePlayer();
+      const initialized = ensurePlayer();
+      // Resume during the click, before waiting for any network or decoding.
+      const resumed = context.resume();
+      await Promise.all([initialized, resumed]);
+      if (attempt.signal.aborted) return;
+      await Promise.race([
+        waitForPlayableSet(attempt.signal),
+        loadLibrary().then(refreshCandidates).then(() => {
+          if (!view.ready) throw Error("PLAYBACK_NOT_READY");
+        }),
+      ]);
+      if (attempt.signal.aborted) return;
       meterNode.port.postMessage("start");
       await player.start();
       if (!player.read().running) return;
@@ -936,10 +987,17 @@ export function createRoomController() {
       vj?.start();
       update({ running: true });
     } catch (e) {
-      error(e);
+      if (!attempt.signal.aborted) error(e);
+    } finally {
+      attempt.abort();
+      if (playRequest === attempt) {
+        playRequest = null;
+        update({playBusy:false});
+      }
     }
   }
   function stop() {
+    playRequest?.abort();
     clearInterval(heartbeatTimer);
     if (session?.owner)
       void request(roomPath("playback"), { action: "release", clientId }).catch(
@@ -950,7 +1008,7 @@ export function createRoomController() {
     vj?.stop();
     meterNode?.port.postMessage("stop");
     for (const node of videos.values()) node.pause();
-    update({ running: false, playStatus: "再生を停止しました。" });
+    update({ running: false, playBusy: false, playStatus: "再生を停止しました。" });
   }
   async function fullscreen() {
     try {
@@ -1023,6 +1081,7 @@ export function createRoomController() {
         });
     }, 500);
     window.addEventListener("pagehide", () => {
+      playRequest?.abort();
       display.close();
       clearInterval(heartbeatTimer);
       if (referenceImage) URL.revokeObjectURL(referenceImage.previewUrl);

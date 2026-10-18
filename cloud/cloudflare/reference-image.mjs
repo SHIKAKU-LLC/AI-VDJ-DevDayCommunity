@@ -84,11 +84,19 @@ async function readBody(request) {
 export async function referenceImageHttp(request, env) {
   const url = new URL(request.url), match = /^\/api\/rooms\/([a-f0-9-]{36})\/reference-image\/([a-f0-9]{64})$/.exec(url.pathname);
   if (!match) return null;
-  if (request.method !== 'PUT') return answer({error: 'METHOD_NOT_ALLOWED'}, 405);
-  if (url.origin !== env.PUBLIC_ORIGIN || request.headers.get('origin') !== env.PUBLIC_ORIGIN || url.search) return answer({error: 'DENIED'}, 403);
-  if (env.GENERATION_ENABLED !== 'true' || env.IMAGE_DIRECTION_ENABLED !== 'true' || !env.AI?.run) return answer({error: 'IMAGE_DIRECTION_DISABLED'}, 503);
+  // Client-declared format is diagnostic only. The payload is still validated
+  // independently as PNG. Never log URLs, filenames, hashes or credentials.
+  const hint = request.headers.get('x-vdj-source-format');
+  const sourceFormat = ['image/jpeg','image/png','image/webp','image/heic'].includes(hint) ? hint : 'unknown';
+  const result = (body, status=200) => {
+    console.info('vdj.reference-image', {status,sourceFormat,reason:body.error ?? 'ACCEPTED'});
+    return answer(body,status);
+  };
+  if (request.method !== 'PUT') return result({error: 'METHOD_NOT_ALLOWED'}, 405);
+  if (url.origin !== env.PUBLIC_ORIGIN || request.headers.get('origin') !== env.PUBLIC_ORIGIN || url.search) return result({error: 'DENIED'}, 403);
+  if (env.GENERATION_ENABLED !== 'true' || env.IMAGE_DIRECTION_ENABLED !== 'true' || !env.AI?.run) return result({error: 'IMAGE_DIRECTION_DISABLED'}, 503);
   const owner = request.headers.get('x-room-owner'), member = request.headers.get('authorization')?.match(/^Bearer ([a-f0-9]{64})$/)?.[1];
-  if (owner && member) return answer({error: 'DENIED'}, 403);
+  if (owner && member) return result({error: 'DENIED'}, 403);
   const [roomId, nonce] = match.slice(1);
   try {
     const row = await createGenerationStore({db: env.DB, eventId: env.EVENT_ID}).authorize(roomId, owner ?? member, !!owner);
@@ -105,7 +113,7 @@ export async function referenceImageHttp(request, env) {
     if (prior) {
       const value = JSON.parse(prior.document);
       if (value.image.sha256 !== hash || value.promptHash !== promptHash) fail('IMAGE_REFERENCE_CONFLICT');
-      if (value.state === 'READY') return answer({attached: true, sha256: hash});
+      if (value.state === 'READY') return result({attached: true, sha256: hash});
     }
     if (document.submissions.some(s => s.nonce === nonce && (s.participantId === 'owner' ? row.owner_proof : document.members.find(m => m.id === s.participantId)?.proof) === actorProof)) fail('IMAGE_REFERENCE_LOCKED');
     const path = 'rooms/' + await sha256(JSON.stringify(roomId)) + '/assets/' + hash + '.media';
@@ -124,11 +132,11 @@ export async function referenceImageHttp(request, env) {
     if (!await env.MEDIA.head(path)) await env.MEDIA.put(path, clean.bytes,
       {onlyIf: {etagDoesNotMatch: '*'}, httpMetadata: {contentType: 'image/png'}, customMetadata: {sha256: hash}});
     await q("update vdj_runtime_records set document=json_set(document,'$.state','READY'),version=version+1 where room_id=? and kind='image-reference' and record_id=?", roomId, id).run();
-    return answer({attached: true, sha256: hash}, 201);
+    return result({attached: true, sha256: hash}, 201);
   } catch (error) {
     const statuses = {ACTOR_DENIED: 403, ROOM_NOT_FOUND: 404, ACCEPTANCE_OFF: 403, IMAGE_TOO_LARGE: 413,
       IMAGE_FORMAT_INVALID: 415, IMAGE_REFERENCE_LIMIT: 429, IMAGE_REFERENCE_CONFLICT: 409, IMAGE_REFERENCE_LOCKED: 409};
-    const status = statuses[error.message]; return answer({error: status ? error.message : 'IMAGE_UPLOAD_UNAVAILABLE'}, status ?? 503);
+    const status = statuses[error.message]; return result({error: status ? error.message : 'IMAGE_UPLOAD_UNAVAILABLE'}, status ?? 503);
   }
 }
 

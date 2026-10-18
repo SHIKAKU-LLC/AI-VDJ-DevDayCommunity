@@ -60,6 +60,7 @@ for (const [name, bytes, type, filename] of [
     const env = browser(t);
     const result = await prepareReferenceImage(new File([bytes], filename, {type}));
     assert.equal(result.blob.type, 'image/png');
+    assert.equal(result.sourceFormat, filename.endsWith('jpeg') || filename.endsWith('jpg') ? 'image/jpeg' : filename.toLowerCase().endsWith('heic') || filename.endsWith('heif') ? 'image/heic' : filename.endsWith('webp') ? 'image/webp' : 'image/png');
     assert.equal(result.hash.length, 64);
     assert.equal(env.drawn[0].w, 1024);
     assert.equal(env.drawn[0].h, 768);
