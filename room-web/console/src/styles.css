@@ -851,7 +851,12 @@
     max-width: min(var(--container-xs), calc(100% - var(--credit-inset) * 2));
   }
   .stage-credit-name { @apply block text-xl leading-normal font-bold; }
-  .stage-credit-text { @apply block truncate; }
+  .stage-credit-text {
+    @apply block truncate;
+    /* Leave room for the neon halo while keeping long names on one line. */
+    margin: -10px -12px;
+    padding: 10px 12px;
+  }
   /* Claude Code's seven character colors, each with a brighter sweep color. */
   .stage-credit-letter[data-tone="0"] { --credit-base: #eb5f57; --credit-highlight: #fa9b93; }
   .stage-credit-letter[data-tone="1"] { --credit-base: #f58b57; --credit-highlight: #ffb989; }
@@ -860,7 +865,16 @@
   .stage-credit-letter[data-tone="4"] { --credit-base: #82aadc; --credit-highlight: #b4cdf0; }
   .stage-credit-letter[data-tone="5"] { --credit-base: #9b82c8; --credit-highlight: #c3b4e6; }
   .stage-credit-letter[data-tone="6"] { --credit-base: #c882b4; --credit-highlight: #e6b4d2; }
-  .stage-credit-letter { color: var(--credit-base); }
+  .stage-credit-letter {
+    color: var(--credit-base);
+    -webkit-text-stroke: .45px color-mix(in srgb, currentColor 35%, white);
+    paint-order: stroke fill;
+    text-shadow:
+      0 0 2px color-mix(in srgb, currentColor 25%, white),
+      0 0 5px currentColor,
+      0 0 10px color-mix(in srgb, currentColor 80%, transparent),
+      0 0 18px color-mix(in srgb, currentColor 50%, transparent);
+  }
   .stage-credit-letter[data-highlighted="true"] { color: var(--credit-highlight); }
   .transport-panel { @apply surface-panel grid items-center gap-4 border-t border-border p-4; }
   .transport-main { @apply grid min-w-0 grid-cols-[1fr_auto] items-center gap-3; }
@@ -895,7 +909,7 @@
 }
 @media (prefers-reduced-motion:reduce) { *,*::before,*::after { animation-duration:.01ms!important; transition-duration:.01ms!important; } }
 @media (forced-colors: active) {
-  .stage-credit-letter { color: CanvasText; }
+  .stage-credit-letter { color: CanvasText; -webkit-text-stroke: 0; text-shadow: none; }
   .stage-credit-letter[data-highlighted="true"] { color: CanvasText; }
 }
 
