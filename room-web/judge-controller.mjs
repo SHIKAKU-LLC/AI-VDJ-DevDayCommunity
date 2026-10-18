@@ -1033,7 +1033,7 @@ export function createRoomController() {
         await request(roomPath("generation"), {
           presetBatchId: view.presetBatchId,
         });
-        status("承認済みの待機音楽38本を準備しています。");
+        status("承認済みの待機音楽を準備しています。");
       }
     },
     copyInvitation,

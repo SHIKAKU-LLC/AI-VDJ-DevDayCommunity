@@ -9,7 +9,7 @@ export function imageDirectionSummary(plan) {
   if (typeof plan?.summary === 'string' && /[\u3040-\u30ff\u3400-\u9fff]/.test(plan.summary)) return plan.summary;
   const subject = {'figure':'被写体の表情や髪形、服装', 'illustration':'イラストの輪郭や画風',
     'pixel-art':'ドット絵の輪郭や色使い', 'object':'被写体の形や質感', 'abstract':'画像の形や色使い'}[plan?.kind] ?? '画像';
-  return `${subject}の特徴を残し、サイケデリックな空間の6つの場面へ展開します。`;
+  return `${subject}の特徴を残し、サイケデリックな空間の映像へ展開します。`;
 }
 
 // The vision model observes source material only. Its result cannot select an
