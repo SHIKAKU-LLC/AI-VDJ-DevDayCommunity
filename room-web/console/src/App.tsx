@@ -29,6 +29,7 @@ import {
 import { createRoomController } from "../../judge-controller.mjs";
 import { REFERENCE_IMAGE_ACCEPT } from "../../judge-image.mjs";
 import { Button } from "./components/ui/button";
+import { CreditName } from "./components/credit-name";
 import {
   Card,
   CardHeader,
@@ -798,10 +799,9 @@ export function App({
                     </div>
                   )}
                   {state.credit && (
-                    <div className="stage-credit">
-                      <span>このアイデアから生まれました</span>
-                      <strong>{state.credit}</strong>
-                    </div>
+                    <aside className="stage-credit" aria-label="この曲のアイデア投稿者">
+                      <CreditName name={state.credit} />
+                    </aside>
                   )}
                 </div>
                 <div className="transport-panel">
