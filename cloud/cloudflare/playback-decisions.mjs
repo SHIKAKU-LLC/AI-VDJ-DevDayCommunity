@@ -58,7 +58,9 @@ export async function requestPlaybackDecision(plan, {
         headers,
         body: JSON.stringify(decisionRequest(plan)),
         signal: controller.signal,
-        redirect: "error",
+        // workerd rejects "error" before sending. Return redirects unchanged
+        // so the non-2xx guard rejects them without forwarding credentials.
+        redirect: "manual",
       });
       if (!response.ok) return { status: "unavailable", httpStatus: response.status };
       phase = "response";

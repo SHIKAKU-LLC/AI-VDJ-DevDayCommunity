@@ -176,6 +176,19 @@ test("HTTP failures expose only status and do not read the provider error body",
   assert.deepEqual(result, {status: "unavailable", httpStatus: 401});
 });
 
+test("Workers-compatible redirect handling never follows a redirect with credentials", async () => {
+  const plan = playbackPlan(jobs, afterFirst());
+  let calls = 0;
+  const result = await requestPlaybackDecision(plan, {key: "placeholder", fetchImpl: async (url, init) => {
+    calls++;
+    assert.equal(url, "https://api.openai.com/v1/decisions");
+    assert.equal(init.redirect, "manual");
+    return new Response(null, {status: 307, headers: {location: "https://example.invalid/redirect"}});
+  }});
+  assert.deepEqual(result, {status: "unavailable", httpStatus: 307});
+  assert.equal(calls, 1);
+});
+
 test("request setup and transport failures return fixed phases without error messages", async () => {
   const plan = playbackPlan(jobs, afterFirst());
   let calls = 0;
