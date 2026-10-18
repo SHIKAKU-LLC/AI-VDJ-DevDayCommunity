@@ -132,6 +132,8 @@ test('new submissions generate only a visual and remain eligible without an audi
     assert.equal(f.posts.length,1);assert.equal(f.posts[0].input.duration,12);assert.match(f.posts[0].url,/text-to-video/);
     const job=(await f.store.records(f.room))[0];assert.equal(job.state,'READY');assert.equal(job.assets.audio,undefined);
     assert.equal(eligibleSets([job],playbackState()).length,1);assert.equal(job.profile,'visual-12-v1');
+    const playback=await f.coordinator.playback(f.room,{action:'view'});
+    assert.deepEqual(playback.queue.map(j=>j.id),[job.id]);
   }finally{f.sqlite.close();}
 });
 test('late heartbeats and start requests cannot revive a stopped music run',async()=>{
