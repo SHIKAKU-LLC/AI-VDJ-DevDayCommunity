@@ -97,6 +97,13 @@ export function createAudienceRoomClass(Base) {
       await Promise.all(
         selected.map(async (id) => {
           try {
+            // Legacy jobs keep their private provider handles in GenerationRoom.
+            // Retrying an old receipt must never redispatch its paid requests.
+            const prior = records.find((job) => job.id === id);
+            if (prior && prior.profile !== "audience-12-v1") {
+              finished.push(id);
+              return;
+            }
             await this.env.GENERATION_JOBS.getByName(roomId + ":" + id).enqueue(
               roomId,
               [id],

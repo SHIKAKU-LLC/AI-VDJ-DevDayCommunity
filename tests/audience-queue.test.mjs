@@ -332,6 +332,49 @@ test("30 simultaneous participants persist full prompts outside the room and dis
     f.sqlite.close();
   }
 });
+test("retrying a legacy receipt never redispatches paid requests into a new job object", async () => {
+  const f = await fixture();
+  try {
+    const payload = { nonce: crypto.randomUUID(), prompt: "従来の投稿" };
+    const receipt = await f.call("submit", f.owner, payload);
+    const legacy = {
+      id: receipt.submissionId,
+      roomId: f.room.roomId,
+      state: "GENERATING",
+      duration: 60,
+    };
+    f.sqlite
+      .prepare(
+        "insert into vdj_runtime_records values(?,'cloud-generation',?,0,?)",
+      )
+      .run(f.room.roomId, legacy.id, JSON.stringify(legacy));
+    f.sqlite
+      .prepare("insert into vdj_budget_reservations values(?,?,?,?,?)")
+      .run(f.env.EVENT_ID, f.room.roomId, legacy.id, 1500, Date.now());
+    assert.equal(
+      (await f.call("submit", f.owner, payload)).submissionId,
+      legacy.id,
+    );
+    await f.coordinator.alarm();
+    assert.equal(f.pool.size, 0);
+    assert.equal(f.posted.length, 0);
+    assert.equal(
+      f.sqlite.prepare("select sum(cents) n from vdj_budget_reservations").get()
+        .n,
+      1500,
+    );
+    assert.deepEqual(
+      JSON.parse(
+        f.sqlite
+          .prepare("select document from vdj_runtime_records where record_id=?")
+          .get(legacy.id).document,
+      ),
+      legacy,
+    );
+  } finally {
+    f.sqlite.close();
+  }
+});
 test("fair playback prioritises first adoption, skips unfinished work and counts a start exactly once across restart", () => {
   const s = playbackState(),
     a = job("a", "frequent", 1),
