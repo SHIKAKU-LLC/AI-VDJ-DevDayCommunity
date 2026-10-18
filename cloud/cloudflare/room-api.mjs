@@ -110,6 +110,7 @@ export function createD1RoomRpc({db, eventId, maximumParticipants = 64, maximumS
         if (document.submissions.length >= maximumSubmissions) fail('SUBMISSION_CAP');
         receipt = {roomId, sessionId, nonce: payload.nonce, submissionId: crypto.randomUUID(), participantId: who.id,
           nickname: who.owner ? payload.nickname : who.nickname, prompt: payload.prompt, createdAtMs: row.clock_ms,
+          submissionOrder: document.submissions.length + 1,
           state: 'QUEUED', generationId: null, controlVersion: document.controlRevision,
           reason: 'PROVIDER_NOT_CONNECTED', mode: 'collect', jobs: [], kind: 'submission'};
         document.submissions.push(receipt);

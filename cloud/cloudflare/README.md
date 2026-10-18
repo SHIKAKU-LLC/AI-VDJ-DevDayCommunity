@@ -100,10 +100,14 @@ Mac接続ページ・ローカル接続用の通信許可・リポジトリ内�
 | `VDJ_D1_ID` | 専用D1のUUID |
 | `VDJ_EVENT_ID` | 公開期間・人数・予算を管理するイベントID |
 | `VDJ_GENERATION_ENABLED` | 承認後に`true`。既定は`false` |
+| `VDJ_DECISIONS_ENABLED` | 再生候補のDecisions API連携。既定は`false`。実行時Secret `OPENAI_API_KEY`も必要 |
 
 これらは接続先・動作の設定であり、APIキーを入れない。
 生成サービスの秘密値は実行時Secretの`FAL_KEY`に登録する。画面用ファイルやD1のルーム文書には保存しない。
 利用者にAPIキーの入力やMacへの接続は求めない。
+
+Decisions連携もサーバー側だけで動く。投稿順と一巡を維持し、同じ参加者の繰り返し採用を調整する。
+設定・呼出回数の上限・確認方法は[Decisionsの説明](../../docs/decisions-playback.md)を参照。
 
 Workerは同一オリジンのAPIだけを受付し、ルームの権限は個別のランダム値で確認する。
 D1には権限のハッシュを保存し、公開レスポンスから内部の操作記録を除く。

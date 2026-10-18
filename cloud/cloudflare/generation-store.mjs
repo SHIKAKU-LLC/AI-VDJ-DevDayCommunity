@@ -58,6 +58,7 @@ export function createGenerationStore({db, eventId, policy = DJ_DIRECTION, norma
         on conflict(event_id,plan_id) do nothing`, submissionId, eventId, roomId).run();
       if (!await query('select plan_id from vdj_budget_reservations where event_id=? and room_id=? and plan_id=?', eventId, roomId, submissionId).first()) fail('JUDGE_BUDGET');
       const job = {id: submissionId, roomId, prompt: submission.prompt, nickname: submission.nickname,
+        submittedAtMs: submission.createdAtMs, submissionOrder: submission.submissionOrder,
         participantId: submission.participantId, state: 'QUEUED', duration: policy.audioSeconds, videoDuration: policy.videoSeconds, profile: policy.audioSeconds === 12 ? 'audience-12-v1' : 'legacy', sceneCount: policy.sceneCount, mediaProfile: policy.mediaProfile, createdAtMs: Date.now(), maximumCents: policy.maximumCents,
         ...(reference ? {reference, direction: {state: 'QUEUED'}} : {})};
       await query(`insert into vdj_runtime_records(room_id,kind,record_id,version,document) values(?,'cloud-generation',?,0,?)
@@ -67,7 +68,7 @@ export function createGenerationStore({db, eventId, policy = DJ_DIRECTION, norma
     async save(job) {
       // Provider handles remain in private DO storage. Browser-visible D1 records
       // contain only safe progress, private R2 descriptors and the submitted text.
-      const safe = Object.fromEntries(['id', 'roomId', 'participantId', 'profile', 'readyAtMs', 'prompt', 'nickname', 'state', 'duration', 'videoDuration', 'sceneCount', 'mediaProfile', 'createdAtMs', 'maximumCents', 'reason', 'failures', 'assets', 'quality', 'providerReceipts', 'progress', 'timings', 'reference', 'direction'].filter(k => job[k] !== undefined).map(k => [k, job[k]]));
+      const safe = Object.fromEntries(['id', 'roomId', 'participantId', 'profile', 'readyAtMs', 'submittedAtMs', 'submissionOrder', 'prompt', 'nickname', 'state', 'duration', 'videoDuration', 'sceneCount', 'mediaProfile', 'createdAtMs', 'maximumCents', 'reason', 'failures', 'assets', 'quality', 'providerReceipts', 'progress', 'timings', 'reference', 'direction'].filter(k => job[k] !== undefined).map(k => [k, job[k]]));
       await query("update vdj_runtime_records set document=?,version=version+1 where room_id=? and kind='cloud-generation' and record_id=?", JSON.stringify(safe), job.roomId, job.id).run();
     },
   };
