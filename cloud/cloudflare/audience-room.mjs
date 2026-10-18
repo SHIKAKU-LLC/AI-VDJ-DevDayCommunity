@@ -31,6 +31,7 @@ export function createAudienceRoomClass(Base) {
         options.duration,
         !!options.reference,
         !!options.audioOnly,
+        !!options.videoOnly,
       ]);
       const cached = this.prices.get(key);
       if (cached && cached.until > Date.now()) return cached.promise;
@@ -91,7 +92,7 @@ export function createAudienceRoomClass(Base) {
       const records = await store.records(roomId);
       const active = records.filter(
         (j) =>
-          j.profile === "audience-12-v1" &&
+          ["audience-12-v1","visual-12-v1"].includes(j.profile) &&
           !["READY", "FAILED", "NEEDS_REVIEW"].includes(j.state),
       ).length;
       const selected = pending.slice(0, Math.max(0, 30 - active));
@@ -102,7 +103,7 @@ export function createAudienceRoomClass(Base) {
             // Legacy jobs keep their private provider handles in GenerationRoom.
             // Retrying an old receipt must never redispatch its paid requests.
             const prior = records.find((job) => job.id === id);
-            if (prior && prior.profile !== "audience-12-v1") {
+            if (prior && !["audience-12-v1","visual-12-v1"].includes(prior.profile)) {
               finished.push(id);
               return;
             }

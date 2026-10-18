@@ -64,9 +64,9 @@ export function createFalProvider({key, fetchImpl = fetch} = {}) {
     return url.href;
   }
   return {
-    async preflight({duration = 12, reference = false, audioOnly = false} = {}) {
+    async preflight({duration = 12, reference = false, audioOnly = false, videoOnly = false} = {}) {
       if (![12, 60].includes(duration)) throw Error('PROVIDER_DURATION_INVALID');
-      const models = audioOnly ? {initial:MODELS.initial} : reference ? {...MODELS, video: REFERENCE_VIDEO_MODEL} : MODELS;
+      const models = videoOnly ? {video:reference ? REFERENCE_VIDEO_MODEL : MODELS.video} : audioOnly ? {initial:MODELS.initial,...(duration===60?{continuation:MODELS.continuation}:{})} : reference ? {...MODELS, video: REFERENCE_VIDEO_MODEL} : MODELS;
       // The runtime uses a generation-only key. Billing is verified by the
       // operator; D1 reserves the event and room ceilings before paid requests.
       const price = await json('https://api.fal.ai/v1/models/pricing?endpoint_id=' + encodeURIComponent(Object.values(models).join(',')));

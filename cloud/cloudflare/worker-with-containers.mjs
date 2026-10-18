@@ -6,9 +6,10 @@ import {stagingCheck} from './staging-check-http.mjs';
 import worker from './worker.mjs';
 import {DurableObject} from 'cloudflare:workers';
 import {createGenerationClass} from './generation-runtime.mjs';
+import {createSoundtrackClass} from './soundtrack-runtime.mjs';
 
 export class NativeProcessor extends createNativeContainerClass(Container) {}
-export class GenerationRoom extends createGenerationClass(DurableObject) {}
+export class GenerationRoom extends createSoundtrackClass(DurableObject) {}
 export default {
   async fetch(request, env) {
     try { return await stagingCheck(request, env) ?? await worker.fetch(request, env); }

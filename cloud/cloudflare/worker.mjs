@@ -3,6 +3,7 @@ import {createCloudflareRoomApi} from './http.mjs';
 import {createProviderDelivery} from './provider-delivery.mjs';
 import {generationHttp, sceneLibraryHttp} from './generation-http.mjs';
 import {referenceImageHttp} from './reference-image.mjs';
+import {soundtrackHttp} from './soundtrack-http.mjs';
 
 const page = /^\/(?:room\/?|join\/[a-f0-9-]{36}\/?)?$/;
 const policy = "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' blob:; media-src 'self' blob:; connect-src 'self'; frame-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'";
@@ -29,6 +30,8 @@ export default {
         } catch { return secured(new Response(null, {status: 404, headers: {'cache-control': 'no-store'}}), url.pathname); }
       }
       if (url.pathname.startsWith('/api/')) {
+        const soundtrack=await soundtrackHttp(request,env);
+        if(soundtrack)return secured(soundtrack,url.pathname);
         const audience = await audienceHttp(request,env);
         if (audience) return secured(audience,url.pathname);
         const reference = await referenceImageHttp(request, env);
@@ -40,6 +43,7 @@ export default {
         const api = createCloudflareRoomApi({db: env.DB, eventId: env.EVENT_ID, origin: env.PUBLIC_ORIGIN,
           generationEnabled: env.GENERATION_ENABLED === 'true' && !!env.FAL_KEY && !!env.GENERATION,
           imageDirectionEnabled: env.IMAGE_DIRECTION_ENABLED === 'true' && !!env.AI?.run,
+          independentAudio: env.INDEPENDENT_AUDIO === 'true',
           audienceRooms: env.AUDIENCE_MODE === 'true' ? env.AUDIENCE_ROOMS : undefined});
         return secured(await api(request), url.pathname);
       }

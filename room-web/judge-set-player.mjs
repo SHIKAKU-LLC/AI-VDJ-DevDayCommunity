@@ -9,6 +9,7 @@ export function createSetPlayer({
   onAbandon = () => {},
   setTimer = setInterval,
   clearTimer = clearInterval,
+  audioEnabled = true,
 }) {
   let starting = false,
     running = false,
@@ -23,7 +24,8 @@ export function createSetPlayer({
     scheduled = [],
     history = [];
   function schedule(set, at) {
-    if (!set?.buffer) return false;
+    if (!set || audioEnabled && !set.buffer) return false;
+    if (audioEnabled) {
     const source = context.createBufferSource(),
       gain = context.createGain();
     source.buffer = set.buffer;
@@ -41,6 +43,7 @@ export function createSetPlayer({
       source.disconnect();
       gain.disconnect();
     };
+    }
     scheduled.push({ id: set.id, start: at, end: at + 12, set });
     if (scheduled.length > 100) scheduled.shift();
     nextAt = at + 12;

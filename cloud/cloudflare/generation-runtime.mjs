@@ -47,9 +47,9 @@ function summarize(job) {
     return;
   }
   const videos = sceneKeys(job).map(key => job.parts[key]);
-  if (job.parts.audio.state === 'READY' && (job.audioOnly || videos.some(p => p.state === 'READY'))) {
+  if ((job.videoOnly || job.parts.audio?.state === 'READY') && (job.audioOnly || videos.some(p => p.state === 'READY'))) {
     job.state = 'READY'; job.readyAtMs ??= Math.max(...parts.filter(p => p.readyAtMs).map(p => p.readyAtMs), Date.now()); delete job.reason;
-  } else if (parts.every(terminal) || ['FAILED', 'NEEDS_REVIEW'].includes(job.parts.audio.state)) {
+  } else if (parts.every(terminal) || ['FAILED', 'NEEDS_REVIEW'].includes(job.parts.audio?.state)) {
     const problem = parts.find(p => p.state === 'NEEDS_REVIEW') ?? parts.find(p => p.state === 'FAILED');
     job.state = problem?.state ?? 'FAILED'; job.reason = problem?.reason ?? 'GENERATION_FAILED';
   } else job.state = 'GENERATING';
@@ -62,7 +62,7 @@ export function createGenerationClass(Base) {
   return class GenerationRoom extends Base {
     constructor(ctx, env) { super(ctx, env); this.ctx = ctx; this.env = env; this.serial = Promise.resolve(); }
     locked(fn) { const task = this.serial.then(fn); this.serial = task.catch(() => {}); return task; }
-    store() { return createGenerationStore({db: this.env.DB, eventId: this.env.EVENT_ID, normalized: this.env.AUDIENCE_MODE === 'true'}); }
+    store() { return createGenerationStore({db: this.env.DB, eventId: this.env.EVENT_ID, normalized: this.env.AUDIENCE_MODE === 'true', independentAudio:this.env.INDEPENDENT_AUDIO === 'true'}); }
     async purgeClosedRoom(roomId) {
       return this.locked(async () => {
         const requested = await this.store().purgeRequested(roomId);
@@ -277,7 +277,7 @@ export function createGenerationClass(Base) {
         await Promise.all(directing.map(async job => {
           if (job.reference && job.direction?.state === 'QUEUED') {
             try {
-              if (!preflights.has('reference')) preflights.set('reference', provider.preflight({duration: job.duration, reference: true}));
+              if (!preflights.has('reference')) preflights.set('reference', provider.preflight({duration: job.duration, reference: true, videoOnly:!!job.videoOnly}));
               await preflights.get('reference');
             } catch (error) { job.direction = {state: 'FAILED', reason: safeReason(error)}; }
           }
@@ -294,10 +294,10 @@ export function createGenerationClass(Base) {
             if (part.state === 'SUBMITTING') {
               part.state = 'NEEDS_REVIEW'; part.reason = 'PROVIDER_SUBMISSION_UNCERTAIN';
             } else if (part.state === 'QUEUED') {
-              if (['FAILED', 'NEEDS_REVIEW'].includes(job.parts.audio.state)) { part.state = 'CANCELLED'; }
+              if (['FAILED', 'NEEDS_REVIEW'].includes(job.parts.audio?.state)) { part.state = 'CANCELLED'; }
               else {
-                const preflightKey = `${job.duration}:${!!job.reference}`;
-                if (!preflights.has(preflightKey)) preflights.set(preflightKey, provider.preflight({duration: job.duration, reference: !!job.reference, audioOnly:!!job.audioOnly}));
+                const preflightKey = `${job.duration}:${!!job.reference}:${!!job.audioOnly}:${!!job.videoOnly}`;
+                if (!preflights.has(preflightKey)) preflights.set(preflightKey, provider.preflight({duration: job.duration, reference: !!job.reference, audioOnly:!!job.audioOnly,videoOnly:!!job.videoOnly}));
                 await preflights.get(preflightKey);
                 let contextUrl;
                 if (kind === 'audio' && context) contextUrl = (await createProviderDelivery({db: this.env.DB,

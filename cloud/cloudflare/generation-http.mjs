@@ -24,7 +24,7 @@ export async function generationHttp(request, env) {
     }
     const room = await store.authorize(roomId, owner ?? member, !!owner || request.method === 'POST' || route === 'generated-media');
     if (route === 'generation' && request.method === 'GET' && !jobId) {
-      let jobs = await store.records(roomId);
+      let jobs = (await store.records(roomId)).filter(j=>j.profile!=='soundtrack-60-v1');
       if (!owner) {
         const proof = await sha256(member), document = JSON.parse(room.document);
         if(env.AUDIENCE_MODE==='true')document.submissions=await readSubmissionRecords(env.DB,roomId,document);
@@ -50,7 +50,7 @@ export async function generationHttp(request, env) {
           input.retryPreparation.every(v => /^[a-f0-9-]{36}$/.test(v))) {
         if(env.AUDIENCE_MODE==='true') {
           const jobs=await store.records(roomId); let resumed=0;
-          for(const id of input.retryPreparation) { const job=jobs.find(j=>j.id===id); const runtime=job?.profile==='audience-12-v1'?env.GENERATION_JOBS.getByName(roomId+':'+id):env.GENERATION.getByName(roomId); resumed+=(await runtime.retryPreparation(roomId,[id])).resumed; }
+          for(const id of input.retryPreparation) { const job=jobs.find(j=>j.id===id); const runtime=['audience-12-v1','visual-12-v1'].includes(job?.profile)?env.GENERATION_JOBS.getByName(roomId+':'+id):env.GENERATION.getByName(roomId); resumed+=(await runtime.retryPreparation(roomId,[id])).resumed; }
           return answer({resumed},202);
         }
         return answer(await env.GENERATION.getByName(roomId).retryPreparation(roomId, input.retryPreparation), 202);
