@@ -844,39 +844,10 @@
   .stage-empty>svg { @apply size-16 text-stone-500; }
   .stage-empty .text-muted-foreground { @apply text-stone-400; }
   .stage-credit {
-    --credit-inset: calc(var(--spacing) * 3);
-    @apply absolute w-max rounded-2xl border border-white/15 bg-black/80 px-4 py-3 text-white shadow-lg backdrop-blur-md;
-    bottom: var(--credit-inset);
-    left: var(--credit-inset);
-    max-width: min(var(--container-xs), calc(100% - var(--credit-inset) * 2));
+    @apply absolute bottom-5 left-5 w-max rounded-xl bg-black/60 px-3 py-2 text-white;
+    max-width: calc(100% - 2.5rem);
   }
-  .stage-credit-name { @apply block text-xl leading-normal font-bold; }
-  .stage-credit-text {
-    @apply block truncate;
-    /* Leave room for the neon halo while keeping long names on one line. */
-    margin: -10px -12px;
-    padding: 10px 12px;
-  }
-  /* Claude Code's seven character colors, each with a brighter sweep color. */
-  .stage-credit-letter[data-tone="0"] { --credit-base: #eb5f57; --credit-highlight: #fa9b93; }
-  .stage-credit-letter[data-tone="1"] { --credit-base: #f58b57; --credit-highlight: #ffb989; }
-  .stage-credit-letter[data-tone="2"] { --credit-base: #fac35f; --credit-highlight: #ffe19b; }
-  .stage-credit-letter[data-tone="3"] { --credit-base: #91c882; --credit-highlight: #b9e6b4; }
-  .stage-credit-letter[data-tone="4"] { --credit-base: #82aadc; --credit-highlight: #b4cdf0; }
-  .stage-credit-letter[data-tone="5"] { --credit-base: #9b82c8; --credit-highlight: #c3b4e6; }
-  .stage-credit-letter[data-tone="6"] { --credit-base: #c882b4; --credit-highlight: #e6b4d2; }
-  .stage-credit-letter {
-    color: var(--credit-base);
-    -webkit-text-stroke: .45px color-mix(in srgb, currentColor 35%, white);
-    paint-order: stroke fill;
-    /* Match the selected 180% glow in the local preview. */
-    text-shadow:
-      0 0 3.6px color-mix(in srgb, currentColor 25%, white),
-      0 0 9px currentColor,
-      0 0 18px color-mix(in srgb, currentColor 80%, transparent),
-      0 0 32.4px color-mix(in srgb, currentColor 50%, transparent);
-  }
-  .stage-credit-letter[data-highlighted="true"] { color: var(--credit-highlight); }
+  .stage-credit-name { @apply block truncate text-sm font-bold; }
   .transport-panel { @apply surface-panel grid items-center gap-4 border-t border-border p-4; }
   .transport-main { @apply grid min-w-0 grid-cols-[1fr_auto] items-center gap-3; }
   .transport-buttons { @apply flex flex-wrap items-center gap-2; }
@@ -922,8 +893,6 @@
 
 /* Use the console width, not the viewport: the sidebar also takes space. */
 @container (min-width: 44rem) {
-  .stage-credit { --credit-inset: calc(var(--spacing) * 5); }
-  .stage-credit-name { @apply text-2xl; }
   .transport-panel { @apply grid-cols-[minmax(0,1fr)_14rem]; }
   .master-output { @apply border-t-0 border-l border-border pt-0 pl-4; }
 }
@@ -957,5 +926,5 @@
   left: clamp(1rem, 4vw, 4rem);
   right: clamp(1rem, 4vw, 4rem);
 }
-.display-screen .stage-credit-name { font-size: clamp(1.5rem, 3vw, 3rem); }
+.display-screen .stage-credit-name { font-size: clamp(1rem, 2vw, 1.5rem); }
 .display-screen:fullscreen { cursor: none; }
