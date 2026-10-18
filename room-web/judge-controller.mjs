@@ -1,5 +1,6 @@
 import qrcode from "./qr-encoder.mjs";
 import { createSetPlayer } from "./judge-set-player.mjs";
+import { createSoundtrackPlayer } from "./judge-soundtrack.mjs";
 import { createAudioReactiveVj } from "./judge-vj.mjs";
 import { prepareReferenceImage, REFERENCE_IMAGE_EXTENSIONS } from "./judge-image.mjs";
 import { createMasterOutput } from "./judge-output.mjs";
@@ -36,6 +37,8 @@ export function createRoomController() {
     gainDb: 0,
     muted: false,
     elapsed: 0,
+    independentAudio: false,
+    musicStatus: "",
   };
   const listeners = new Set();
   const update = (patch) => {
@@ -55,7 +58,7 @@ export function createRoomController() {
   const labels = {
     QUEUED: "生成の準備中",
     DIRECTING: "画像の特徴から演出を作成中",
-    GENERATING: "音楽・映像を並行生成中",
+    GENERATING: "生成中",
     AUDIO_SUBMITTING: "音楽を依頼中",
     AUDIO_WAIT: "音楽を生成中",
     AUDIO_READY: "音楽が完成",
@@ -149,6 +152,8 @@ export function createRoomController() {
     candidateLoading = null,
     heartbeatTimer;
   let playRequest;
+  let music, musicRun, musicLoading=false, musicPollAt=0;
+  const musicLoaded=new Set();
   const emergencySeen = new Set();
   const reservedForPlayback = new Set();
   const failedUntil = new Map();
@@ -246,15 +251,14 @@ export function createRoomController() {
       tracks: jobs
         .filter(
           (job) =>
-            job.profile === "audience-12-v1" &&
-            job.assets?.audio &&
+            ["audience-12-v1","visual-12-v1"].includes(job.profile) &&
             job.assets?.video,
         )
         .map((job) => ({
           id: job.id,
           nickname: job.nickname,
           prompt: job.prompt,
-          duration: job.assets.audio.duration,
+          duration: job.assets.video.duration,
         })),
     });
   }
@@ -272,6 +276,11 @@ export function createRoomController() {
       master = createMasterOutput(context);
       meterNode.connect(master.input);
       master.set(view.gainDb, view.muted);
+      if(view.independentAudio) music=createSoundtrackPlayer({context,destination:meterNode,onTrack:track=>{
+        if(track.kind==='preset')return;
+        update({musicStatus:"60秒の音楽を連続再生中"});
+        void pollMusic('played',track.id);
+      }});
       meterNode.port.onmessage = (event) => {
         meter = event.data;
       };
@@ -293,6 +302,7 @@ export function createRoomController() {
       };
       player = createSetPlayer({
         context,
+        audioEnabled: !view.independentAudio,
         destination: meterNode,
         choose: chooseSet,
         fallback: standbySet,
@@ -336,6 +346,7 @@ export function createRoomController() {
       });
       window.__vdjPlayback = () => ({
         ...player.read(),
+        ...(music ? {music:music.read()} : {}),
         decodeFailures,
         meter: { ...meter },
         visualizer: vj?.read(),
@@ -378,7 +389,7 @@ export function createRoomController() {
   function updatePlayButton() {
     if (!player) return;
     player.setReady(loaded.size);
-    const ready = loaded.size > 0;
+    const ready = loaded.size > 0 && (!music || music.read().ready);
     update({ ready, running: player.read().running });
     if (ready && !player.read().running && !view.playBusy)
       update({ playStatus: "音楽と映像の準備完了。再生できます。" });
@@ -463,9 +474,9 @@ export function createRoomController() {
   }
   function load(job) {
     if (
-      job.profile !== "audience-12-v1" ||
+      !["audience-12-v1",...(view.independentAudio?["visual-12-v1"]:[])].includes(job.profile) ||
       !["READY", "PLAYED"].includes(job.state) ||
-      job.assets?.audio?.duration !== 12 ||
+      (!view.independentAudio && job.assets?.audio?.duration !== 12) ||
       job.assets?.video?.duration !== 12
     )
       return;
@@ -534,15 +545,16 @@ export function createRoomController() {
         setBytes(set, "video"),
       );
       const [buffer] = await Promise.all([
-        setBytes(set, "audio").then(bytes => context.decodeAudioData(bytes)),
+        view.independentAudio && set.kind!=='preset' ? Promise.resolve(null) : setBytes(set, "audio").then(bytes => context.decodeAudioData(bytes)),
         prepareScene(set.id + ":video"),
       ]);
       if (
-        Math.abs(buffer.duration - 12) > 0.05 ||
-        buffer.numberOfChannels !== 2
+        buffer && (Math.abs(buffer.duration - 12) > 0.05 ||
+        buffer.numberOfChannels !== 2)
       )
         throw Error("MEDIA_INVALID");
       loaded.set(set.id, { ...set, buffer });
+      if(buffer && set.kind==='preset')music?.setFallback({...set,buffer});
       updatePlayButton();
     } catch {
       decodeFailures++;
@@ -683,6 +695,7 @@ export function createRoomController() {
     update({
       generation: capabilities.generation,
       imageEnabled: !!capabilities.cloud?.imageDirection,
+      independentAudio: !!capabilities.cloud?.independentAudio,
     });
   }
   async function recheck() {
@@ -701,6 +714,7 @@ export function createRoomController() {
     if (session.owner) void loadLibrary().then(refreshCandidates).catch(() => {
       if (!view.ready && !view.playBusy) update({playStatus:messages.PRESETS_UNAVAILABLE});
     });
+    if(session.owner && view.running && view.independentAudio && Date.now()>musicPollAt)void pollMusic();
     try {
       const [nextSnapshot, result] = await Promise.all([request(roomPath()), request(roomPath("generation"))]);
       snapshot = nextSnapshot;
@@ -952,6 +966,29 @@ export function createRoomController() {
       if (signal.aborted) cancel();
     });
   }
+  async function pollMusic(action='pulse',id) {
+    if(!music || !player?.read().running || action==='pulse' && musicLoading)return;
+    if(action==='pulse')musicLoading=true;
+    musicPollAt=Date.now()+8000;
+    try {
+      const result=await request(roomPath('soundtrack'),{action,clientId,runId:musicRun,...(id?{id}:{})});
+      if(!player.read().running)return;
+      if(result.reason)update({musicStatus:'新しい音楽の生成を確認中。準備済みの音楽で再生を続けます。'});
+      else if(!result.songs.some(s=>s.state==='READY'))update({musicStatus:'60秒の音楽を生成中。待機音楽でつないでいます。'});
+      for(const song of result.songs.filter(s=>s.state==='READY' && s.assets?.audio?.duration===60)) {
+        if(musicLoaded.has(song.id))continue;
+        musicLoaded.add(song.id);
+        try {
+          const bytes=await fetchAsset(song,'audio');
+          const buffer=await context.decodeAudioData(bytes);
+          if(Math.abs(buffer.duration-60)>.05 || buffer.numberOfChannels!==2)throw Error('MEDIA_INVALID');
+          music.add({...song,buffer});
+        }catch{musicLoaded.delete(song.id);}
+      }
+    }catch{
+      update({musicStatus:'音楽の生成状況を再確認しています。準備済みの音楽で再生を続けます。'});
+    }finally{if(action==='pulse')musicLoading=false;}
+  }
   async function play() {
     if (!session?.owner || view.playBusy || view.running) return;
     const attempt = new AbortController();
@@ -973,6 +1010,8 @@ export function createRoomController() {
       meterNode.port.postMessage("start");
       await player.start();
       if (!player.read().running) return;
+      music?.start();
+      if(music){musicRun=crypto.randomUUID();void pollMusic('start');}
       heartbeatTimer = setInterval(
         () =>
           request(roomPath("playback"), { action: "heartbeat", clientId })
@@ -999,10 +1038,11 @@ export function createRoomController() {
   function stop() {
     playRequest?.abort();
     clearInterval(heartbeatTimer);
-    if (session?.owner)
-      void request(roomPath("playback"), { action: "release", clientId }).catch(
-        () => {},
-      );
+    if (session?.owner) {
+      const ending=music && musicRun ? request(roomPath('soundtrack'),{action:'stop',clientId,runId:musicRun}).catch(()=>{}) : Promise.resolve();
+      void ending.then(()=>request(roomPath("playback"),{action:"release",clientId})).catch(()=>{});
+    }
+    music?.stop();
     player?.stop();
     scenePlayer?.stop();
     vj?.stop();
@@ -1086,6 +1126,7 @@ export function createRoomController() {
       clearInterval(heartbeatTimer);
       if (referenceImage) URL.revokeObjectURL(referenceImage.previewUrl);
       player?.stop();
+      music?.stop();
       scenePlayer?.stop();
       for (const url of sceneUrls.values()) URL.revokeObjectURL(url);
     });

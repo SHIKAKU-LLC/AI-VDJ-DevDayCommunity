@@ -14,9 +14,9 @@ function fifoSets(jobs, state) {
   return jobs
     .filter(
       (j) =>
-        j.profile === "audience-12-v1" &&
+        ["audience-12-v1","visual-12-v1"].includes(j.profile) &&
         j.state === "READY" &&
-        j.assets?.audio?.duration === 12 &&
+        (j.profile === "visual-12-v1" || j.assets?.audio?.duration === 12) &&
         j.assets?.video?.duration === 12 &&
         !state.played.includes(j.id),
     )

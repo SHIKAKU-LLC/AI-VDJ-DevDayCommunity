@@ -248,10 +248,10 @@ function Composer({
   return (
     <Panel
       title="ひとことで、次の熱狂を。"
-      description="音楽も映像も、同じアイデアから。"
+      description={state.independentAudio ? "あなたのアイデアを12秒の映像に。音楽は独立して流れ続けます。" : "音楽も映像も、同じアイデアから。"}
     >
       <Field>
-        <FieldLabel htmlFor="prompt">音楽と映像のイメージ</FieldLabel>
+        <FieldLabel htmlFor="prompt">{state.independentAudio ? "映像のイメージ" : "音楽と映像のイメージ"}</FieldLabel>
         <PromptInput
           onSubmit={async (event) => {
             event.preventDefault();
@@ -314,7 +314,7 @@ function Composer({
               disabled={busy || state.imageError || !prompt.trim() || full || !state.accepting}
               aria-label={
                 state.role === "owner"
-                  ? "音楽・映像を生成する"
+                  ? state.independentAudio ? "映像を生成する" : "音楽・映像を生成する"
                   : "このアイデアを送る"
               }
             >
@@ -524,7 +524,7 @@ function Invitation({
         </Button>
       </div>
       <p className="text-copy-13 text-muted-foreground">
-        生成費用は運営側が負担します。参加者への請求はありません。1投稿は音楽・映像それぞれ12秒。初採用・採用回数の少ない人を優先します。
+        生成費用は運営側が負担します。参加者への請求はありません。{state.independentAudio ? "1投稿は12秒の映像。音楽は60秒単位で自動生成し、映像とは独立してつなぎます。" : "1投稿は音楽・映像それぞれ12秒。"}初採用・採用回数の少ない人を優先します。
       </p>
     </Panel>
   );
@@ -915,9 +915,10 @@ export function App({
                 {state.displayConnected && " 表示タブに接続しました。"}
                 {!state.displayConnected && " 開かない場合は、このサイトのポップアップを許可してください。"}
               </p>
+              {state.musicStatus && <p role="status" className="mt-2 text-copy-13 text-muted-foreground">{state.musicStatus}</p>}
               <Panel
-                title="このルームの曲"
-                description="音楽と映像を12秒ずつ。みんなの投稿を公平に、途切れずにつなぎます。"
+                title={state.independentAudio ? "このルームの映像" : "このルームの曲"}
+                description={state.independentAudio ? "投稿の映像を12秒ずつ公平に再生。音楽は60秒単位で流れ続けます。" : "音楽と映像を12秒ずつ。みんなの投稿を公平に、途切れずにつなぎます。"}
                 className="mt-4"
               >
                 {!state.tracks?.length ? (
@@ -926,9 +927,9 @@ export function App({
                       <EmptyMedia variant="icon">
                         <MusicNotesIcon />
                       </EmptyMedia>
-                      <EmptyTitle>まだ曲がありません</EmptyTitle>
+                      <EmptyTitle>{state.independentAudio ? "まだ映像がありません" : "まだ曲がありません"}</EmptyTitle>
                       <EmptyDescription>
-                        最初のアイデアを投稿して、会場の音をつくりましょう。
+                        {state.independentAudio ? "最初のアイデアを投稿して、会場の映像をつくりましょう。" : "最初のアイデアを投稿して、会場の音をつくりましょう。"}
                       </EmptyDescription>
                     </EmptyHeader>
                   </Empty>

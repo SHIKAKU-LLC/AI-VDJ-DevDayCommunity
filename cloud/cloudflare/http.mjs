@@ -27,7 +27,7 @@ async function admission(request) {
 
 // This entry can collect ideas before the generation runtime is connected.
 // Capabilities stay disabled until real generation and playback are wired.
-export function createCloudflareRoomApi({db, eventId, origin, generationEnabled = false, imageDirectionEnabled = false, audienceRooms} = {}) {
+export function createCloudflareRoomApi({db, eventId, origin, generationEnabled = false, imageDirectionEnabled = false, independentAudio = false, audienceRooms} = {}) {
   if (!origin || new URL(origin).origin !== origin) throw Error('JUDGE_CONFIGURATION_REQUIRED');
   const store = createD1JudgeStore({db, eventId});
   const fallbackRpc = createD1RoomRpc({db, eventId});
@@ -39,8 +39,8 @@ export function createCloudflareRoomApi({db, eventId, origin, generationEnabled 
     if (request.method === 'GET' && url.pathname === '/api/room-capabilities') return response({mode: 'judge-cloud',
       durable: true, serverManaged: true, generation: generationEnabled, autoDJ: false,
       reason: generationEnabled ? null : 'PROVIDER_NOT_CONNECTED',
-      ...(audienceRooms ? {generationPolicy: {audioSeconds:12,videoSeconds:12,sceneCount:1,maximumSets:100,maximumCents:DJ_DIRECTION.maximumCents,serverDispatch:true}} : {}),
-      cloud: {generationJobs: generationEnabled, portableQC: generationEnabled, browserPlayback: generationEnabled, imageDirection: generationEnabled && imageDirectionEnabled,
+      ...(audienceRooms ? {generationPolicy: {audioSeconds:independentAudio?0:12,soundtrackSeconds:independentAudio?60:0,videoSeconds:12,sceneCount:1,maximumSets:100,maximumCents:DJ_DIRECTION.maximumCents,serverDispatch:true}} : {}),
+      cloud: {generationJobs: generationEnabled, portableQC: generationEnabled, browserPlayback: generationEnabled, imageDirection: generationEnabled && imageDirectionEnabled, independentAudio,
         clipRelativeTimeline: false, playerObserver: false, macRequired: false}});
     if (request.method === 'POST' && url.pathname === '/api/judge/rooms') {
       if (request.headers.get('origin') !== origin) return response({error: 'ORIGIN_DENIED'}, 403);

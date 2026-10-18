@@ -1,6 +1,6 @@
 export const sceneKey = index => index === 0 ? 'video' : `video-${index}`;
 export const sceneKeys = job => Array.from({length: job.sceneCount ?? 1}, (_, index) => sceneKey(index));
-export const partKeys = job => job.audioOnly ? ['audio'] : ['audio', ...sceneKeys(job)];
+export const partKeys = job => job.videoOnly ? sceneKeys(job) : job.audioOnly ? ['audio'] : ['audio', ...sceneKeys(job)];
 export const mediaKind = key => key === 'audio' ? 'audio' : 'video';
 export function publicAssets(job) {
   const scenes = sceneKeys(job).filter(key => job.assets?.[key]).map(key => ({key, ...job.assets[key]}));

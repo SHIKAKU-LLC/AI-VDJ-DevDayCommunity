@@ -48,4 +48,6 @@ export interface RoomView {
   remainingSets?: number | null;
   hasVideo?: boolean;
   displayConnected?: boolean;
+  independentAudio?: boolean;
+  musicStatus?: string;
 }

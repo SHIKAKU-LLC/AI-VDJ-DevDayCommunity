@@ -6,6 +6,8 @@ import { resolve, extname } from "node:path";
 import { createHash } from "node:crypto";
 const root = resolve("room-web/console/dist"),
   media = process.env.VDJ_FIXTURE_MEDIA;
+const independent=process.env.VDJ_FIXTURE_INDEPENDENT_AUDIO==='true';
+const port=Number(process.env.VDJ_FIXTURE_PORT??4176);
 if (!media) throw Error("VDJ_FIXTURE_MEDIA must point to synthetic media.");
 const audio = await readFile(resolve(media, "tone.wav")),
   video = await readFile(resolve(media, "scene.mp4"));
@@ -16,6 +18,9 @@ const descriptor = (bytes, extra) => ({
 });
 const audioAsset = descriptor(audio, { duration: 12 }),
   videoAsset = descriptor(video, { duration: 12, width: 854, height: 480 });
+const music=independent?await readFile(resolve(media,'music.wav')):null;
+const musicAsset=music?descriptor(music,{duration:60}):null;
+const songs=[1,2,3].map(n=>({id:`00000000-0000-4000-a000-${String(n).padStart(12,'0')}`,sequence:n,state:'READY',assets:{audio:musicAsset}}));
 const roomId = "11111111-1111-4111-8111-111111111111";
 let playback=playbackState();
 const presets=Array.from({length:38},(_,i)=>({id:"preset:"+createHash("sha256").update(String(i)).digest("hex"),audio:audioAsset,video:videoAsset}));
@@ -50,7 +55,7 @@ const server = http.createServer(async (req, res) => {
     return json(res, { mode });
   }
   if (path === "/api/room-capabilities")
-    return json(res, { generation: true, cloud: { imageDirection: true } });
+    return json(res, { generation: true, cloud: { imageDirection: true, independentAudio:independent } });
   if (path === "/api/judge/rooms") {
     await body();
     return json(res, {
@@ -84,10 +89,11 @@ const server = http.createServer(async (req, res) => {
         prompt: data.prompt,
         participantId:data.nickname?"owner":"participant",
       });
-    if(!jobs.some(j=>j.id===id)){const sub=submissions.find(s=>s.submissionId===id);jobs.push({...sub,id,profile:"audience-12-v1",state:mode==="waiting"?"GENERATING":"READY",sceneCount:1,readyAtMs:Date.now(),progress:{audio:"READY",video:"READY"},...(mode==="waiting"?{}:{assets:{audio:audioAsset,video:videoAsset}})});}
+    if(!jobs.some(j=>j.id===id)){const sub=submissions.find(s=>s.submissionId===id);jobs.push({...sub,id,profile:independent?"visual-12-v1":"audience-12-v1",state:mode==="waiting"?"GENERATING":"READY",sceneCount:1,readyAtMs:Date.now(),progress:{audio:"READY",video:"READY"},...(mode==="waiting"?{}:{assets:{...(independent?{}:{audio:audioAsset}),video:videoAsset}})});}
     await new Promise((r) => setTimeout(r, 350));
     return json(res, { submissionId: id });
   }
+  if(path.endsWith('/soundtrack')){if(req.method==='POST')await body();return json(res,{songs});}
   if(path.endsWith("/generation"))return json(res,{jobs,remainingSets:100-jobs.length,playback:{...playback,queue:eligibleSets(jobs,playback).map(j=>({id:j.id}))}});
   if(path.endsWith("/preset-library"))return json(res,{presets});
   if(path.endsWith("/playback")){
@@ -103,7 +109,7 @@ const server = http.createServer(async (req, res) => {
   }
   if (path.endsWith("/scene-library")) return json(res, { scenes: [] });
   if (path.includes("/generated-media/")||path.includes("/preset-media/")) {
-    const bytes = path.endsWith("/audio") ? audio : video;
+    const bytes = path.endsWith("/audio") ? independent&&songs.some(s=>path.includes(s.id))?music:audio : video;
     res.writeHead(200, {
       "content-type": path.endsWith("/audio") ? "audio/wav" : "video/mp4",
     });
@@ -139,6 +145,6 @@ const server = http.createServer(async (req, res) => {
     json(res, {}, 404);
   }
 });
-server.listen(4176, "127.0.0.1", () =>
-  console.log("合成データ専用の画面確認: http://127.0.0.1:4176/room"),
+server.listen(port, "127.0.0.1", () =>
+  console.log(`合成データ専用の画面確認: http://127.0.0.1:${port}/room`),
 );
