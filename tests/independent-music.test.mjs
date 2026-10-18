@@ -57,6 +57,15 @@ test('the visual clock changes every twelve seconds without creating audio sourc
   assert.equal(context.starts.length,0);assert.equal(changes.length,2);
   assert.ok(player.read().scheduled.every(s=>Math.abs(s.end-s.start-12)<1e-6));player.stop();
 });
+test('stopping and restarting retains the last decoded sixty-second song',()=>{
+  const context=audioContext();
+  const player=createSoundtrackPlayer({context,setTimer(){},clearTimer(){}});
+  player.setFallback({id:'preset',buffer:{duration:12}});
+  player.add({id:'music',buffer:{duration:60}});
+  player.start();player.stop();player.start();
+  assert.equal(context.starts.at(-1).duration,60);
+  player.stop();
+});
 
 async function fixture(){
   const sqlite=new DatabaseSync(':memory:');sqlite.exec(await readFile(new URL('../cloud/cloudflare/schema.sql',import.meta.url),'utf8'));
@@ -111,6 +120,21 @@ test('a lost paid music receipt is held across restart and a stop cannot submit 
     await g.runtime.alarm();await g.runtime.alarm();assert.equal(g.posts.length,1);
     await g.runtime.soundtrack(g.room,{action:'stop',clientId,runId});await g.runtime.alarm();assert.equal(g.posts.length,1);
   }finally{g.sqlite.close();}
+});
+test('a reloaded owner can reuse a ready song when all songs were already played',async()=>{
+  const f=await fixture();try{
+    const clientId=crypto.randomUUID(),runId=crypto.randomUUID();
+    await f.runtime.soundtrack(f.room,{action:'start',clientId,runId});
+    for(let i=0;i<5;i++)await f.runtime.alarm();
+    const {songs}=await f.runtime.soundtrack(f.room,{action:'view'});
+    for(const song of songs)await f.runtime.soundtrack(f.room,{action:'played',clientId,runId,id:song.id});
+    await f.runtime.soundtrack(f.room,{action:'stop',clientId,runId});
+    const posts=f.posts.length;
+    const reloaded=await f.runtime.soundtrack(f.room,{action:'view'});
+    assert.equal(reloaded.songs.at(-1)?.id,songs.at(-1).id);
+    assert.equal(reloaded.songs.at(-1)?.state,'READY');
+    assert.equal(f.posts.length,posts);
+  }finally{f.sqlite.close();}
 });
 test('the owner lease prevents a second tab or participant from starting another paid stream',async()=>{
   const f=await fixture();try{
