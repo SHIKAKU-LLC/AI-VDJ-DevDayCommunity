@@ -152,7 +152,7 @@ export function createAudienceRoomClass(Base) {
       let decision;
       const result = await this.locked(async () => {
         const store = createGenerationStore({
-          db: this.env.DB,
+          db: this.env.DB.withSession?.("first-primary") ?? this.env.DB,
           eventId: this.env.EVENT_ID,
           normalized: true,
         });
@@ -196,6 +196,12 @@ export function createAudienceRoomClass(Base) {
           result = acknowledgeStart(state, input);
         else if (input.action === "view")
           result = {
+            queuePolicy: "visual-12-v1",
+            readyMedia: jobs.filter((j) => j.state === "READY").map((j) => ({
+              id: j.id, profile: j.profile,
+              videoSeconds: j.assets?.video?.duration ?? null,
+              played: state.played.includes(j.id),
+            })),
             revision: state.revision,
             counts: state.counts,
             played: state.played,
