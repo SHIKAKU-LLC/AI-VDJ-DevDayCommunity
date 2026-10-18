@@ -145,6 +145,9 @@ export function createGenerationClass(Base) {
           }
           let resumedAudio = false;
           for (const part of Object.values(job.parts ?? {})) {
+            // Recover polling of an already-paid request after an interrupted
+            // alarm. Keep the handle and WAIT state; never submit it again.
+            if (part.state === 'WAIT' && part.handle) { resumed++; continue; }
             if (part.state !== 'FAILED' || !part.handle || !part.completedAtMs || (part.preparationRetries ?? 0) >= 2) continue;
             part.state = 'PREPARING'; part.preparationRetries = (part.preparationRetries ?? 0) + 1;
             delete part.reason; resumed++;

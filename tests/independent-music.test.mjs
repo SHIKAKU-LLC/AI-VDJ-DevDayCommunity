@@ -57,6 +57,15 @@ test('the visual clock changes every twelve seconds without creating audio sourc
   assert.equal(context.starts.length,0);assert.equal(changes.length,2);
   assert.ok(player.read().scheduled.every(s=>Math.abs(s.end-s.start-12)<1e-6));player.stop();
 });
+test('stopping and restarting retains the last decoded sixty-second song',()=>{
+  const context=audioContext();
+  const player=createSoundtrackPlayer({context,setTimer(){},clearTimer(){}});
+  player.setFallback({id:'preset',buffer:{duration:12}});
+  player.add({id:'music',buffer:{duration:60}});
+  player.start();player.stop();player.start();
+  assert.equal(context.starts.at(-1).duration,60);
+  player.stop();
+});
 
 async function fixture(){
   const sqlite=new DatabaseSync(':memory:');sqlite.exec(await readFile(new URL('../cloud/cloudflare/schema.sql',import.meta.url),'utf8'));
@@ -112,6 +121,21 @@ test('a lost paid music receipt is held across restart and a stop cannot submit 
     await g.runtime.soundtrack(g.room,{action:'stop',clientId,runId});await g.runtime.alarm();assert.equal(g.posts.length,1);
   }finally{g.sqlite.close();}
 });
+test('a reloaded owner can reuse a ready song when all songs were already played',async()=>{
+  const f=await fixture();try{
+    const clientId=crypto.randomUUID(),runId=crypto.randomUUID();
+    await f.runtime.soundtrack(f.room,{action:'start',clientId,runId});
+    for(let i=0;i<5;i++)await f.runtime.alarm();
+    const {songs}=await f.runtime.soundtrack(f.room,{action:'view'});
+    for(const song of songs)await f.runtime.soundtrack(f.room,{action:'played',clientId,runId,id:song.id});
+    await f.runtime.soundtrack(f.room,{action:'stop',clientId,runId});
+    const posts=f.posts.length;
+    const reloaded=await f.runtime.soundtrack(f.room,{action:'view'});
+    assert.equal(reloaded.songs.at(-1)?.id,songs.at(-1).id);
+    assert.equal(reloaded.songs.at(-1)?.state,'READY');
+    assert.equal(f.posts.length,posts);
+  }finally{f.sqlite.close();}
+});
 test('the owner lease prevents a second tab or participant from starting another paid stream',async()=>{
   const f=await fixture();try{
     const clientId=crypto.randomUUID(),runId=crypto.randomUUID();await f.coordinator.playback(f.room,{action:'heartbeat',clientId});
@@ -144,5 +168,20 @@ test('late heartbeats and start requests cannot revive a stopped music run',asyn
     await assert.rejects(f.runtime.soundtrack(f.room,{action:'pulse',clientId,runId}),/PLAYBACK_INPUT_INVALID/);
     await f.runtime.alarm();assert.equal(f.posts.length,0);
     assert.equal(f.sqlite.prepare('select count(*) n from vdj_budget_reservations').get().n,0);
+  }finally{f.sqlite.close();}
+});
+test('resuming a waiting video restarts polling without repeating the paid request',async()=>{
+  const f=await fixture();try{
+    const submitted=await f.coordinator.roomOperation({op:'submit',room_id:f.room,capability:f.owner,payload:{nonce:crypto.randomUUID(),nickname:'合成',prompt:'回転する光'}});
+    const ctx={storage:{...f.ctx.storage}};
+    const runtime=new (createGenerationClass(class{}))(ctx,f.env);
+    await runtime.enqueue(f.room,[submitted.submissionId]);await runtime.alarm();
+    assert.equal(f.posts.length,1);
+    await ctx.storage.deleteAlarm();
+    assert.equal((await runtime.retryPreparation(f.room,[submitted.submissionId])).resumed,1);
+    assert.ok(await ctx.storage.getAlarm());
+    await runtime.alarm();
+    assert.equal((await f.store.records(f.room))[0].state,'READY');
+    assert.equal(f.posts.length,1);
   }finally{f.sqlite.close();}
 });

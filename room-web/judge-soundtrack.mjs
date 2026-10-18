@@ -69,12 +69,12 @@ export function createSoundtrackPlayer({context,destination=context.destination,
     setFallback(track){if(track?.buffer && !fallback)fallback=track;},
     start(){
       if(running)return;
-      const track=queue.shift()??fallback;
+      const track=queue.shift()??current??fallback;
       if(!track)throw Error('PLAYBACK_NOT_READY');
       running=true;revision++;schedule(track,context.currentTime+.1,true);timer=setTimer(tick,100);
     },
-    stop(){running=false;revision++;clearTimer(timer);for(const s of sources){try{s.stop();}catch{}}sources.clear();history.length=0;nextAt=0;current=null;},
-    read(){return {running,revision,ready:!!(queue.length||fallback),queued:queue.length,
+    stop(){running=false;revision++;clearTimer(timer);for(const s of sources){try{s.stop();}catch{}}sources.clear();history.length=0;nextAt=0;},
+    read(){return {running,revision,ready:!!(queue.length||current||fallback),queued:queue.length,
       currentId:history.findLast(t=>t.start<=context.currentTime && t.end>context.currentTime)?.id,
       scheduled:history.map(({id,start,end})=>({id,start,end})),sourceCount:sources.size};},
     tick,

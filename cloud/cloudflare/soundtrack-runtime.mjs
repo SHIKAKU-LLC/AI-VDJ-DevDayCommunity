@@ -39,8 +39,15 @@ export function createSoundtrackClass(Base) {
           await this.ctx.storage.setAlarm(Date.now()+100);
         }
         const jobs = await this.ctx.storage.get('jobs') ?? [];
+        const available = jobs.filter(j=>!state.played.includes(j.id));
+        // Reloading must retain one validated long-form fallback even when the
+        // server has already recorded every song as played. This never enqueues.
+        if (!available.some(j=>j.state==='READY')) {
+          const fallback=jobs.findLast(j=>j.state==='READY');
+          if(fallback)available.push(fallback);
+        }
         return {active:state.until>Date.now(),reason:state.reason ?? null,
-          songs:jobs.filter(j=>!state.played.includes(j.id)).map(j=>({id:j.id,state:j.state,reason:j.reason,
+          songs:available.map(j=>({id:j.id,state:j.state,reason:j.reason,
             sequence:j.sequence,assets:publicAssets(j)}))};
       });
     }
