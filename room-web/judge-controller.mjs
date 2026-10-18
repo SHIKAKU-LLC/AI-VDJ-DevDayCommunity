@@ -502,9 +502,24 @@ export function createRoomController() {
     }
   }
 
+  async function loadCapabilities() {
+    capabilities = await request("/api/room-capabilities", undefined, {
+      authenticated: false,
+    });
+    update({
+      generation: capabilities.generation,
+      imageEnabled: !!capabilities.cloud?.imageDirection,
+    });
+  }
   async function recheck() {
-    update({error:""});
-    await poll();
+    update({ error: "" });
+    if (session) return poll();
+    try {
+      await loadCapabilities();
+      if (route) update({ joining: true });
+    } catch (e) {
+      error(e);
+    }
   }
   async function poll() {
     if (!session || polling) return;
@@ -784,7 +799,7 @@ export function createRoomController() {
         event.key.toLowerCase() === "f" &&
         !event.ctrlKey &&
         !event.metaKey &&
-        !["INPUT", "TEXTAREA", "BUTTON"].includes(event.target.tagName) &&
+        !["INPUT", "TEXTAREA"].includes(event.target.tagName) &&
         !event.target.isContentEditable &&
         session?.owner
       ) {
@@ -793,13 +808,7 @@ export function createRoomController() {
       }
     });
     try {
-      capabilities = await request("/api/room-capabilities", undefined, {
-        authenticated: false,
-      });
-      update({
-        generation: capabilities.generation,
-        imageEnabled: !!capabilities.cloud?.imageDirection,
-      });
+      await loadCapabilities();
       if (session) {
         showRoom();
         await poll();

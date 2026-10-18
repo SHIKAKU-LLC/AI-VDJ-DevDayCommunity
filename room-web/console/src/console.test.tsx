@@ -65,6 +65,20 @@ describe("console and stable runtime", () => {
       fireEvent.click(screen.getByRole("button", { name: "ルームを開く" }));
     });
     expect(calls.filter((c) => c.url === "/api/judge/rooms")).toHaveLength(1);
+    const requestFullscreen = vi.fn(async () => {});
+    document.getElementById("stage")!.requestFullscreen = requestFullscreen;
+    await act(async () =>
+      fireEvent.keyDown(screen.getByRole("button", { name: "再生する" }), {
+        key: "f",
+      }),
+    );
+    expect(requestFullscreen).toHaveBeenCalledTimes(1);
+    await act(async () =>
+      fireEvent.keyDown(screen.getByLabelText("音楽と映像のイメージ"), {
+        key: "f",
+      }),
+    );
+    expect(requestFullscreen).toHaveBeenCalledTimes(1);
     const video = document.getElementById("videos"),
       canvas = document.getElementById("vj-overlay");
     fireEvent.click(screen.getByRole("radio", { name: "ライト" }));
@@ -126,5 +140,34 @@ describe("console and stable runtime", () => {
       (screen.getByLabelText("音楽と映像のイメージ") as HTMLTextAreaElement)
         .value,
     ).toBe("再試行する音");
+  });
+  it("recovers entry capabilities without a room after a temporary failure", async () => {
+    const available = fetch;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        Response.json({ error: "NETWORK_FAILED" }, { status: 503 }),
+      ),
+    );
+    await mount();
+    expect(
+      (
+        screen.getByRole("button", {
+          name: "ルームを開く",
+        }) as HTMLButtonElement
+      ).disabled,
+    ).toBe(true);
+    vi.stubGlobal("fetch", available);
+    await act(async () =>
+      fireEvent.click(screen.getByRole("button", { name: "状態を再確認" })),
+    );
+    expect(
+      (
+        screen.getByRole("button", {
+          name: "ルームを開く",
+        }) as HTMLButtonElement
+      ).disabled,
+    ).toBe(false);
+    expect(screen.getByRole("alert").textContent).toBe("");
   });
 });
