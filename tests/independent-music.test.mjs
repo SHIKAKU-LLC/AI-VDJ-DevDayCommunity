@@ -170,3 +170,18 @@ test('late heartbeats and start requests cannot revive a stopped music run',asyn
     assert.equal(f.sqlite.prepare('select count(*) n from vdj_budget_reservations').get().n,0);
   }finally{f.sqlite.close();}
 });
+test('resuming a waiting video restarts polling without repeating the paid request',async()=>{
+  const f=await fixture();try{
+    const submitted=await f.coordinator.roomOperation({op:'submit',room_id:f.room,capability:f.owner,payload:{nonce:crypto.randomUUID(),nickname:'合成',prompt:'回転する光'}});
+    const ctx={storage:{...f.ctx.storage}};
+    const runtime=new (createGenerationClass(class{}))(ctx,f.env);
+    await runtime.enqueue(f.room,[submitted.submissionId]);await runtime.alarm();
+    assert.equal(f.posts.length,1);
+    await ctx.storage.deleteAlarm();
+    assert.equal((await runtime.retryPreparation(f.room,[submitted.submissionId])).resumed,1);
+    assert.ok(await ctx.storage.getAlarm());
+    await runtime.alarm();
+    assert.equal((await f.store.records(f.room))[0].state,'READY');
+    assert.equal(f.posts.length,1);
+  }finally{f.sqlite.close();}
+});
