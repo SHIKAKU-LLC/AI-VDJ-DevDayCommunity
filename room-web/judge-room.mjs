@@ -17,9 +17,8 @@ const messages = {JUDGE_CLOSED: '現在はルームの受付期間外です。',
   PROVIDER_RATE_LIMITED: '生成サービスが混み合っています。しばらく待ってから再確認します。',
   ROOM_NOT_FOUND: 'このルームは終了したか、利用期限を過ぎています。', ACCEPTANCE_OFF: '現在は新しいアイデアの受付を閉じています。',
   RATE_LIMITED: '少し時間をおいてから送信してください。',
-  IMAGE_FORMAT_INVALID: '対応していない画像形式です。JPEG・PNG・WebP・HEICの画像を選んでください。',
-  IMAGE_DECODE_FAILED: 'このブラウザで画像を読み込めませんでした。画像のスクリーンショットか、JPEG・PNG・WebP形式を選んでください。',
-  IMAGE_TOO_LARGE: '画像が大きすぎます。小さい画像を選んでください（元画像は8MB・5,000万画素まで）。',
+  IMAGE_FORMAT_INVALID: '画像を読み取れませんでした。JPEG・PNG・WebPの画像を選んでください。',
+  IMAGE_TOO_LARGE: '画像が大きすぎます。小さい画像を選んでください（元画像は8MBまで）。',
   IMAGE_REFERENCE_LIMIT: 'このルームの画像投稿上限に達しました。画像を外すと文章だけで投稿できます。',
   IMAGE_DIRECTION_DISABLED: '画像付き生成は準備中です。画像を外すと文章だけで投稿できます。',
   IMAGE_REFERENCE_CONFLICT: '送信中の画像と一致しません。画像を選び直してください。',
@@ -29,7 +28,7 @@ const loaded = new Map(), loadPending = new Set(), videos = new Map();
 let decodeFailures = 0, meter = {}, meterNode, playerInit, vj, scenePlayer;
 const sceneLoading = new Map(), sceneUrls = new Map(), sceneAssets = new Map();
 let generationRetryAfterMs = 0, queueBusy = false;
-let referenceImage, imageBusy = false, imageVersion = 0;
+let referenceImage, imageBusy = false, imageVersion = 0, imageRejected = false;
 const route = /^\/join\/([a-f0-9-]{36})$/.exec(location.pathname);
 let invitation = new URLSearchParams(location.search).get('code');
 if (location.search || location.hash) history.replaceState(null, '', location.pathname);
@@ -257,7 +256,7 @@ $('join').onclick = async () => {
   } catch (e) { error(e); } finally { $('join').disabled = false; }
 };
 $('prompt-form').onsubmit = async event => {
-  event.preventDefault(); if (submitBusy || imageBusy) return;
+  event.preventDefault(); if (submitBusy || imageBusy || imageRejected) return;
   const prompt = $('prompt').value.trim(); if (!prompt) return;
   submitBusy = true; $('submit').disabled = true; $('error').textContent = '';
   $('reference-image').disabled = true; $('remove-image').disabled = true;
@@ -277,11 +276,12 @@ $('prompt-form').onsubmit = async event => {
     $('prompt').value = ''; status(session.owner ? autoGenerate ? '受付完了。音楽と映像を生成しています。' :
       '受付完了。自動生成をONにすると音楽と映像を生成します。' : '受付完了。オーナーの画面で音楽と映像を準備します。'); await poll();
   } catch (e) { error(e); } finally {
-    submitBusy = false; $('submit').disabled = false; $('reference-image').disabled = false; $('remove-image').disabled = false;
+    submitBusy = false; $('submit').disabled = imageBusy || imageRejected; $('reference-image').disabled = false; $('remove-image').disabled = false;
   }
 };
 function clearReference() {
   imageVersion++;
+  imageBusy = false; imageRejected = false; $('submit').disabled = submitBusy;
   if (referenceImage) URL.revokeObjectURL(referenceImage.previewUrl);
   referenceImage = null; $('reference-image').value = ''; $('image-preview').removeAttribute('src');
   $('image-preview').hidden = true; $('remove-image').hidden = true; $('image-status').textContent = '';
@@ -295,8 +295,13 @@ $('reference-image').onchange = async () => {
     if (version !== imageVersion) { URL.revokeObjectURL(image.previewUrl); return; }
     referenceImage = image; $('image-preview').src = image.previewUrl; $('image-preview').hidden = false;
     $('remove-image').hidden = false; $('image-status').textContent = '添付済み。画像の特徴と共通の世界観から、演出を自動で作ります。';
-  } catch (e) { if (version === imageVersion) error(e); } finally {
-    if (version === imageVersion) { imageBusy = false; $('submit').disabled = submitBusy; }
+  } catch {
+    if (version === imageVersion) {
+      imageRejected = true; $('remove-image').hidden = false;
+      $('image-status').textContent = 'JPEG・PNG・WebP形式の画像（8MB以下・2,000万画素以下）を選び直すか、画像を外して送信してください。';
+    }
+  } finally {
+    if (version === imageVersion) { imageBusy = false; $('submit').disabled = submitBusy || imageRejected; }
   }
 };
 $('remove-image').onclick = clearReference;
