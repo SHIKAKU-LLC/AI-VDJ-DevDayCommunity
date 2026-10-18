@@ -696,64 +696,66 @@ test("preparation reserves at most four slots before downloading and later jobs 
     f.sqlite.close();
   }
 });
-test("operator-approved preset batch registers 38 pairs within one reservation and never buys again on restart", async () => {
-  const f = await fixture();
-  try {
-    const items = [];
-    for (let i = 0; i < 38; i++) {
-      const sha = await sha256("preset" + i);
+for (const count of [15, 38])
+  test(`operator-approved preset batch registers ${count} pairs within one reservation and never buys again on restart`, async () => {
+    const f = await fixture();
+    try {
+      const items = [];
+      for (let i = 0; i < count; i++) {
+        const sha = await sha256("preset" + i);
+        f.sqlite
+          .prepare(
+            "insert into vdj_curated_scenes values(?,?,3,12,1920,1080,1,?)",
+          )
+          .run(f.env.EVENT_ID, sha, Date.now());
+        items.push({
+          id: crypto.randomUUID(),
+          videoSha: sha,
+          prompt: "synthetic music " + i,
+        });
+      }
+      const batchId = crypto.randomUUID();
       f.sqlite
-        .prepare(
-          "insert into vdj_curated_scenes values(?,?,3,12,1920,1080,1,?)",
-        )
-        .run(f.env.EVENT_ID, sha, Date.now());
-      items.push({
-        id: crypto.randomUUID(),
-        videoSha: sha,
-        prompt: "synthetic music " + i,
-      });
+        .prepare("insert into vdj_preset_batches values(?,?,?,1,?)")
+        .run(f.env.EVENT_ID, batchId, f.room.roomId, JSON.stringify({ items }));
+      const values = new Map(),
+        storage = {
+          async get(k) {
+            return structuredClone(values.get(k));
+          },
+          async put(k, v) {
+            values.set(k, structuredClone(v));
+          },
+          async setAlarm(t) {
+            values.set("alarm", t);
+          },
+          async deleteAlarm() {
+            values.delete("alarm");
+          },
+        };
+      const Batch = createPresetBatchClass(class {}),
+        batch = new Batch({ storage }, f.env);
+      await batch.startBatch(f.room.roomId, batchId);
+      for (let n = 0; n < 23; n++) await batch.alarm();
+      assert.equal(f.posted.length, count);
+      assert.equal(
+        f.sqlite.prepare("select count(*) n from vdj_curated_audio").get().n,
+        count,
+      );
+      const restarted = new Batch({ storage }, f.env);
+      await restarted.startBatch(f.room.roomId, batchId);
+      await restarted.alarm();
+      assert.equal(f.posted.length, count);
+      assert.equal(
+        f.sqlite
+          .prepare("select sum(cents) n from vdj_budget_reservations")
+          .get().n,
+        400,
+      );
+    } finally {
+      f.sqlite.close();
     }
-    const batchId = crypto.randomUUID();
-    f.sqlite
-      .prepare("insert into vdj_preset_batches values(?,?,?,1,?)")
-      .run(f.env.EVENT_ID, batchId, f.room.roomId, JSON.stringify({ items }));
-    const values = new Map(),
-      storage = {
-        async get(k) {
-          return structuredClone(values.get(k));
-        },
-        async put(k, v) {
-          values.set(k, structuredClone(v));
-        },
-        async setAlarm(t) {
-          values.set("alarm", t);
-        },
-        async deleteAlarm() {
-          values.delete("alarm");
-        },
-      };
-    const Batch = createPresetBatchClass(class {}),
-      batch = new Batch({ storage }, f.env);
-    await batch.startBatch(f.room.roomId, batchId);
-    for (let n = 0; n < 23; n++) await batch.alarm();
-    assert.equal(f.posted.length, 38);
-    assert.equal(
-      f.sqlite.prepare("select count(*) n from vdj_curated_audio").get().n,
-      38,
-    );
-    const restarted = new Batch({ storage }, f.env);
-    await restarted.startBatch(f.room.roomId, batchId);
-    await restarted.alarm();
-    assert.equal(f.posted.length, 38);
-    assert.equal(
-      f.sqlite.prepare("select sum(cents) n from vdj_budget_reservations").get()
-        .n,
-      400,
-    );
-  } finally {
-    f.sqlite.close();
-  }
-});
+  });
 
 test("journal migration preserves legacy media and reservations while moving future posts out of the room row", async () => {
   const f = await fixture();

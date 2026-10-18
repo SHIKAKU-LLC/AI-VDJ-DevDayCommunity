@@ -12,8 +12,8 @@ def prepare(data):
         raise ValueError('イベントIDが不正です。')
     room = str(uuid.UUID(data['roomId']))
     videos = data['videoSha256']
-    if len(videos) != 38 or len(set(videos)) != 38 or any(not re.fullmatch(r'[a-f0-9]{64}', v) for v in videos):
-        raise ValueError('承認済み映像のSHA-256を、重複なしで38件指定してください。')
+    if not 1 <= len(videos) <= 38 or len(set(videos)) != len(videos) or any(not re.fullmatch(r'[a-f0-9]{64}', v) for v in videos):
+        raise ValueError('承認済み映像のSHA-256を、重複なしで1〜38件指定してください。')
     colours = ['cyan chrome', 'violet glass', 'warm copper', 'ultraviolet crystal', 'teal liquid', 'magenta lattice']
     sounds = ['resonant acid hook', 'rhythmic FM pluck', 'glassy percussive stab', 'rolling metallic arpeggio', 'elastic filtered synth', 'short detuned lead', 'syncopated laser motif']
     items = [{'id': str(uuid.uuid4()), 'videoSha': video,
@@ -22,7 +22,7 @@ def prepare(data):
     batch = str(uuid.uuid4())
     quote = lambda value: "'" + value.replace("'", "''") + "'"
     document = json.dumps({'items': items}, separators=(',', ':'), ensure_ascii=False)
-    sql = ('-- 承認後に適用する。38曲・合計$4の一括予約は開始時に行う。\n'
+    sql = (f'-- 承認後に適用する。{len(videos)}曲・上限$4の一括予約は開始時に行う。\n'
            'insert into vdj_preset_batches(event_id,batch_id,room_id,enabled,document) values('
            + ','.join([quote(data['eventId']), quote(batch), quote(room), '1', quote(document)]) + ');\n')
     return batch, sql

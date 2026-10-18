@@ -63,7 +63,8 @@ export function createPresetBatchClass(Base) {
         const config = JSON.parse(row.document);
         if (
           !Array.isArray(config.items) ||
-          config.items.length !== 38 ||
+          config.items.length < 1 ||
+          config.items.length > 38 ||
           config.items.some(
             (i) =>
               !(
@@ -122,7 +123,7 @@ export function createPresetBatchClass(Base) {
           );
         }
         await this.ctx.storage.setAlarm(Date.now() + 100);
-        return { accepted: 38 };
+        return { accepted: config.items.length };
       });
     }
   };
