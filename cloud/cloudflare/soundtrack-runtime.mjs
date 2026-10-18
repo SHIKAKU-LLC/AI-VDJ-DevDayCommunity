@@ -1,5 +1,6 @@
 import {createGenerationClass} from './generation-runtime.mjs';
 import {publicAssets} from './generation-parts.mjs';
+import {curatedSoundtracks} from './soundtrack-library.mjs';
 
 const terminal = job => ['READY','FAILED','NEEDS_REVIEW','CANCELLED'].includes(job.state);
 
@@ -30,7 +31,8 @@ export function createSoundtrackClass(Base) {
             state.until = Date.now() + 20000;
             if (input.action === 'played') {
               const jobs = await this.ctx.storage.get('jobs') ?? [];
-              if (!jobs.some(j=>j.id===input.id && j.state==='READY')) throw Error('PLAYBACK_INPUT_INVALID');
+              const curated=await curatedSoundtracks(this.env);
+              if (![...jobs,...curated].some(j=>j.id===input.id && j.state==='READY')) throw Error('PLAYBACK_INPUT_INVALID');
               if (!state.played.includes(input.id)) state.played.push(input.id);
             }
           }
@@ -39,14 +41,15 @@ export function createSoundtrackClass(Base) {
           await this.ctx.storage.setAlarm(Date.now()+100);
         }
         const jobs = await this.ctx.storage.get('jobs') ?? [];
-        const available = jobs.filter(j=>!state.played.includes(j.id));
+        const curated=await curatedSoundtracks(this.env);
+        const available = curated.length ? curated.filter(j=>!state.played.includes(j.id)) : jobs.filter(j=>!state.played.includes(j.id));
         // Reloading must retain one validated long-form fallback even when the
         // server has already recorded every song as played. This never enqueues.
         if (!available.some(j=>j.state==='READY')) {
-          const fallback=jobs.findLast(j=>j.state==='READY');
+          const fallback=(curated.length?curated:jobs).findLast(j=>j.state==='READY');
           if(fallback)available.push(fallback);
         }
-        return {active:state.until>Date.now(),reason:state.reason ?? null,
+        return {active:state.until>Date.now(),reason:curated.length ? null : state.reason ?? null,
           songs:available.map(j=>({id:j.id,state:j.state,reason:j.reason,
             sequence:j.sequence,assets:publicAssets(j)}))};
       });
@@ -68,6 +71,7 @@ export function createSoundtrackClass(Base) {
           await this.ctx.storage.put('jobs',jobs);
           return true;
         }
+        if ((await curatedSoundtracks(this.env)).length) return true;
         const available = jobs.filter(j=>!state.played.includes(j.id) && !['FAILED','NEEDS_REVIEW','CANCELLED'].includes(j.state));
         const last=jobs.at(-1);
         // Generate continuations after the prior song is validated, so the

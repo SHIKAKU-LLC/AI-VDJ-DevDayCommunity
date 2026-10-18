@@ -3,6 +3,7 @@ import {publicAssets, sceneKeys} from './generation-parts.mjs';
 import {createGenerationStore} from './generation-store.mjs';
 import {boundedBytes, sha256, createFalProvider} from './fal-provider.mjs';
 import {imageDirectionSummary} from './image-direction.mjs';
+import {curatedSoundtracks} from './soundtrack-library.mjs';
 const answer = (value, status = 200) => Response.json(value, {status, headers: {'cache-control': 'no-store'}});
 export async function generationHttp(request, env) {
   const url = new URL(request.url), match = /^\/api\/rooms\/([a-f0-9-]{36})\/(generation|generated-media)(?:\/([a-f0-9-]{36})\/(audio|video(?:-[1-5])?))?$/.exec(url.pathname);
@@ -69,10 +70,11 @@ export async function generationHttp(request, env) {
       return answer(result, 202);
     }
     if (route === 'generated-media' && request.method === 'GET' && jobId && kind) {
-      const job = (await store.records(roomId)).find(j => j.id === jobId);
+      const shared = owner && kind==='audio' ? (await curatedSoundtracks(env)).find(j=>j.id===jobId) : undefined;
+      const job = (await store.records(roomId)).find(j => j.id === jobId) ?? shared;
       if (!job?.assets?.[kind]) return answer({error: 'NOT_READY'}, 404);
       const file = job.assets[kind], object = await env.MEDIA.get(file.path);
-      if (!object?.body || object.size !== file.byteLength || object.customMetadata?.sha256 !== file.sha256) return answer({error: 'MEDIA_UNAVAILABLE'}, 503);
+      if (!object?.body || object.size !== file.byteLength || object.customMetadata?.sha256 !== file.sha256 && !(job===shared && object.customMetadata?.sha256===undefined)) return answer({error: 'MEDIA_UNAVAILABLE'}, 503);
       return new Response(object.body, {headers: {'content-type': file.contentType, 'content-length': String(file.byteLength),
         'cache-control': 'private, no-store', 'x-content-sha256': file.sha256}});
     }
