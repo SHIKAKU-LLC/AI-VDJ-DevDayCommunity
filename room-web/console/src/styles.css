@@ -869,11 +869,12 @@
     color: var(--credit-base);
     -webkit-text-stroke: .45px color-mix(in srgb, currentColor 35%, white);
     paint-order: stroke fill;
+    /* Match the selected 180% glow in the local preview. */
     text-shadow:
-      0 0 2px color-mix(in srgb, currentColor 25%, white),
-      0 0 5px currentColor,
-      0 0 10px color-mix(in srgb, currentColor 80%, transparent),
-      0 0 18px color-mix(in srgb, currentColor 50%, transparent);
+      0 0 3.6px color-mix(in srgb, currentColor 25%, white),
+      0 0 9px currentColor,
+      0 0 18px color-mix(in srgb, currentColor 80%, transparent),
+      0 0 32.4px color-mix(in srgb, currentColor 50%, transparent);
   }
   .stage-credit-letter[data-highlighted="true"] { color: var(--credit-highlight); }
   .transport-panel { @apply surface-panel grid items-center gap-4 border-t border-border p-4; }
