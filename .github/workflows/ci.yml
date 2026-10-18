@@ -49,6 +49,7 @@ jobs:
             qa-tools/package-lock.json
             snapshot/package-lock.json
             cloud/cloudflare/package-lock.json
+            room-web/console/package-lock.json
       - name: Confirm 8-core runner
         run: node -e "const os = require('node:os'); const cpu = os.availableParallelism(); console.log(JSON.stringify({cpu, memoryGiB:Math.round(os.totalmem()/2**30)})); if (cpu < 8) process.exit(1)"
       - name: Install pinned local PostgreSQL verification runtime
@@ -59,6 +60,10 @@ jobs:
         run: node --test --test-concurrency=4 tests/*.test.mjs snapshot/app/runtime/*.test.mjs integration/mac-host/*.test.mjs
       - name: Install pinned Cloudflare build dependencies
         run: npm ci --prefix cloud/cloudflare --no-audit --no-fund
+      - name: Install pinned console dependencies
+        run: npm ci --prefix room-web/console --no-audit --no-fund
+      - name: Check console interactions
+        run: npm test --prefix room-web/console
       - name: Build Cloudflare Worker and static assets without remote resources
         run: npm run build:local --prefix cloud/cloudflare
 

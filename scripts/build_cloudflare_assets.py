@@ -1,23 +1,38 @@
 #!/usr/bin/env python3
-"""Cloudflareに配信する画面を許可リストから構築する。配備は行わない。"""
+"""公開用のReactビルドだけを許可リストで取り込む。配備は行わない。"""
 from pathlib import Path
 import shutil
 
 ROOT = Path(__file__).resolve().parent.parent
 DESTINATION = ROOT / 'cloud/cloudflare/.cloudflare/assets'
+FRONTEND = ROOT / 'room-web/console/dist'
 
 
-def build(destination=DESTINATION):
-    destination = Path(destination)
+def build(destination=DESTINATION, frontend=FRONTEND):
+    destination, frontend = Path(destination), Path(frontend)
+    if not (frontend / 'index.html').is_file():
+        raise ValueError('先に npm run build --prefix room-web/console を実行してください。')
+    files = {'judge-room.html': (frontend / 'index.html').read_bytes()}
+    for source in frontend.rglob('*'):
+        if not source.is_file():
+            continue
+        name = source.relative_to(frontend)
+        if name.as_posix() == 'index.html':
+            continue
+        if source.is_symlink() or len(name.parts) != 2 or name.parts[0] != 'console-assets' or source.suffix not in {'.js', '.css', '.woff2', '.woff'}:
+            raise ValueError('公開用ビルドに許可されていないファイルがあります。')
+        files[name.as_posix()] = source.read_bytes()
+    for name, source in {
+        'judge-meter.mjs': ROOT / 'room-web/judge-meter.mjs',
+        'LICENSE.qr.txt': ROOT / 'room-web/LICENSE.qr.txt',
+        'LICENSE.audiocn.txt': ROOT / 'room-web/console/LICENSE.audiocn.txt',
+        'LICENSE.fonts.txt': ROOT / 'room-web/console/LICENSE.fonts.txt',
+    }.items():
+        files[name] = source.read_bytes()
+    # Validate everything before replacing the previous build.
     destination.mkdir(parents=True, exist_ok=True)
-    # A fixed, generated directory only. Never copy the repository wholesale.
     for child in destination.iterdir():
         shutil.rmtree(child) if child.is_dir() else child.unlink()
-    # Ship only the cloud interface. The historical owner/native setup pages
-    # remain source history, never public assets in the Cloudflare service.
-    names = ['judge-room.html', 'judge-room.css', 'judge-room.mjs', 'judge-image.mjs', 'judge-player.mjs',
-             'judge-meter.mjs', 'judge-scenes.mjs', 'judge-vj.mjs', 'qr-encoder.mjs', 'LICENSE.qr.txt']
-    files = {name: (ROOT / 'room-web' / name).read_bytes() for name in names}
     for name, content in files.items():
         target = destination / name
         target.parent.mkdir(parents=True, exist_ok=True)
