@@ -1,3 +1,4 @@
+import {readSubmissionRecords} from './submission-records.mjs';
 import {sha256} from './fal-provider.mjs';
 import {createGenerationStore} from './generation-store.mjs';
 import {referenceId} from './reference-store.mjs';
@@ -92,6 +93,7 @@ export async function referenceImageHttp(request, env) {
   try {
     const row = await createGenerationStore({db: env.DB, eventId: env.EVENT_ID}).authorize(roomId, owner ?? member, !!owner);
     const actorProof = await sha256(owner ?? member), document = JSON.parse(row.document);
+    if(env.AUDIENCE_MODE==='true')document.submissions=await readSubmissionRecords(env.DB,roomId,document);
     if (row.owner_proof !== actorProof && !document.accepting) fail('ACCEPTANCE_OFF');
     if (request.headers.get('content-type') !== 'image/png' || !/^[a-f0-9]{64}$/.test(request.headers.get('x-vdj-prompt-sha256') ?? '')) fail('IMAGE_FORMAT_INVALID');
     if (Number(request.headers.get('content-length')) > MAX_REFERENCE_BYTES) fail('IMAGE_TOO_LARGE');
@@ -112,8 +114,8 @@ export async function referenceImageHttp(request, env) {
     await q(`insert into vdj_runtime_records(room_id,kind,record_id,version,document)
       select r.id,'image-reference',?,0,? from vdj_rooms r join vdj_events e on e.id=r.event_id
       where r.id=? and e.id=? and e.enabled=1 and e.expires_at_ms>${clock} and r.expires_at_ms>${clock}
-      and (select count(*) from vdj_runtime_records where room_id=r.id and kind='image-reference')<30
-      and (select count(*) from vdj_runtime_records where room_id=r.id and kind='image-reference' and json_extract(document,'$.actorProof')=?)<6
+      and (select count(*) from vdj_runtime_records where room_id=r.id and kind='image-reference')<100
+      and (select count(*) from vdj_runtime_records where room_id=r.id and kind='image-reference' and json_extract(document,'$.actorProof')=?)<100
       on conflict(room_id,kind,record_id) do nothing`, id, JSON.stringify(value), roomId, env.EVENT_ID, actorProof).run();
     const saved = await q("select document from vdj_runtime_records where room_id=? and kind='image-reference' and record_id=?", roomId, id).first();
     if (!saved) fail('IMAGE_REFERENCE_LIMIT');

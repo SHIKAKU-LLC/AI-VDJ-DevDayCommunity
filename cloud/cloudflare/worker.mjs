@@ -1,3 +1,4 @@
+import {audienceHttp} from './audience-http.mjs';
 import {createCloudflareRoomApi} from './http.mjs';
 import {createProviderDelivery} from './provider-delivery.mjs';
 import {generationHttp, sceneLibraryHttp} from './generation-http.mjs';
@@ -28,6 +29,8 @@ export default {
         } catch { return secured(new Response(null, {status: 404, headers: {'cache-control': 'no-store'}}), url.pathname); }
       }
       if (url.pathname.startsWith('/api/')) {
+        const audience = await audienceHttp(request,env);
+        if (audience) return secured(audience,url.pathname);
         const reference = await referenceImageHttp(request, env);
         if (reference) return secured(reference, url.pathname);
         const library = await sceneLibraryHttp(request, env);
@@ -36,7 +39,8 @@ export default {
         if (generated) return secured(generated, url.pathname);
         const api = createCloudflareRoomApi({db: env.DB, eventId: env.EVENT_ID, origin: env.PUBLIC_ORIGIN,
           generationEnabled: env.GENERATION_ENABLED === 'true' && !!env.FAL_KEY && !!env.GENERATION,
-          imageDirectionEnabled: env.IMAGE_DIRECTION_ENABLED === 'true' && !!env.AI?.run});
+          imageDirectionEnabled: env.IMAGE_DIRECTION_ENABLED === 'true' && !!env.AI?.run,
+          audienceRooms: env.AUDIENCE_MODE === 'true' ? env.AUDIENCE_ROOMS : undefined});
         return secured(await api(request), url.pathname);
       }
       if (!['GET', 'HEAD'].includes(request.method)) return secured(new Response(null, {status: 405, headers: {Allow: 'GET, HEAD'}}), url.pathname);

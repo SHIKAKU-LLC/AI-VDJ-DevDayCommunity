@@ -239,7 +239,9 @@ function Composer({
   const [prompt, setPrompt] = useState("");
   const file = useRef<HTMLInputElement>(null);
   const busy = state.submitBusy || state.imageBusy;
-  const full = state.jobs.length >= 5;
+  const full =
+    state.submissions.length >= (state.maximumSets ?? 100) ||
+    state.remainingSets === 0;
   return (
     <Panel
       title="ひとことで、次の熱狂を。"
@@ -337,7 +339,7 @@ function Composer({
       {full && (
         <Note variant="warning">
           <NoteContent>
-            このルームは5曲の生成枠に達しました。完成した曲と映像を続けて楽しめます。
+            生成枠の上限に達しました。完成した投稿とプリセットを続けて楽しめます。
           </NoteContent>
         </Note>
       )}
@@ -366,6 +368,14 @@ function Generation({
       title="生成状況"
       description={state.budget ?? "届いたアイデアから演出を準備します。"}
     >
+      {state.presetBatchId && (
+        <Button
+          variant="outline"
+          onClick={() => void controller.startPresets()}
+        >
+          承認済みの待機音楽を準備
+        </Button>
+      )}
       {!state.submissions.length ? (
         <Empty>
           <EmptyHeader>
@@ -385,7 +395,7 @@ function Generation({
               (j) => j.id === submission.submissionId,
             );
             const sceneCount = job?.sceneCount ?? 0;
-              const ready = Object.entries(job?.progress ?? {}).filter(
+            const ready = Object.entries(job?.progress ?? {}).filter(
               ([key, value]) => key.startsWith("video") && value === "READY",
             ).length;
             return (
@@ -409,6 +419,11 @@ function Generation({
                   />
                 </div>
                 <p className="text-copy-14 break-words">{submission.prompt}</p>
+                {job && (
+                  <p className="text-copy-13 text-muted-foreground">
+                    採用 {job.adopted ?? 0} 回
+                  </p>
+                )}
                 {sceneCount > 1 && (
                   <>
                     <Progress
@@ -476,19 +491,12 @@ function Invitation({
         </>
       )}
       <div className="flex flex-wrap gap-2">
-        <Button
-          variant="secondary"
-          aria-pressed={state.autoGenerate}
-          onClick={() => controller.toggleGeneration()}
-        >
-          自動生成 {state.autoGenerate ? "ON" : "OFF"}
-        </Button>
         <Button variant="outline" onClick={() => controller.toggleAcceptance()}>
           {state.accepting ? "受付を閉じる" : "受付を開く"}
         </Button>
       </div>
       <p className="text-copy-13 text-muted-foreground">
-        生成費用は運営側が負担します。参加者への請求はありません。1ルーム最大5曲です。
+        生成費用は運営側が負担します。参加者への請求はありません。1投稿は音楽・映像それぞれ12秒。初採用・採用回数の少ない人を優先します。
       </p>
     </Panel>
   );
@@ -522,7 +530,12 @@ export function App({
   useEffect(() => {
     if (state.role === "participant") setTab("prompt");
   }, [state.role]);
-  const primary = !(owner && state.ready && !state.running && (!narrow || tab === "video"));
+  const primary = !(
+    owner &&
+    state.ready &&
+    !state.running &&
+    (!narrow || tab === "video")
+  );
   return (
     <SidebarProvider defaultOpen>
       <a href="#main" className="skip-link">
@@ -843,7 +856,7 @@ export function App({
               </section>
               <Panel
                 title="このルームの曲"
-                description="音楽は60秒。映像は次々に切り替わります。"
+                description="音楽と映像を12秒ずつ。みんなの投稿を公平に、途切れずにつなぎます。"
                 className="mt-4"
               >
                 {!state.tracks?.length ? (

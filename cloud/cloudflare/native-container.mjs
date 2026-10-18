@@ -13,6 +13,7 @@ export function createNativeContainerClass(Container) {
     #busy = false;
     #context;
     #checkStart;
+    #lease;
 
     constructor(ctx, env) {
       super(ctx, env);
@@ -24,7 +25,19 @@ export function createNativeContainerClass(Container) {
           await ctx.storage.put('native-auth-v1', value);
         }
         this.#auth = value;
+        this.#lease = await ctx.storage.get('preparation-lease');
       });
+    }
+
+    async reserve(id) {
+      await this.#ready;
+      if (this.#busy || this.#lease && this.#lease.until > Date.now() && this.#lease.id !== id) return false;
+      this.#lease = {id, until: Date.now() + 180000};
+      await this.#context.storage.put('preparation-lease', this.#lease);
+      return true;
+    }
+    async release(id) {
+      if (this.#lease?.id === id) { this.#lease = null; await this.#context.storage.delete('preparation-lease'); }
     }
 
     async fetch(request) {
@@ -32,7 +45,8 @@ export function createNativeContainerClass(Container) {
       if (url.origin !== 'http://native.internal' || !['/inspect', '/self-check', '/prepare/audio', '/prepare/video'].includes(url.pathname) || url.search || request.method !== 'POST') return fail('NOT_FOUND', 404);
       const type = url.pathname.startsWith('/prepare/') ? 'application/octet-stream' : 'application/json';
       if (request.headers.get('content-type') !== type) return fail('JSON_REQUIRED', 415);
-      if (this.#busy) return fail('BUSY', 409);
+      await this.#ready;
+      if (this.#busy || this.#lease && this.#lease.until > Date.now() && request.headers.get('x-vdj-preparation-lease') !== this.#lease.id) return fail('BUSY', 409);
       this.#busy = true;
       try {
         await this.#ready;

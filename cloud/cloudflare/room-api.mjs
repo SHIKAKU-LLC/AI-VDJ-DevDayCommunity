@@ -1,3 +1,4 @@
+import {hydrateJournal} from './submission-records.mjs';
 const clock = "cast(unixepoch('subsec')*1000 as integer)";
 const uuid = value => typeof value === 'string' && /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/.test(value);
 const token = value => typeof value === 'string' && /^[a-f0-9]{64}$/.test(value);
@@ -7,8 +8,9 @@ const digest = async value => Array.from(new Uint8Array(await crypto.subtle.dige
 
 // D1 owns the journal. A version-checked write includes its receipt so a lost
 // response can be recovered without repeating a submission or a control action.
-export function createD1RoomRpc({db, eventId, maximumParticipants = 64, maximumSubmissions = 100} = {}) {
+export function createD1RoomRpc({db, eventId, maximumParticipants = 64, maximumSubmissions = 100, normalized = false} = {}) {
   if (!db?.prepare || !/^judge-[a-z0-9-]{1,60}$/.test(eventId ?? '')) fail('ROOM_BACKEND_UNAVAILABLE');
+  const journalKeys = new WeakMap();
   const connection = db.withSession ? db.withSession('first-primary') : db;
   const query = (sql, ...values) => connection.prepare(sql).bind(...values);
   async function load(roomId) {
@@ -17,6 +19,7 @@ export function createD1RoomRpc({db, eventId, maximumParticipants = 64, maximumS
       where r.id=? and r.event_id=? and e.enabled=1 and e.expires_at_ms>${clock} and r.expires_at_ms>${clock}`, roomId, eventId).first();
     if (!row) fail('ROOM_NOT_FOUND');
     const document = JSON.parse(row.document);
+    if (normalized) { await hydrateJournal(connection, roomId, document); journalKeys.set(document,{submissions:new Set(document.submissions.map(s=>s.submissionId)),operations:new Set(Object.keys(document.operations))}); }
     document.members ??= [];
     document.operations ??= {};
     return {row, document};
@@ -39,7 +42,18 @@ export function createD1RoomRpc({db, eventId, maximumParticipants = 64, maximumS
         .map(value => ({...value}))};
   }
   async function write(row, document) {
-    const serialized = JSON.stringify(document);
+    const serialized = JSON.stringify(normalized ? {...document, submissions: [], operations: {}} : document);
+    if (normalized) {
+      const known=journalKeys.get(document);
+      const condition = 'exists(select 1 from vdj_rooms where id=? and version=?)';
+      const records = [
+        ...document.submissions.filter(s=>!known.submissions.has(s.submissionId)).map(s => query(`insert or ignore into vdj_submissions select ?,?,?,?,? where ${condition}`, row.id,s.submissionId,s.participantId,s.createdAtMs ?? 0,JSON.stringify(s),row.id,row.version)),
+        ...Object.entries(document.operations).filter(([key])=>!known.operations.has(key)).map(([key,op]) => query(`insert or ignore into vdj_operations select ?,?,?,?,? where ${condition}`,row.id,key,op.actor,op.atMs,JSON.stringify(op),row.id,row.version)),
+        query(`update vdj_rooms set document=?,version=version+1 where id=? and event_id=? and version=? and expires_at_ms>${clock} and exists(select 1 from vdj_events where id=? and enabled=1 and expires_at_ms>${clock})`,serialized,row.id,eventId,row.version,eventId),
+      ];
+      const result = await connection.batch(records);
+      return result.at(-1).meta.changes === 1;
+    }
     if (new TextEncoder().encode(serialized).length > 65536) fail('ROOM_OPERATION_CAP');
     const result = await query(`update vdj_rooms set document=?,version=version+1
       where id=? and event_id=? and version=? and expires_at_ms>${clock}
@@ -88,14 +102,14 @@ export function createD1RoomRpc({db, eventId, maximumParticipants = 64, maximumS
         if (saved.actor !== proof || saved.digest !== operationDigest) fail('NONCE_CONFLICT');
         return structuredClone(saved.envelope.receipt);
       }
-      if (Object.keys(document.operations).length >= 120) fail('ROOM_OPERATION_CAP');
+      if (!normalized && Object.keys(document.operations).length >= 120) fail('ROOM_OPERATION_CAP');
       if (Object.values(document.operations).filter(value => value.actor === proof && value.atMs > row.clock_ms - 60000).length >= 6) fail('RATE_LIMITED');
       let receipt, kind;
       if (op === 'submit') {
         if ((!document.accepting && !who.owner) || document.closed) fail('ACCEPTANCE_OFF');
         if (document.submissions.length >= maximumSubmissions) fail('SUBMISSION_CAP');
         receipt = {roomId, sessionId, nonce: payload.nonce, submissionId: crypto.randomUUID(), participantId: who.id,
-          nickname: who.owner ? payload.nickname : who.nickname, prompt: payload.prompt,
+          nickname: who.owner ? payload.nickname : who.nickname, prompt: payload.prompt, createdAtMs: row.clock_ms,
           state: 'QUEUED', generationId: null, controlVersion: document.controlRevision,
           reason: 'PROVIDER_NOT_CONNECTED', mode: 'collect', jobs: [], kind: 'submission'};
         document.submissions.push(receipt);

@@ -21,7 +21,7 @@ async function fixture() {
   }})};
   const roomStore = createD1JudgeStore({db,eventId:'judge-capacity'});
   const rpc = createD1RoomRpc({db,eventId:'judge-capacity'});
-  const generation = createGenerationStore({db,eventId:'judge-capacity'});
+  const generation = createGenerationStore({db,eventId:'judge-capacity',policy:{audioSeconds:60,videoSeconds:12,sceneCount:6,mediaProfile:'club-flow-v1',maximumCents:1500,maximumSets:5}});
   const room = () => roomStore.create({nonce:crypto.randomUUID(),ownerToken:owner,joinCode:join});
   const submit = roomId => rpc({op:'submit',room_id:roomId,capability:owner,
     payload:{nonce:crypto.randomUUID(),nickname:'合成テスト',prompt:'低音の強いトランスと抽象映像'}});

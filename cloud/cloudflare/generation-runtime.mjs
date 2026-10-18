@@ -47,22 +47,22 @@ function summarize(job) {
     return;
   }
   const videos = sceneKeys(job).map(key => job.parts[key]);
-  if (job.parts.audio.state === 'READY' && videos.some(p => p.state === 'READY')) {
-    job.state = 'READY'; delete job.reason;
+  if (job.parts.audio.state === 'READY' && (job.audioOnly || videos.some(p => p.state === 'READY'))) {
+    job.state = 'READY'; job.readyAtMs ??= Math.max(...parts.filter(p => p.readyAtMs).map(p => p.readyAtMs), Date.now()); delete job.reason;
   } else if (parts.every(terminal) || ['FAILED', 'NEEDS_REVIEW'].includes(job.parts.audio.state)) {
     const problem = parts.find(p => p.state === 'NEEDS_REVIEW') ?? parts.find(p => p.state === 'FAILED');
     job.state = problem?.state ?? 'FAILED'; job.reason = problem?.reason ?? 'GENERATION_FAILED';
   } else job.state = 'GENERATING';
 }
 
-// One coordinator per room, up to five songs and six independent scenes per
-// song. Small provider requests run together; large media preparation is
-// serialized so five downloads/transcodes cannot exhaust the Worker heap.
+// Legacy rooms retain their existing multipart journal. New submissions use
+// one instance each, so provider waits never block another participant. Media
+// downloads acquire a bounded native slot before allocating large buffers.
 export function createGenerationClass(Base) {
   return class GenerationRoom extends Base {
     constructor(ctx, env) { super(ctx, env); this.ctx = ctx; this.env = env; this.serial = Promise.resolve(); }
     locked(fn) { const task = this.serial.then(fn); this.serial = task.catch(() => {}); return task; }
-    store() { return createGenerationStore({db: this.env.DB, eventId: this.env.EVENT_ID}); }
+    store() { return createGenerationStore({db: this.env.DB, eventId: this.env.EVENT_ID, normalized: this.env.AUDIENCE_MODE === 'true'}); }
     async purgeClosedRoom(roomId) {
       return this.locked(async () => {
         const requested = await this.store().purgeRequested(roomId);
@@ -168,13 +168,24 @@ export function createGenerationClass(Base) {
       const result = await provider.result(part.handle);
       // URLs stay transient. Only vetted bytes and hashes enter R2.
       part.stage = 'download';
-      const bytes = await provider.download(result[kind]?.url);
       const duration = kind === 'audio' ? job.duration : job.videoDuration;
-      const native = this.env.NATIVE_PROCESSOR.getByName('cloud-media-v9');
+      let native;
+      const lease = crypto.randomUUID();
+      if (this.env.NATIVE_POOL_SIZE) {
+        const count = Math.min(4, Math.max(1, Number(this.env.NATIVE_POOL_SIZE) || 1));
+        const start = parseInt(job.id.replaceAll('-', '').slice(0, 8), 16) % count;
+        for (let n = 0; n < count; n++) {
+          const candidate = this.env.NATIVE_PROCESSOR.getByName('cloud-media-v10-' + ((start + n) % count));
+          if (await candidate.reserve(lease)) { native = candidate; break; }
+        }
+        if (!native) return false;
+      } else native = this.env.NATIVE_PROCESSOR.getByName('cloud-media-v9');
       part.stage = 'native';
+      try {
+      const bytes = await provider.download(result[kind]?.url);
       const response = await native.fetch(new Request('http://native.internal/prepare/' + kind,
         {method: 'POST', headers: {'content-type': 'application/octet-stream', 'x-vdj-duration-seconds': String(duration),
-          'x-vdj-context-seconds': String(part.contextSeconds ?? 0), 'x-vdj-media-profile': job.mediaProfile ?? 'legacy'}, body: bytes, signal: AbortSignal.timeout(150000)}));
+          'x-vdj-context-seconds': String(part.contextSeconds ?? 0), 'x-vdj-media-profile': job.mediaProfile ?? 'legacy', 'x-vdj-preparation-lease': lease}, body: bytes, signal: AbortSignal.timeout(150000)}));
       if (response.status === 409 || response.status === 503) { await response.body?.cancel(); return false; }
       if (!response.ok) { const problem = await response.json().catch(() => ({})); throw Error(safeReason({message: problem.error})); }
       part.stage = 'validate';
@@ -188,6 +199,7 @@ export function createGenerationClass(Base) {
       if (kind === 'audio') await this.saveAsset(job, 'context', prepared.context, Math.min(16, job.duration));
       part.state = 'READY'; part.readyAtMs = Date.now(); delete part.handle;
       return true;
+      } finally { if (this.env.NATIVE_POOL_SIZE) await native.release(lease); }
     }
     async directImage(job, persist) {
       if (!job.reference || job.direction?.state === 'READY') return;
@@ -225,7 +237,7 @@ export function createGenerationClass(Base) {
         const jobs = (await this.ctx.storage.get('jobs') ?? []).map(upgrade);
         const roomId = await this.ctx.storage.get('room');
         if (roomId && await this.store().purgeRequested(roomId)) { await this.ctx.storage.deleteAlarm(); return; }
-        const active = jobs.filter(pending).slice(0, 5);
+        const active = jobs.filter(pending).slice(0, this.env.AUDIENCE_MODE === 'true' ? 38 : 5);
         if (!active.length) return;
         // Persist a recovery alarm before any external I/O. Cloudflare runs only
         // one alarm at a time, including retries after object interruption.
@@ -249,6 +261,7 @@ export function createGenerationClass(Base) {
           await this.store().active(active[0].roomId);
           if (this.env.GENERATION_ENABLED !== 'true') throw Error('GENERATION_DISABLED');
           provider = createFalProvider({key: this.env.FAL_KEY, fetchImpl: this.env.testFetch ?? fetch});
+          if (this.env.AUDIENCE_MODE === 'true' && this.env.AUDIENCE_ROOMS) provider.preflight = options => this.env.AUDIENCE_ROOMS.getByName(roomId).checkPrice(options);
         } catch (error) {
           for (const job of active) {
             for (const kind of partKeys(job)) if (!terminal(job.parts[kind])) {
@@ -272,7 +285,7 @@ export function createGenerationClass(Base) {
         }));
         // A batch shares the most recent completed musical context. Waiting for
         // each new song's context would serialize the entire batch again.
-        const context = jobs.filter(j => j.assets?.context && j.state === 'READY').at(-1)?.assets.context;
+        const context = jobs.filter(j => j.duration > 12 && j.assets?.context && j.state === 'READY').at(-1)?.assets.context;
         const advance = async (job, key) => {
           const kind = mediaKind(key), part = job.parts[key];
           if (terminal(part)) return;
@@ -284,16 +297,16 @@ export function createGenerationClass(Base) {
               if (['FAILED', 'NEEDS_REVIEW'].includes(job.parts.audio.state)) { part.state = 'CANCELLED'; }
               else {
                 const preflightKey = `${job.duration}:${!!job.reference}`;
-                if (!preflights.has(preflightKey)) preflights.set(preflightKey, provider.preflight({duration: job.duration, reference: !!job.reference}));
+                if (!preflights.has(preflightKey)) preflights.set(preflightKey, provider.preflight({duration: job.duration, reference: !!job.reference, audioOnly:!!job.audioOnly}));
                 await preflights.get(preflightKey);
                 let contextUrl;
                 if (kind === 'audio' && context) contextUrl = (await createProviderDelivery({db: this.env.DB,
-                  bucket: this.env.MEDIA, eventId: this.env.EVENT_ID, origin: this.env.PUBLIC_ORIGIN})
+                  bucket: this.env.MEDIA, eventId: this.env.EVENT_ID, origin: this.env.PUBLIC_ORIGIN, maximumGrants:this.env.AUDIENCE_MODE==='true'?200:50})
                   .issue({roomId: job.roomId, path: context.path, expiresIn: 3600})).url;
                 part.contextSeconds = contextUrl ? context.duration : 0;
                 let referenceUrl;
                 if (kind === 'video' && job.reference) referenceUrl = (await createProviderDelivery({db: this.env.DB,
-                  bucket: this.env.MEDIA, eventId: this.env.EVENT_ID, origin: this.env.PUBLIC_ORIGIN})
+                  bucket: this.env.MEDIA, eventId: this.env.EVENT_ID, origin: this.env.PUBLIC_ORIGIN, maximumGrants:this.env.AUDIENCE_MODE==='true'?200:50})
                   .issue({roomId: job.roomId, path: job.reference.path, expiresIn: 3600})).url;
                 part.state = 'SUBMITTING'; await persist(job);
                 await this.store().active(job.roomId);
@@ -319,7 +332,7 @@ export function createGenerationClass(Base) {
         const inFlight = all.filter(({job, key}) => ['WAIT', 'SUBMITTING'].includes(job.parts[key].state)).length;
         const queued = all.filter(({job, key}) => job.parts[key].state === 'QUEUED' && (!job.reference || job.direction?.state === 'READY'))
           .sort((a, b) => partKeys(a.job).indexOf(a.key) - partKeys(b.job).indexOf(b.key));
-        await Promise.all(queued.slice(0, Math.max(0, 8 - inFlight)).map(({job, key}) => advance(job, key)));
+        await Promise.all(queued.slice(0, Math.max(0, (this.env.AUDIENCE_MODE === 'true' ? 30 : 8) - inFlight)).map(({job, key}) => advance(job, key)));
         // No provider POST is held behind a media download or native QC request.
         // At most two files per alarm bound duration and memory, and resuming
         // PREPARING after restart only re-reads the existing provider receipt.
