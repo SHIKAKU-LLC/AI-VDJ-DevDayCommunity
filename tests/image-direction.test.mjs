@@ -84,8 +84,19 @@ test('each image scene keeps common VJ direction and recognisable source traits'
     assert.match(prompt, /140 BPM/); assert.match(prompt, /no strobe/); assert.match(prompt, /round black glasses/);
     assert.match(prompt, /Discard the reference image's background and packaging/);
     assert.match(prompt, /Do not turn an illustration or pixel character into a photographic person/);
+    assert.match(prompt, /subject itself must visibly change pose/);
+    assert.match(prompt, /contact shadows, reflected light/);
+    assert.match(prompt, /Never present Image 1 as a framed picture/);
+    assert.match(prompt, /movement pushes particles aside and leaves trails/);
+    assert.doesNotMatch(prompt, /kinetic installation suspended|engraved luminous details/);
     assert.doesNotMatch(prompt, /No text, logos, people,/);
   }
   assert.match(visualPrompt('ネオンの猫'), /No text, logos, people,/);
   assert.doesNotMatch(visualPrompt('ネオンの猫'), /REFERENCE_OBSERVATIONS_JSON/);
+});
+test('reference motion respects pixel, illustration, photographic and non-human media', () => {
+  assert.match(visualPrompt('dance',{reference:{...observed,kind:'pixel-art'}}),/articulated pixel body parts/);
+  assert.match(visualPrompt('dance',{reference:{...observed,kind:'illustration'}}),/without adding human anatomy/);
+  assert.match(visualPrompt('dance',{reference:observed}),/cropped portrait use natural head, shoulder and torso movement/);
+  assert.match(visualPrompt('dance',{reference:{...observed,kind:'object'}}),/Do not invent human anatomy/);
 });
