@@ -27,6 +27,7 @@ import {
   BroadcastIcon,
 } from "@phosphor-icons/react";
 import { createRoomController } from "../../judge-controller.mjs";
+import { REFERENCE_IMAGE_ACCEPT } from "../../judge-image.mjs";
 import { Button } from "./components/ui/button";
 import {
   Card,
@@ -326,7 +327,7 @@ function Composer({
         className="sr-only"
         tabIndex={-1}
         type="file"
-        accept="image/jpeg,image/png,image/webp"
+        accept={REFERENCE_IMAGE_ACCEPT}
         aria-label="参考画像（任意）"
         onChange={(event) => {
           const selected = event.target.files?.[0];
