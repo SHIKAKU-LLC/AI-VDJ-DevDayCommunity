@@ -133,7 +133,7 @@ function ensurePlayer() {
     }, onStop() { for (const node of videos.values()) node.pause(); }});
   player = createContinuousPlayer({context, destination: meterNode, onTrack(track) {
     vj.setTrack(track.id); scenePlayer.setTrack(track.id);
-    $('credit-label').textContent = 'このアイデアから生まれました'; $('credit').textContent = track.nickname;
+    $('credit-label').textContent = ''; $('credit').textContent = track.nickname;
     $('play-status').textContent = '再生中 · ' + track.prompt;
   }});
   window.__vdjPlayback = () => ({...player.read(), decodeFailures, meter: {...meter}, visualizer: vj?.read(), scenes: scenePlayer.read(),

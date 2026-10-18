@@ -65,6 +65,8 @@ describe("console and stable runtime", () => {
       fireEvent.click(screen.getByRole("button", { name: "ルームを開く" }));
     });
     expect(calls.filter((c) => c.url === "/api/judge/rooms")).toHaveLength(1);
+    expect(screen.getByRole("button", {name: "別タブで大画面を開く"})).toBeTruthy();
+    expect(document.body.textContent).not.toContain("このアイデアから生まれました");
     const requestFullscreen = vi.fn(async () => {});
     document.getElementById("stage")!.requestFullscreen = requestFullscreen;
     await act(async () =>

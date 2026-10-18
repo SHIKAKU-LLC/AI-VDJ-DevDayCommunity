@@ -32,33 +32,10 @@ export function createVjDynamics({sampleRate = 44100, fftSize = 1024} = {}) {
   };
 }
 
-export function createAudioReactiveVj({context, input, canvas, videoLayer}) {
-  const graphics = canvas?.getContext('2d');
-  if (!graphics) return {start() {}, stop() {}, setTrack() {}, dispose() {}, read: () => ({active: false, reason: 'canvas-unavailable'})};
-  const analyser = context.createAnalyser(); analyser.fftSize = 1024; analyser.smoothingTimeConstant = .12;
-  analyser.minDecibels = -90; analyser.maxDecibels = -5;
-  // AnalyserNode also works with an unconnected output; keep the speaker path
-  // untouched so adding visuals cannot duplicate, mute or delay the sound.
-  input.connect(analyser);
-  const bins = new Uint8Array(analyser.frequencyBinCount), wave = new Float32Array(analyser.fftSize);
-  const dynamics = createVjDynamics({sampleRate: context.sampleRate, fftSize: analyser.fftSize});
-  const motion = matchMedia('(prefers-reduced-motion: reduce)');
-  let running = false, frameId, width = 1, height = 1, prior = 0, frames = 0, started = 0, trackStart = 0, hue = 285;
-  const resize = () => {
-    const rect = canvas.getBoundingClientRect();
-    const ratio = Math.min(devicePixelRatio || 1, 1.5, 1920 / Math.max(1, rect.width), 1080 / Math.max(1, rect.height));
-    width = canvas.width = Math.max(1, Math.round(rect.width * ratio));
-    height = canvas.height = Math.max(1, Math.round(rect.height * ratio));
-  };
-  const observer = new ResizeObserver(resize); observer.observe(canvas); resize();
-  function draw() {
-    if (!running) return;
-    const time = context.currentTime, delta = prior ? time - prior : 1 / 60; prior = time;
-    analyser.getByteFrequencyData(bins); analyser.getFloatTimeDomainData(wave);
-    let power = 0; for (const sample of wave) power += sample * sample;
-    const signal = dynamics.step(bins, Math.sqrt(power / wave.length), time, delta);
-    const amount = motion.matches ? .12 : 1, pulse = signal.pulse * amount;
-    const age = Math.max(0, time - trackStart), mode = Math.floor(age / 13.714) % 3;
+export const trackHue = id => [...String(id)].reduce((n, c) => (n * 31 + c.charCodeAt(0)) % 360, 0);
+export function paintVjFrame(graphics, videoLayer, width, height, {signal, age, hue}, reducedMotion = false) {
+    const amount = reducedMotion ? .12 : 1, pulse = signal.pulse * amount;
+    const mode = Math.floor(age / 13.714) % 3;
     const radius = Math.hypot(width, height) * .55, sides = [6, 3, 8][mode];
     graphics.clearRect(0, 0, width, height);
     graphics.save(); graphics.translate(width / 2, height / 2); graphics.globalCompositeOperation = 'screen';
@@ -86,13 +63,49 @@ export function createAudioReactiveVj({context, input, canvas, videoLayer}) {
     }
     graphics.restore();
     videoLayer.style.transform = `scale(${1.06 + pulse * .075}) rotate(${Math.sin(age * .35) * .5 * amount}deg)`;
+}
+
+export function createAudioReactiveVj({context, input, canvas, videoLayer}) {
+  const graphics = canvas?.getContext('2d');
+  if (!graphics) return {start() {}, stop() {}, setTrack() {}, dispose() {}, sample: () => null, read: () => ({active: false, reason: 'canvas-unavailable'})};
+  const analyser = context.createAnalyser(); analyser.fftSize = 1024; analyser.smoothingTimeConstant = .12;
+  analyser.minDecibels = -90; analyser.maxDecibels = -5;
+  // AnalyserNode also works with an unconnected output; keep the speaker path
+  // untouched so adding visuals cannot duplicate, mute or delay the sound.
+  input.connect(analyser);
+  const bins = new Uint8Array(analyser.frequencyBinCount), wave = new Float32Array(analyser.fftSize);
+  const dynamics = createVjDynamics({sampleRate: context.sampleRate, fftSize: analyser.fftSize});
+  const motion = matchMedia('(prefers-reduced-motion: reduce)');
+  let running = false, frameId, width = 1, height = 1, prior = 0, frames = 0, started = 0, trackStart = 0, hue = 285;
+  const resize = () => {
+    const rect = canvas.getBoundingClientRect();
+    const ratio = Math.min(devicePixelRatio || 1, 1.5, 1920 / Math.max(1, rect.width), 1080 / Math.max(1, rect.height));
+    width = canvas.width = Math.max(1, Math.round(rect.width * ratio));
+    height = canvas.height = Math.max(1, Math.round(rect.height * ratio));
+  };
+  const observer = new ResizeObserver(resize); observer.observe(canvas); resize();
+  function sampleSignal() {
+    const time = context.currentTime;
+    if (time !== prior) {
+      const delta = prior ? time - prior : 1 / 60; prior = time;
+      analyser.getByteFrequencyData(bins); analyser.getFloatTimeDomainData(wave);
+      let power = 0; for (const sample of wave) power += sample * sample;
+      dynamics.step(bins, Math.sqrt(power / wave.length), time, delta);
+    }
+    return {signal: {...dynamics.state}, age: Math.max(0, time - trackStart), hue};
+  }
+  function draw() {
+    if (!running) return;
+    const sample = sampleSignal();
+    paintVjFrame(graphics, videoLayer, width, height, sample, motion.matches);
     frames++; frameId = requestAnimationFrame(draw);
   }
   const stop = () => { running = false; cancelAnimationFrame(frameId); graphics.clearRect(0, 0, width, height); videoLayer.style.transform = ''; };
   return {
     start() { if (!running) { running = true; started = context.currentTime; prior = 0; frames = 0; draw(); } },
     stop,
-    setTrack(id) { trackStart = context.currentTime; hue = [...String(id)].reduce((n, c) => (n * 31 + c.charCodeAt(0)) % 360, 0); },
+    setTrack(id) { trackStart = context.currentTime; hue = trackHue(id); },
+    sample: sampleSignal,
     read: () => ({active: running, ...dynamics.state, frames, fps: frames / Math.max(.1, context.currentTime - started), width, height, reducedMotion: motion.matches}),
     dispose() { stop(); observer.disconnect(); input.disconnect(analyser); },
   };
