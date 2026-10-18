@@ -1,11 +1,8 @@
 # 12秒投稿・公平な再生キュー
 
-[READMEへ戻る](../README.md)
-
 ## 実装
 
-投稿受付順への変更とDecisions連携は本番配備済み。
-下記は12秒版の生成・連続再生の検証記録で、Decisionsの実APIによる追加検証は[Decisions連携の本番検証記録](decisions-playback.md#本番検証記録)を参照。
+投稿受付順への変更とDecisions連携は追加実装で、本番未配備。下記の本番検証記録は従来の12秒版のもの。
 
 1投稿から12秒の音楽・12秒の映像を生成する。画像は任意。
 受付・再生順はAudienceRoom、各投稿の進行はGenerationJobで管理する。

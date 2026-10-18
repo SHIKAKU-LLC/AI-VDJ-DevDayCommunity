@@ -1,11 +1,8 @@
 # Decisions APIによる参加者の出番の調整
 
-[READMEへ戻る](../README.md)
-
 OpenAI Decisions APIを、次に流す12秒の音楽・映像セットの選択に組み込む。
 投稿内容の審査ではなく、同じ参加者の繰り返し採用を調整する用途で使う。
-2026年10月18日、[PR #23の本番検証記録](https://github.com/SHIKAKU-LLC/AI-VDJ-DevDayCommunity/pull/23)で、実APIの回答採用と12秒間隔の連続再生を確認した。
-新規環境では既定で無効。運営側が設定を有効にした場合だけ外部へ問い合わせる。
+実API応答・本番配備は未確認。既定では外部への問い合わせを行わない。
 
 ## 参加者に見える挙動
 
@@ -55,16 +52,7 @@ Durable Objectのロック外で実行し、投稿受付・ハートビート・
 5. 無効化する場合は `VDJ_DECISIONS_ENABLED=false` で再配備する。新規要求を止め、保存済み回答も使わない。
 
 `selection` は直近の予約を示す。実際の採用は `played` と `counts` で確認する。
-
-## 本番検証記録
-
-2026年10月18日の[PR #23](https://github.com/SHIKAKU-LLC/AI-VDJ-DevDayCommunity/pull/23)に、以下の結果が記録されている。
-
-- 実APIの `ready` 応答と、`selection.source: decisions` / `DEFER_REPEAT` の採用を確認。
-- 全画面で A1 → B1 → C1 → A2 → プリセットを12秒間隔で連続再生。採用回数は A=2 / B=1 / C=1。
-- API呼び出し1回、読み込み失敗0件。承認済みの4件を使い、新しい音楽・映像は生成していない。
-
-この結果は上記条件での検証記録であり、実機の同時接続人数は未計測。
+本変更ではクラウド設定変更・配備・実API課金は行っていない。
 
 ## ローカル検証
 
