@@ -853,29 +853,31 @@
   .stage-credit-name { @apply block text-xl leading-normal font-bold; }
   .stage-credit-text {
     @apply block truncate;
-    /* Leave room for the neon halo while keeping long names on one line. */
-    margin: -10px -12px;
-    padding: 10px 12px;
+    /* Leave room for the aurora halo while keeping long names on one line. */
+    margin: -14px;
+    padding: 14px;
   }
   /* Claude Code's seven character colors, each with a brighter sweep color. */
-  .stage-credit-letter[data-tone="0"] { --credit-base: #eb5f57; --credit-highlight: #fa9b93; }
-  .stage-credit-letter[data-tone="1"] { --credit-base: #f58b57; --credit-highlight: #ffb989; }
-  .stage-credit-letter[data-tone="2"] { --credit-base: #fac35f; --credit-highlight: #ffe19b; }
-  .stage-credit-letter[data-tone="3"] { --credit-base: #91c882; --credit-highlight: #b9e6b4; }
-  .stage-credit-letter[data-tone="4"] { --credit-base: #82aadc; --credit-highlight: #b4cdf0; }
-  .stage-credit-letter[data-tone="5"] { --credit-base: #9b82c8; --credit-highlight: #c3b4e6; }
-  .stage-credit-letter[data-tone="6"] { --credit-base: #c882b4; --credit-highlight: #e6b4d2; }
+  .stage-credit-letter[data-tone="0"] { --credit-base: #eb5f57; --credit-highlight: #fa9b93; --aurora-delay: 0s; }
+  .stage-credit-letter[data-tone="1"] { --credit-base: #f58b57; --credit-highlight: #ffb989; --aurora-delay: -.6s; }
+  .stage-credit-letter[data-tone="2"] { --credit-base: #fac35f; --credit-highlight: #ffe19b; --aurora-delay: -1.2s; }
+  .stage-credit-letter[data-tone="3"] { --credit-base: #91c882; --credit-highlight: #b9e6b4; --aurora-delay: -1.8s; }
+  .stage-credit-letter[data-tone="4"] { --credit-base: #82aadc; --credit-highlight: #b4cdf0; --aurora-delay: -2.4s; }
+  .stage-credit-letter[data-tone="5"] { --credit-base: #9b82c8; --credit-highlight: #c3b4e6; --aurora-delay: -3s; }
+  .stage-credit-letter[data-tone="6"] { --credit-base: #c882b4; --credit-highlight: #e6b4d2; --aurora-delay: -3.6s; }
   .stage-credit-letter {
-    color: var(--credit-base);
-    -webkit-text-stroke: .45px color-mix(in srgb, currentColor 35%, white);
+    --credit-ink: var(--credit-base);
+    color: color-mix(in srgb, var(--credit-ink) 60%, white);
+    -webkit-text-stroke: .5px color-mix(in srgb, currentColor 20%, white);
     paint-order: stroke fill;
     text-shadow:
-      0 0 2px color-mix(in srgb, currentColor 25%, white),
-      0 0 5px currentColor,
-      0 0 10px color-mix(in srgb, currentColor 80%, transparent),
-      0 0 18px color-mix(in srgb, currentColor 50%, transparent);
+      0 0 2px rgb(255 255 255 / .85),
+      0 0 6px currentColor,
+      -2px -1px 12px rgb(105 249 216 / .75),
+      3px 1px 18px rgb(157 133 255 / .75),
+      0 0 24px rgb(99 205 255 / .45);
   }
-  .stage-credit-letter[data-highlighted="true"] { color: var(--credit-highlight); }
+  .stage-credit-letter[data-highlighted="true"] { --credit-ink: var(--credit-highlight); }
   .transport-panel { @apply surface-panel grid items-center gap-4 border-t border-border p-4; }
   .transport-main { @apply grid min-w-0 grid-cols-[1fr_auto] items-center gap-3; }
   .transport-buttons { @apply flex flex-wrap items-center gap-2; }
@@ -908,8 +910,29 @@
   .stage:fullscreen .stage-credit { top: var(--credit-inset); bottom: auto; }
 }
 @media (prefers-reduced-motion:reduce) { *,*::before,*::after { animation-duration:.01ms!important; transition-duration:.01ms!important; } }
+@media (prefers-reduced-motion: no-preference) {
+  .stage-credit-letter { animation: credit-aurora 6s ease-in-out var(--aurora-delay) infinite; }
+}
+@keyframes credit-aurora {
+  0%, 100% {
+    text-shadow:
+      0 0 2px rgb(255 255 255 / .85),
+      0 0 6px currentColor,
+      -2px -1px 12px rgb(105 249 216 / .75),
+      3px 1px 18px rgb(157 133 255 / .75),
+      0 0 24px rgb(99 205 255 / .45);
+  }
+  50% {
+    text-shadow:
+      0 0 2px rgb(255 255 255 / .95),
+      0 0 7px currentColor,
+      2px 1px 14px rgb(146 169 255 / .8),
+      -3px -1px 20px rgb(237 143 255 / .7),
+      0 0 26px rgb(105 255 205 / .5);
+  }
+}
 @media (forced-colors: active) {
-  .stage-credit-letter { color: CanvasText; -webkit-text-stroke: 0; text-shadow: none; }
+  .stage-credit-letter { color: CanvasText; -webkit-text-stroke: 0; text-shadow: none; animation: none; }
   .stage-credit-letter[data-highlighted="true"] { color: CanvasText; }
 }
 
