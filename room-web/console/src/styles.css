@@ -851,18 +851,25 @@
     max-width: min(var(--container-xs), calc(100% - var(--credit-inset) * 2));
   }
   .stage-credit-name {
-    --credit-blue: color-mix(in oklch, var(--color-blue-900) 55%, var(--color-white));
-    --credit-purple: color-mix(in oklch, var(--color-purple-900) 55%, var(--color-white));
-    --credit-pink: color-mix(in oklch, var(--color-pink-900) 55%, var(--color-white));
-    --credit-gold: color-mix(in oklch, var(--color-amber-900) 55%, var(--color-white));
+    /* Keep the spectrum vivid on the black caption in either UI theme. */
+    --credit-red: #ff7584;
+    --credit-orange: #ffa85c;
+    --credit-yellow: #ffdf70;
+    --credit-green: #7ce99b;
+    --credit-blue: #78d9ff;
+    --credit-purple: #b89aff;
+    --credit-pink: #f991e9;
     @apply block truncate text-2xl leading-tight font-bold;
-    text-shadow: 0 0 var(--spacing) color-mix(in oklch, var(--credit-blue) 45%, transparent),
-      0 0 calc(var(--spacing) * 4) color-mix(in oklch, var(--credit-pink) 40%, transparent);
+    text-shadow: 0 0 calc(var(--spacing) / 2) color-mix(in srgb, var(--color-white) 15%, transparent),
+      0 0 calc(var(--spacing) * 2) color-mix(in srgb, var(--credit-purple) 20%, transparent);
   }
   @supports (background-clip: text) or (-webkit-background-clip: text) {
     .stage-credit-name {
-      background-image: linear-gradient(110deg, var(--credit-blue), var(--credit-purple) 20%, var(--credit-pink) 36%, var(--color-white) 50%, var(--credit-gold) 64%, var(--credit-blue) 80%, var(--credit-purple));
-      background-size: 240% 100%;
+      background-image:
+        linear-gradient(115deg, transparent 42%, color-mix(in srgb, var(--color-white) 40%, transparent) 46%, var(--color-white) 48%, var(--color-white) 52%, color-mix(in srgb, var(--color-white) 40%, transparent) 54%, transparent 58%),
+        linear-gradient(90deg, var(--credit-red), var(--credit-orange) 16%, var(--credit-yellow) 32%, var(--credit-green) 48%, var(--credit-blue) 64%, var(--credit-purple) 80%, var(--credit-pink));
+      background-size: 240% 100%, 100% 100%;
+      background-position: 0% 50%, 0% 50%;
       background-clip: text;
       -webkit-background-clip: text;
       color: transparent;
@@ -901,11 +908,11 @@
 }
 @media (prefers-reduced-motion:reduce) { *,*::before,*::after { animation-duration:.01ms!important; transition-duration:.01ms!important; } }
 @media (prefers-reduced-motion: no-preference) {
-  .stage-credit-name { animation: credit-shimmer 6s ease-in-out infinite alternate; }
+  .stage-credit-name { animation: credit-shimmer 4s linear infinite; }
 }
 @keyframes credit-shimmer {
-  from { background-position: 0% 50%; }
-  to { background-position: 100% 50%; }
+  from { background-position: 0% 50%, 0% 50%; }
+  to { background-position: 100% 50%, 0% 50%; }
 }
 @media (forced-colors: active) {
   .stage-credit-name { background: none; color: CanvasText; text-shadow: none; animation: none; }
