@@ -25,7 +25,6 @@ import {
   CheckCircleIcon,
   ArrowRightIcon,
   BroadcastIcon,
-  LightbulbIcon,
 } from "@phosphor-icons/react";
 import { createRoomController } from "../../judge-controller.mjs";
 import { Button } from "./components/ui/button";
@@ -786,15 +785,9 @@ export function App({
                   )}
                   {state.credit && (
                     <aside className="stage-credit" aria-label="この曲のアイデア投稿者">
-                      <span className="stage-credit-icon" aria-hidden="true">
-                        <LightbulbIcon weight="duotone" />
-                      </span>
-                      <div className="stage-credit-copy">
-                        <span className="stage-credit-label">アイデアをくれた人</span>
-                        <strong className="stage-credit-name" title={state.credit}>
-                          {state.credit}
-                        </strong>
-                      </div>
+                      <strong className="stage-credit-name" title={state.credit}>
+                        {state.credit}
+                      </strong>
                     </aside>
                   )}
                 </div>
