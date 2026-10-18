@@ -189,6 +189,15 @@ test("Workers-compatible redirect handling never follows a redirect with credent
   assert.equal(calls, 1);
 });
 
+test("first-request latency above 800ms still yields usable preflight advice", async () => {
+  const plan = playbackPlan(jobs, afterFirst());
+  const result = await requestPlaybackDecision(plan, {key: "placeholder", fetchImpl: async () => {
+    await new Promise(resolve => setTimeout(resolve, 1000));
+    return Response.json({answers: [{type: "choice", name: "playback_action", choice: "DEFER_REPEAT"}]});
+  }});
+  assert.deepEqual(result, {status: "ready", action: "DEFER_REPEAT"});
+});
+
 test("request setup and transport failures return fixed phases without error messages", async () => {
   const plan = playbackPlan(jobs, afterFirst());
   let calls = 0;

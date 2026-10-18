@@ -1,7 +1,9 @@
 import { playbackPlan } from "./playback-queue.mjs";
 
 export const DECISIONS_MODEL = "gpt-6-luna";
-export const DECISIONS_TIMEOUT_MS = 800;
+// Sent at playback start, ahead of the next 12-second boundary. Network and
+// first-request latency must not consume the entire response window.
+export const DECISIONS_TIMEOUT_MS = 5000;
 export const DECISIONS_MAX_CALLS = 100;
 
 // Reserve once per deferred head before sending. Eviction, retries and polling
