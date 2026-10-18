@@ -28,7 +28,7 @@ import {
   BroadcastIcon,
 } from "@phosphor-icons/react";
 import { createRoomController } from "../../judge-controller.mjs";
-import { REFERENCE_IMAGE_ACCEPT } from "../../judge-image.mjs";
+import { REFERENCE_IMAGE_ACCEPT, REFERENCE_IMAGE_EXTENSIONS } from "../../judge-image.mjs";
 import { Button } from "./components/ui/button";
 import { CreditName } from "./components/credit-name";
 import {
@@ -298,6 +298,7 @@ function Composer({
                   variant="ghost"
                   size="sm"
                   disabled={busy || full}
+                  aria-describedby={state.imageError ? "image-help image-error" : "image-help"}
                   onClick={() => file.current?.click()}
                 >
                   <ImageIcon />
@@ -310,7 +311,7 @@ function Composer({
               className="h-8 w-auto px-3"
               status={busy ? "submitted" : "idle"}
               variant={primary ? "default" : "secondary"}
-              disabled={busy || !prompt.trim() || full || !state.accepting}
+              disabled={busy || state.imageError || !prompt.trim() || full || !state.accepting}
               aria-label={
                 state.role === "owner"
                   ? "音楽・映像を生成する"
@@ -325,6 +326,13 @@ function Composer({
         <FieldDescription id="prompt-help">
           短い言葉だけで大丈夫。画像は任意です。演出の詳しい指示は自動で作ります。
         </FieldDescription>
+        {state.imageEnabled && (
+          <FieldDescription id="image-help">
+            <span className="block">対応形式（8MBまで）</span>
+            <span className="block">{REFERENCE_IMAGE_EXTENSIONS}</span>
+            HEIC・HEIFは対応ブラウザのみ利用できます。
+          </FieldDescription>
+        )}
       </Field>
       <input
         ref={file}
@@ -333,12 +341,24 @@ function Composer({
         type="file"
         accept={REFERENCE_IMAGE_ACCEPT}
         aria-label="参考画像（任意）"
+        aria-describedby={state.imageError ? "image-help image-error" : "image-help"}
+        aria-invalid={state.imageError || undefined}
         onChange={(event) => {
           const selected = event.target.files?.[0];
           void controller.attach(selected);
           event.target.value = "";
         }}
       />
+      {state.imageError && (
+        <Note variant="error" role="alert">
+          <NoteContent>
+            <p id="image-error">{state.error}</p>
+            <Button type="button" variant="outline" size="sm" className="mt-2" onClick={() => controller.clearReference()}>
+              画像なしで続ける
+            </Button>
+          </NoteContent>
+        </Note>
+      )}
       {full && (
         <Note variant="warning">
           <NoteContent>
@@ -441,6 +461,11 @@ function Generation({
                 {job?.direction?.summary && (
                   <p className="text-copy-13 text-muted-foreground">
                     {job.direction.summary}
+                  </p>
+                )}
+                {job?.reason === "IMAGE_DIRECTION_INVALID" && (
+                  <p className="text-copy-13 text-muted-foreground">
+                    画像は読み込めましたが、演出の解析結果を処理できませんでした。再試行してください。
                   </p>
                 )}
                 {job &&
@@ -627,7 +652,31 @@ export function App({
               {owner ? "オーナー" : room ? "参加者" : "音と映像のセッション"}
             </span>
           </div>
-          <ThemeSwitcher size="sm" />
+          <div className="flex shrink-0 items-center gap-2">
+            {owner && (
+              <Sheet>
+                <SheetTrigger
+                  render={<Button variant="outline" size="sm" aria-label="みんなを招待・受付設定" title="みんなを招待・受付設定" />}
+                >
+                  <UsersIcon />
+                  <span className="hidden sm:inline">みんなを招待・受付設定</span>
+                  <span className="sm:hidden">招待</span>
+                </SheetTrigger>
+                <SheetContent>
+                  <SheetHeader>
+                    <SheetTitle>ルームの招待と設定</SheetTitle>
+                    <SheetDescription>
+                      招待した人は自分のブラウザから参加できます。
+                    </SheetDescription>
+                  </SheetHeader>
+                  <div className="p-4 overflow-y-auto">
+                    <Invitation controller={controller} state={state} />
+                  </div>
+                </SheetContent>
+              </Sheet>
+            )}
+            <ThemeSwitcher size="sm" />
+          </div>
         </header>
         <main id="main" className="console-main">
           {!room && (
@@ -926,27 +975,6 @@ export function App({
               <div className="generation-panel">
                 <Generation controller={controller} state={state} />
               </div>
-              {owner && (
-                <Sheet>
-                  <SheetTrigger
-                    render={<Button variant="outline" className="w-full" />}
-                  >
-                    <UsersIcon />
-                    みんなを招待・受付設定
-                  </SheetTrigger>
-                  <SheetContent>
-                    <SheetHeader>
-                      <SheetTitle>ルームの招待と設定</SheetTitle>
-                      <SheetDescription>
-                        招待した人は自分のブラウザから参加できます。
-                      </SheetDescription>
-                    </SheetHeader>
-                    <div className="p-4 overflow-y-auto">
-                      <Invitation controller={controller} state={state} />
-                    </div>
-                  </SheetContent>
-                </Sheet>
-              )}
             </aside>
           </div>
           <div className="feedback">
@@ -957,8 +985,8 @@ export function App({
                 </Note>
               )}
             </div>
-            <div role="alert">
-              {state.error && (
+            <div role={state.imageError ? undefined : "alert"}>
+              {state.error && !state.imageError && (
                 <Note variant="error">
                   <NoteContent>
                     <p>{state.error}</p>

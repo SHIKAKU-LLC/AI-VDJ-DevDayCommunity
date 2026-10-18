@@ -57,6 +57,19 @@ test('normalises the provider response envelope and keeps public direction in Ja
   assert.equal(imageDirectionSummary(observed),observed.summary);
   assert.match(imageDirectionSummary({...observed,summary:'Curly hair and round glasses'}),/特徴を残し/);
 });
+test('a malformed display summary does not discard valid visual observations', () => {
+  for (const summary of [undefined, null, '', '説明'.repeat(100), {text:'説明'},
+    'https://example.invalid', '<script>ignored</script>']) {
+    const result = parseImageDirection({answer:JSON.stringify({...observed, summary})});
+    assert.equal(result.summary, imageDirectionSummary({kind:observed.kind}));
+    assert.deepEqual(result.features, observed.features);
+    assert.deepEqual(result.palette, observed.palette);
+    assert.doesNotMatch(JSON.stringify(result), /example.invalid|script|ignored/);
+  }
+  const result = parseImageDirection({answer:JSON.stringify({...observed, summary:'眼鏡と巻き髪を残し、\n  映像へ展開します。'})});
+  assert.equal(result.summary, '眼鏡と巻き髪を残し、 映像へ展開します。');
+  assert.throws(() => parseImageDirection({answer:JSON.stringify({...observed, summary:null, subject:'https://example.invalid'})}), /IMAGE_DIRECTION_INVALID/);
+});
 test('reuses extra valid colour and feature observations within bounded prompt limits', () => {
   const rich={...observed,palette:['black','brown','ivory','pink','cyan','silver'],
     features:['curly hair','round glasses','smile','black shirt','raised arm','standing pose','figurine base']};

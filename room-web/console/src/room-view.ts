@@ -31,6 +31,7 @@ export interface RoomView {
   joinBusy: boolean;
   submitBusy: boolean;
   imageBusy: boolean;
+  imageError?: boolean;
   retryBusy?: string | null;
   ready: boolean;
   running: boolean;

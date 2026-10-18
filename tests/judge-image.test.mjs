@@ -51,14 +51,14 @@ function browser(t, {width = 4032, height = 3024, bitmapFails = false,
   return {created, revoked, drawn, closed: () => closed, imageLoads: () => imageLoads};
 }
 
-for (const [name, bytes, type] of [
-  ['PNG', png, 'image/png'], ['JPEG', jpeg, 'image/jpeg'], ['WebP', webp, 'image/webp'],
-  ['missing MIME', png, ''], ['generic MIME', jpeg, 'application/octet-stream'],
-  ['HEIC', heic, 'image/heic'], ['HEIF without MIME', heic, ''],
+for (const [name, bytes, type, filename] of [
+  ['PNG', png, 'image/png', 'synthetic.PNG'], ['JPEG', jpeg, 'image/jpeg', 'synthetic.jpeg'], ['WebP', webp, 'image/webp', 'synthetic.webp'],
+  ['missing MIME', png, '', 'synthetic.png'], ['generic MIME', jpeg, 'application/octet-stream', 'synthetic.jpg'],
+  ['HEIC', heic, 'image/heic', 'synthetic.HEIC'], ['HEIF without MIME', heic, '', 'synthetic.heif'],
 ]) {
   test(`normalises ${name} selection into a bounded PNG and hash`, async t => {
     const env = browser(t);
-    const result = await prepareReferenceImage(new File([bytes], 'synthetic', {type}));
+    const result = await prepareReferenceImage(new File([bytes], filename, {type}));
     assert.equal(result.blob.type, 'image/png');
     assert.equal(result.hash.length, 64);
     assert.equal(env.drawn[0].w, 1024);
@@ -106,6 +106,24 @@ test('rejects SVG or unrelated bytes even when the filename and MIME claim PNG',
   }
   assert.equal(env.drawn.length, 0);
   assert.equal(env.created.length, 0);
+});
+
+test('rejects unsupported extensions and mismatched content before decoding', async t => {
+  const env = browser(t);
+  for (const [bytes, name] of [[png, 'synthetic.gif'], [png, 'synthetic.jpg'],
+    [jpeg, 'synthetic.svg'], [heic, 'synthetic.avif'], [png, 'png']]) {
+    await assert.rejects(prepareReferenceImage(new File([bytes], name)), /IMAGE_FORMAT_INVALID/);
+  }
+  assert.equal(env.closed(), 0);
+  assert.equal(env.imageLoads(), 0);
+  assert.equal(env.drawn.length, 0);
+});
+
+test('a JPEG that neither browser decoder can read is rejected before upload', async t => {
+  const env = browser(t, {bitmapFails:true, imageFails:true});
+  await assert.rejects(prepareReferenceImage(new File([jpeg], 'broken.jpeg')), /IMAGE_DECODE_FAILED/);
+  assert.equal(env.drawn.length, 0);
+  assert.deepEqual(env.revoked, [env.created[0].url]);
 });
 
 test('keeps byte and pixel limits, and releases decoded resources on oversized input', async t => {
