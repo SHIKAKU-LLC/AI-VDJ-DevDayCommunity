@@ -1,5 +1,9 @@
 // An optional local preview; original names and metadata never leave the tab.
-export const REFERENCE_IMAGE_ACCEPT = 'image/jpeg,image/png,image/webp,image/heic,image/heif,.heic,.heif';
+const extensions = {jpg:'image/jpeg', jpeg:'image/jpeg', png:'image/png', webp:'image/webp',
+  heic:'image/heic', heif:'image/heic'};
+export const REFERENCE_IMAGE_EXTENSIONS = '.jpg・.jpeg・.png・.webp・.heic・.heif';
+export const REFERENCE_IMAGE_ACCEPT = [...new Set(Object.values(extensions)), 'image/heif',
+  ...Object.keys(extensions).map(extension => '.' + extension)].join(',');
 
 async function imageType(file) {
   // Mobile photo/file pickers can omit or mislabel File.type. Check the bytes
@@ -51,8 +55,11 @@ async function decodeImage(blob) {
 
 export async function prepareReferenceImage(file) {
   if (!file || !file.size) throw Error('IMAGE_FORMAT_INVALID');
+  const extension = /\.([^.]+)$/.exec(file.name ?? '')?.[1].toLowerCase();
+  if (!Object.hasOwn(extensions, extension)) throw Error('IMAGE_FORMAT_INVALID');
   if (file.size > 8 * 1024 * 1024) throw Error('IMAGE_TOO_LARGE');
   const type = await imageType(file);
+  if (extensions[extension] !== type) throw Error('IMAGE_FORMAT_INVALID');
   const image = await decodeImage(file.slice(0, file.size, type));
   let canvas;
   try {

@@ -53,6 +53,11 @@ export function parseImageDirection(result) {
   // become an accepted structured result.
   if (value && typeof value === 'object' && !Array.isArray(value)) {
     value = {...value};
+    // This optional display annotation is also sent with the observations.
+    // Keep valid visual facts if the model omits or malforms the summary.
+    // Never truncate and retain unvalidated model text in the video prompt.
+    const summary = typeof value.summary === 'string' ? value.summary.replace(/\s+/g, ' ').trim() : '';
+    value.summary = text(summary, 180) ? summary : imageDirectionSummary({kind:value.kind});
     // Some vision responses use a comma-separated palette or keyed colour
     // descriptions rather than the requested list. This is display metadata,
     // never an instruction or a resource locator. Validate the full strings

@@ -1,7 +1,7 @@
 import qrcode from "./qr-encoder.mjs";
 import { createSetPlayer } from "./judge-set-player.mjs";
 import { createAudioReactiveVj } from "./judge-vj.mjs";
-import { prepareReferenceImage } from "./judge-image.mjs";
+import { prepareReferenceImage, REFERENCE_IMAGE_EXTENSIONS } from "./judge-image.mjs";
 import { createMasterOutput } from "./judge-output.mjs";
 import { createDisplayHost, videoDescriptor, displaySchedule } from "./judge-display.mjs";
 
@@ -25,6 +25,7 @@ export function createRoomController() {
     joinBusy: false,
     submitBusy: false,
     imageBusy: false,
+    imageError: false,
     maximumSets: 100,
     remainingSets: null,
     ready: false,
@@ -86,9 +87,9 @@ export function createRoomController() {
     ACCEPTANCE_OFF: "現在は新しいアイデアの受付を閉じています。",
     RATE_LIMITED: "少し時間をおいてから送信してください。",
     IMAGE_FORMAT_INVALID:
-      "対応していない画像形式です。JPEG・PNG・WebP・HEICの画像を選んでください。",
+      `対応していない画像形式、または拡張子と内容が一致しない画像です。${REFERENCE_IMAGE_EXTENSIONS} の画像を選んでください。`,
     IMAGE_DECODE_FAILED:
-      "このブラウザで画像を読み込めませんでした。画像のスクリーンショットか、JPEG・PNG・WebP形式を選んでください。",
+      "このブラウザで画像を読み込めませんでした。.jpg・.jpeg・.png・.webp で保存し直すか、画像のスクリーンショットを選んでください。",
     IMAGE_TOO_LARGE:
       "画像が大きすぎます。小さい画像を選んでください（元画像は8MB・5,000万画素まで）。",
     IMAGE_REFERENCE_LIMIT:
@@ -759,7 +760,7 @@ export function createRoomController() {
     }
   }
   async function submit(value) {
-    if (submitBusy || imageBusy) return false;
+    if (submitBusy || imageBusy || view.imageError) return false;
     const prompt = value.trim();
     if (!prompt) return false;
     submitBusy = true;
@@ -838,7 +839,7 @@ export function createRoomController() {
     if (referenceImage) URL.revokeObjectURL(referenceImage.previewUrl);
     referenceImage = null;
     imageBusy = false;
-    update({ image: null, imageBusy: false });
+    update({ image: null, imageBusy: false, imageError: false, ...(view.imageError ? {error:""} : {}) });
   }
   async function attach(file) {
     clearReference();
@@ -855,7 +856,10 @@ export function createRoomController() {
       referenceImage = image;
       update({ image: { url: image.previewUrl, name: file.name } });
     } catch (e) {
-      if (version === imageVersion) error(e);
+      if (version === imageVersion) {
+        update({imageError:true});
+        error(e);
+      }
     } finally {
       if (version === imageVersion) {
         imageBusy = false;

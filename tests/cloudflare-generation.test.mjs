@@ -160,6 +160,26 @@ test('owner can reparse the private cached image answer without another paid inf
     assert.deepEqual(await f.runtime.retryPreparation(f.room.roomId,[receipt.submissionId]),{resumed:0});
   } finally { f.sqlite.close(); }
 });
+
+test('an overlong image summary does not block generation or buy another analysis', async () => {
+  const f = await fixture({flow:true}); let observations = 0;
+  try {
+    f.env.IMAGE_DIRECTION_ENABLED = 'true';
+    f.env.AI = {async run() { observations++; return {answer:JSON.stringify({...imagePlan, summary:'説明'.repeat(100)})}; }};
+    await attach(f);
+    const receipt = await f.rpc({op:'submit', room_id:f.room.roomId, capability:f.owner,
+      payload:{nonce:'d'.repeat(64), prompt:'ネオンの猫', nickname:'合成テスト'}});
+    await f.runtime.enqueue(f.room.roomId, [receipt.submissionId]);
+    for (let n=0; n<20; n++) await f.runtime.alarm();
+    const job = (await f.store.records(f.room.roomId)).find(j=>j.id===receipt.submissionId);
+    assert.equal(job.state, 'READY');
+    assert.equal(job.direction.state, 'READY');
+    assert.match(job.direction.plan.summary, /特徴を残し/);
+    assert.equal(observations, 1);
+    assert.equal(f.posted(), 7);
+    assert.equal(f.sqlite.prepare('select count(*) n from vdj_budget_reservations').get().n, 1);
+  } finally { f.sqlite.close(); }
+});
 test('invalid cached answers never trigger another paid inference and legacy retries are bounded', async () => {
   const f=await fixture({flow:true}); let observations=0;
   try {
