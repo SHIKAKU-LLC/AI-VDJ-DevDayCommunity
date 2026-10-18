@@ -1,3 +1,4 @@
+import {readSubmissionRecords} from './submission-records.mjs';
 import {publicAssets, sceneKeys} from './generation-parts.mjs';
 import {createGenerationStore} from './generation-store.mjs';
 import {boundedBytes, sha256, createFalProvider} from './fal-provider.mjs';
@@ -10,7 +11,7 @@ export async function generationHttp(request, env) {
   const [, roomId, route, jobId, kind] = match;
   const owner = request.headers.get('x-room-owner'), member = request.headers.get('authorization')?.match(/^Bearer ([a-f0-9]{64})$/)?.[1];
   if (owner && member) return answer({error: 'DENIED'}, 403);
-  const store = createGenerationStore({db: env.DB, eventId: env.EVENT_ID});
+  const store = createGenerationStore({db: env.DB, eventId: env.EVENT_ID, normalized:env.AUDIENCE_MODE==='true'});
   let phase = 'authorize';
   try {
     if (route === 'generation' && !jobId && request.method === 'DELETE' &&
@@ -26,13 +27,17 @@ export async function generationHttp(request, env) {
       let jobs = await store.records(roomId);
       if (!owner) {
         const proof = await sha256(member), document = JSON.parse(room.document);
+        if(env.AUDIENCE_MODE==='true')document.submissions=await readSubmissionRecords(env.DB,roomId,document);
         const actor = document.members.find(m => m.proof === proof);
         const own = new Set(document.submissions.filter(s => s.participantId === actor?.id).map(s => s.submissionId));
         jobs = jobs.filter(j => own.has(j.id));
       }
-      return answer({jobs: jobs.map(job => {
-        const {id, prompt, nickname, state, reason, maximumCents, progress, sceneCount = 1} = job;
-        return {id, prompt, nickname, state, reason, maximumCents, progress, sceneCount, assets: publicAssets(job),
+      const reservation=env.AUDIENCE_MODE==='true'?await env.DB.prepare(`select e.maximum_cents-coalesce((select sum(cents) from vdj_budget_reservations where event_id=e.id),0) as remaining from vdj_events e where e.id=?`).bind(env.EVENT_ID).first():null;
+      const playback=env.AUDIENCE_MODE==='true'?await env.AUDIENCE_ROOMS.getByName(roomId).playback(roomId,{action:'view'}):null;
+      const batch=env.AUDIENCE_MODE==='true'&&owner?await env.DB.prepare('select batch_id from vdj_preset_batches where event_id=? and room_id=? and enabled=1 limit 1').bind(env.EVENT_ID,roomId).first():null;
+      return answer({...(batch?{presetBatchId:batch.batch_id}:{}),...(reservation?{remainingSets:Math.max(0,Math.floor(reservation.remaining/250)),maximumSets:100}:{}),...(playback&&owner?{playback}:{}),jobs: jobs.map(job => {
+        const {id, prompt, nickname, participantId, profile, duration, readyAtMs, state, reason, maximumCents, progress, sceneCount = 1} = job;
+        return {id, prompt, nickname, participantId, profile, duration, readyAtMs, state:playback?.played.includes(id)?'PLAYED':state,adopted:playback?.counts[participantId]??0, reason, maximumCents, progress, sceneCount, assets: publicAssets(job),
           ...(job.direction ? {direction: {state: job.direction.state,
             ...(job.direction.plan ? {summary: imageDirectionSummary(job.direction.plan)} : {})}} : {})};
       })});
@@ -43,8 +48,15 @@ export async function generationHttp(request, env) {
       if (Array.isArray(input.retryPreparation) && Object.keys(input).join() === 'retryPreparation' &&
           input.retryPreparation.length >= 1 && input.retryPreparation.length <= 5 &&
           input.retryPreparation.every(v => /^[a-f0-9-]{36}$/.test(v))) {
+        if(env.AUDIENCE_MODE==='true') {
+          const jobs=await store.records(roomId); let resumed=0;
+          for(const id of input.retryPreparation) { const job=jobs.find(j=>j.id===id); const runtime=job?.profile==='audience-12-v1'?env.GENERATION_JOBS.getByName(roomId+':'+id):env.GENERATION.getByName(roomId); resumed+=(await runtime.retryPreparation(roomId,[id])).resumed; }
+          return answer({resumed},202);
+        }
         return answer(await env.GENERATION.getByName(roomId).retryPreparation(roomId, input.retryPreparation), 202);
       }
+      if(env.AUDIENCE_MODE==='true'&&Object.keys(input).join()==='presetBatchId'&&/^[a-f0-9-]{36}$/.test(input.presetBatchId))return answer(await env.PRESET_BATCHES.getByName(input.presetBatchId).startBatch(roomId,input.presetBatchId),202);
+      if (env.AUDIENCE_MODE==='true') return answer({error:'SERVER_MANAGED'},409);
       if (!Array.isArray(input.submissionIds) || Object.keys(input).join() !== 'submissionIds' || input.submissionIds.length < 1 || input.submissionIds.length > 5 ||
           input.submissionIds.some(v => !/^[a-f0-9-]{36}$/.test(v))) return answer({error: 'INPUT_INVALID'}, 400);
       if (env.GENERATION_ENABLED !== 'true') throw Error('GENERATION_DISABLED');

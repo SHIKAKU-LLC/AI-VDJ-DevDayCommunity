@@ -64,22 +64,22 @@ export function createFalProvider({key, fetchImpl = fetch} = {}) {
     return url.href;
   }
   return {
-    async preflight({duration = 60, reference = false} = {}) {
+    async preflight({duration = 12, reference = false, audioOnly = false} = {}) {
       if (![12, 60].includes(duration)) throw Error('PROVIDER_DURATION_INVALID');
-      const models = reference ? {...MODELS, video: REFERENCE_VIDEO_MODEL} : MODELS;
+      const models = audioOnly ? {initial:MODELS.initial} : reference ? {...MODELS, video: REFERENCE_VIDEO_MODEL} : MODELS;
       // The runtime uses a generation-only key. Billing is verified by the
       // operator; D1 reserves the event and room ceilings before paid requests.
       const price = await json('https://api.fal.ai/v1/models/pricing?endpoint_id=' + encodeURIComponent(Object.values(models).join(',')));
       for (const [kind, endpoint] of Object.entries(models)) {
         const rate = price.prices?.find(p => p.endpoint_id === endpoint);
         if (!rate || rate.currency !== 'USD' || rate.unit !== (kind === 'video' ? 'seconds' : 'audios') ||
-            !Number.isFinite(rate.unit_price) || rate.unit_price <= 0 || rate.unit_price > (kind === 'video' ? reference ? 0.05 : 0.045 : 0.10)) throw Error('PROVIDER_PRICE_CHANGED');
+            !Number.isFinite(rate.unit_price) || rate.unit_price <= 0 || rate.unit_price > (kind === 'video' ? 0.05 : 0.10)) throw Error('PROVIDER_PRICE_CHANGED');
       }
       return {maximumCents: DJ_DIRECTION.maximumCents};
     },
     async submit(kind, prompt, contextUrl, {duration = kind === 'audio' ? 60 : 12, mediaProfile = DJ_DIRECTION.mediaProfile, sceneIndex = 0, referenceUrl, reference} = {}) {
       if (!(kind === 'audio' ? [12, 60] : [12]).includes(duration)) throw Error('PROVIDER_DURATION_INVALID');
-      if (kind === 'video' && (!Number.isInteger(sceneIndex) || sceneIndex < 0 || sceneIndex >= DJ_DIRECTION.sceneCount)) throw Error('PROVIDER_SCENE_INVALID');
+      if (kind === 'video' && (!Number.isInteger(sceneIndex) || sceneIndex < 0 || sceneIndex >= 6)) throw Error('PROVIDER_SCENE_INVALID');
       if (kind === 'video' && (!!referenceUrl !== !!reference)) throw Error('PROVIDER_REFERENCE_INVALID');
       if (referenceUrl) {
         const url = new URL(referenceUrl);

@@ -5,7 +5,7 @@ import {createNativeContainerClass} from '../cloud/cloudflare/native-container.m
 const context = (values = new Map()) => ({
   pending: [],
   waitUntil(promise) { this.pending.push(promise); },
-  storage: {get: async key => values.get(key), put: async (key, value) => values.set(key, value)},
+  storage: {get: async key => values.get(key), put: async (key, value) => values.set(key, value), delete:async key=>values.delete(key)},
   blockConcurrencyWhile: callback => callback(),
 });
 
@@ -131,4 +131,12 @@ test('a failed synthetic check is not retried after object recreation', async ()
   const second = new NativeProcessor(state, {});
   assert.deepEqual(await second.startSyntheticCheck(), {state: 'failed', httpStatus: 503});
   assert.equal(second.starts.length, 0);
+});
+
+test('native preparation leases exclude competing downloads and survive object recreation',async()=>{
+ const state=context(),Native=createNativeContainerClass(FakeContainer),native=new Native(state,{});
+ assert.equal(await native.reserve('first'),true);assert.equal(await native.reserve('second'),false);
+ const restarted=new Native(state,{});assert.equal(await restarted.reserve('second'),false);
+ await restarted.release('wrong');assert.equal(await restarted.reserve('second'),false);
+ await restarted.release('first');assert.equal(await restarted.reserve('second'),true);
 });

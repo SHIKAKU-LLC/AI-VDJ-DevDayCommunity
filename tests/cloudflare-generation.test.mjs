@@ -32,7 +32,7 @@ async function fixture({flow = false} = {}) {
   const rpc = createD1RoomRpc({db, eventId: 'judge-test'});
   const submit = async (capability = owner) => rpc({op: 'submit', room_id: room.roomId, capability,
     payload: {nonce: crypto.randomUUID(), nickname: '合成テスト', prompt: '青い波と静かな電子音楽'}});
-  const store = createGenerationStore({db, eventId: 'judge-test'});
+  const store = createGenerationStore({db, eventId: 'judge-test',policy:{audioSeconds:60,videoSeconds:12,sceneCount:6,mediaProfile:'club-flow-v1',maximumCents:1500,maximumSets:5}});
   const values = new Map(), objects = new Map(), requests = [];
   const storage = {async get(k) { return structuredClone(values.get(k)); }, async put(k, v) { values.set(k, structuredClone(v)); },
     async setAlarm(t) { values.set('alarm', t); }, async getAlarm() { return values.get('alarm') ?? null; },
@@ -67,6 +67,7 @@ async function fixture({flow = false} = {}) {
         width: request.headers.get('x-vdj-media-profile') !== 'legacy' ? 1920 : 854,
         height: request.headers.get('x-vdj-media-profile') !== 'legacy' ? 1080 : 480, quality: {passed: true}})})}};
   const Class = createGenerationClass(class {}), runtime = new Class({storage}, env);
+  runtime.store = () => store;
   // Existing one-video records remain valid after the multi-scene rollout.
   if (!flow) runtime.store = () => ({...store, async enqueue(...args) {
     const job = await store.enqueue(...args); job.sceneCount = 1; await store.save(job); return job;
@@ -552,7 +553,7 @@ test('generation-only credentials need no billing access and still enforce live 
     return Response.json({prices: Object.entries(MODELS).map(([kind, endpoint_id]) =>
       ({endpoint_id, unit: kind === 'video' ? 'seconds' : 'audios', unit_price: kind === 'video' ? .04 : .04, currency: 'USD'}))});
   }});
-  assert.deepEqual(await provider.preflight(), {maximumCents: 1500});
+  assert.deepEqual(await provider.preflight(), {maximumCents: 250});
 });
 test('H3 Max receives twelve seconds while the music keeps sixty seconds for a full build and peak', async () => {
   const submitted = [];

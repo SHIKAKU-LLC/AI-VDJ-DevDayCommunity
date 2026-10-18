@@ -1,6 +1,5 @@
 import qrcode from "./qr-encoder.mjs";
-import { createContinuousPlayer } from "./judge-player.mjs";
-import { createScenePlayer } from "./judge-scenes.mjs";
+import { createSetPlayer } from "./judge-set-player.mjs";
 import { createAudioReactiveVj } from "./judge-vj.mjs";
 import { prepareReferenceImage } from "./judge-image.mjs";
 import { createMasterOutput } from "./judge-output.mjs";
@@ -25,6 +24,8 @@ export function createRoomController() {
     joinBusy: false,
     submitBusy: false,
     imageBusy: false,
+    maximumSets: 100,
+    remainingSets: null,
     ready: false,
     running: false,
     credit: "",
@@ -57,11 +58,16 @@ export function createRoomController() {
     AUDIO_READY: "音楽が完成",
     VIDEO_SUBMITTING: "映像を依頼中",
     VIDEO_WAIT: "映像を生成中",
-    READY: "再生準備完了",
     FAILED: "生成を完了できませんでした",
+    PLAYED: "再生済み",
+    READY: "再生待ち",
     NEEDS_REVIEW: "生成結果の確認が必要です",
   };
   const messages = {
+    PLAYBACK_IN_USE:
+      "別のオーナー画面で再生中です。その画面で停止してから開始してください。",
+    PLAYBACK_NOT_READY:
+      "音楽と映像を読み込んでいます。少し待ってから再生してください。",
     JUDGE_CLOSED: "現在はルームの受付期間外です。",
     JUDGE_CAPACITY: "ルーム数の上限に達しました。",
     JUDGE_BUDGET: "このルームまたはイベントの生成上限に達しました。",
@@ -112,8 +118,17 @@ export function createRoomController() {
   const sceneLoading = new Map(),
     sceneUrls = new Map(),
     sceneAssets = new Map();
-  let generationRetryAfterMs = 0,
-    queueBusy = false;
+  const clientId = crypto.randomUUID();
+  const setDefinitions = new Map();
+  let playbackView = { queue: [], counts: {}, played: [], presetsPlayed: [] };
+  let remainingSets = null,
+    candidateLoading = false,
+    heartbeatTimer;
+  const emergencySeen = new Set();
+  const reservedForPlayback = new Set();
+  const failedUntil = new Map();
+  let presetOrder = [],
+    leaseUntil = 0;
   let referenceImage,
     imageBusy = false,
     imageVersion = 0;
@@ -177,21 +192,38 @@ export function createRoomController() {
   function render() {
     update({
       accepting: snapshot.accepting,
-      autoGenerate,
+      autoGenerate: true,
       submissions: snapshot.submissions,
       jobs: jobs.map(
-        ({ id, state, progress, sceneCount, direction, reason }) => ({
+        ({
           id,
+          participantId,
           state,
+          adopted,
+          progress,
+          sceneCount,
+          direction,
+          reason,
+        }) => ({
+          id,
+          state: playbackView.played.includes(id) ? "PLAYED" : state,
+          adopted: playbackView.counts[participantId] ?? adopted ?? 0,
           progress,
           sceneCount,
           direction,
           reason,
         }),
       ),
-      budget: `生成枠 ${jobs.length} / 5 セット`,
+      maximumSets: 100,
+      remainingSets,
+      budget: `このルーム ${snapshot.submissions.length} / 100 投稿 · 全体の残り ${remainingSets ?? "確認中"} セット`,
       tracks: jobs
-        .filter((job) => job.assets?.audio)
+        .filter(
+          (job) =>
+            job.profile === "audience-12-v1" &&
+            job.assets?.audio &&
+            job.assets?.video,
+        )
         .map((job) => ({
           id: job.id,
           nickname: job.nickname,
@@ -199,31 +231,6 @@ export function createRoomController() {
           duration: job.assets.audio.duration,
         })),
     });
-  }
-  async function queuePending() {
-    if (
-      queueBusy ||
-      !session.owner ||
-      !autoGenerate ||
-      !capabilities.generation ||
-      jobs.length >= 5 ||
-      Date.now() < generationRetryAfterMs
-    )
-      return;
-    const ids = snapshot.submissions
-      .filter((s) => !jobs.some((j) => j.id === s.submissionId))
-      .slice(0, 5 - jobs.length)
-      .map((s) => s.submissionId);
-    if (!ids.length) return;
-    queueBusy = true;
-    try {
-      await request(roomPath("generation"), { submissionIds: ids });
-    } catch (e) {
-      generationRetryAfterMs = Date.now() + 30000;
-      error(e);
-    } finally {
-      queueBusy = false;
-    }
   }
   function ensurePlayer() {
     if (playerInit) return playerInit;
@@ -248,58 +255,57 @@ export function createRoomController() {
         canvas: $("vj-overlay"),
         videoLayer: $("videos"),
       });
-      scenePlayer = createScenePlayer({
-        clock: () => context.currentTime,
-        onPrepare: (scene) => prepareScene(scene.id),
-        async onChange(scene, previous, isCurrent) {
-          const video = await prepareScene(scene.id);
-          if (!isCurrent()) return;
-          video.currentTime = 0;
-          await video.play();
-          if (!isCurrent()) {
-            video.pause();
-            return;
-          }
-          for (const [id, node] of videos)
-            node.classList.toggle("active", id === scene.id);
-          setTimeout(() => {
-            if (
-              previous &&
-              !videos.get(previous.id)?.classList.contains("active")
-            )
-              videos.get(previous.id)?.pause();
-            // Keep the active scene and two nearby decoded clips; all other
-            // library entries remain descriptors until their turn approaches.
-            for (const [id, node] of videos) {
-              if (videos.size <= 3) break;
-              if (node.classList.contains("active")) continue;
-              node.pause();
-              node.removeAttribute("src");
-              node.load();
-              node.remove();
-              videos.delete(id);
-              URL.revokeObjectURL(sceneUrls.get(id));
-              sceneUrls.delete(id);
-            }
-          }, 800);
-          update({ hasVideo: true });
+      scenePlayer = {
+        read: () => ({
+          ready: loaded.size,
+          currentId: player?.read().currentId,
+          history: player?.read().history ?? [],
+        }),
+        stop: () => {
+          for (const v of videos.values()) v.pause();
         },
-        onStop() {
-          for (const node of videos.values()) node.pause();
-        },
-      });
-      player = createContinuousPlayer({
+      };
+      player = createSetPlayer({
         context,
         destination: meterNode,
-        onTrack(track) {
-          vj.setTrack(track.id);
-          scenePlayer.setTrack(track.id);
+        choose: chooseSet,
+        fallback: standbySet,
+        onAbandon: async (set) => {
+          reservedForPlayback.delete(set.id);
+          try {
+            await request(roomPath("playback"), {
+              action: "abandon",
+              clientId,
+            });
+          } catch {}
+        },
+        async onStart(set, at, offset) {
+          reservedForPlayback.delete(set.id);
+          const video = videos.get(set.id + ":video");
+          if (video) {
+            if (offset > 0.15) video.currentTime = Math.min(offset, 11.9);
+            void video.play().catch(() => {});
+          }
+          if (!player.read().running) return;
+          for (const [id, node] of videos)
+            node.classList.toggle("active", id === set.id + ":video");
+          setTimeout(() => {
+            for (const node of videos.values())
+              if (!node.classList.contains("active")) node.pause();
+          }, 250);
+          vj.setTrack(set.id);
           update({
-            credit: track.nickname,
-            playStatus: "再生中 · " + track.prompt,
-            currentId: track.id,
-            trackStarted: context.currentTime,
+            hasVideo: !!video,
+            credit: set.kind === "preset" ? "AI VDJ プリセット" : set.nickname,
+            playStatus:
+              set.kind === "preset"
+                ? "投稿の完成を待ちながらプリセットを再生中"
+                : "再生中 · " + set.prompt,
+            currentId: set.id,
+            trackStarted: at,
           });
+          if (set.nonce) await acknowledge(set).catch(() => {});
+          void refreshCandidates();
         },
       });
       window.__vdjPlayback = () => ({
@@ -345,9 +351,8 @@ export function createRoomController() {
   }
   function updatePlayButton() {
     if (!player) return;
-    const minimum = jobs.some((j) => j.sceneCount > 1) ? 2 : 1;
-    const ready =
-      player.read().ready > 0 && scenePlayer.read().ready >= minimum;
+    player.setReady(loaded.size);
+    const ready = loaded.size > 0;
     update({ ready, running: player.read().running });
     if (ready && !player.read().running)
       update({ playStatus: "音楽と映像の準備完了。再生できます。" });
@@ -357,7 +362,7 @@ export function createRoomController() {
     await ensurePlayer();
     if (sceneAssets.has(id)) return;
     sceneAssets.set(id, { descriptor, fetchBytes });
-    scenePlayer.add({ id, trackId, duration: descriptor.duration });
+
     updatePlayButton();
   }
   async function prepareScene(id) {
@@ -430,78 +435,205 @@ export function createRoomController() {
       throw error;
     }
   }
-  async function load(job) {
-    const scenes =
-      job.assets?.scenes ??
-      (job.assets?.video ? [{ key: "video", ...job.assets.video }] : []);
-    for (const scene of scenes)
-      void loadScene(job.id + ":" + scene.key, job.id, scene, () =>
-        fetchAsset(job, scene.key, scene),
-      );
-    if (loaded.has(job.id) || loadPending.has(job.id) || !job.assets?.audio)
+  function load(job) {
+    if (
+      job.profile !== "audience-12-v1" ||
+      !["READY", "PLAYED"].includes(job.state) ||
+      job.assets?.audio?.duration !== 12 ||
+      job.assets?.video?.duration !== 12
+    )
       return;
-    loadPending.add(job.id);
-    try {
-      await ensurePlayer();
-      const buffer = await context.decodeAudioData(
-        await fetchAsset(job, "audio"),
-      );
-      const duration = job.assets.audio.duration;
-      if (
-        ![12, 24, 60].includes(duration) ||
-        Math.abs(buffer.duration - duration) > 0.05 ||
-        buffer.numberOfChannels !== 2
-      )
-        throw Error("MEDIA_INVALID");
-      loaded.set(job.id, { ...job, buffer });
-      for (const ready of jobs.filter((j) => j.assets?.audio)) {
-        if (!loaded.has(ready.id)) break;
-        player.add(loaded.get(ready.id));
-      }
-      updatePlayButton();
-    } catch {
-      decodeFailures++;
-      status(
-        "素材を読み込めませんでした。現在の再生を続けながら再確認します。",
-      );
-    } finally {
-      loadPending.delete(job.id);
-    }
+    setDefinitions.set(job.id, { ...job, kind: "generated" });
   }
-  let libraryLoaded = false;
   async function loadLibrary() {
     if (libraryLoaded) return;
     try {
-      const result = await request(roomPath("scene-library"));
-      libraryLoaded = true;
-      const own = new Set(
-        jobs
-          .flatMap((job) => job.assets?.scenes ?? [])
-          .map((scene) => scene.sha256),
-      );
-      for (const scene of result.scenes.filter(
-        (scene) => !own.has(scene.sha256),
-      ))
-        void loadScene("stock:" + scene.sha256, null, scene, async () => {
-          const response = await request(
-            roomPath("library-media/" + scene.sha256),
-            undefined,
-            { raw: true },
-          );
-          const bytes = await response.arrayBuffer();
-          const hash = Array.from(
-            new Uint8Array(await crypto.subtle.digest("SHA-256", bytes)),
-            (b) => b.toString(16).padStart(2, "0"),
-          ).join("");
-          if (bytes.byteLength !== scene.byteLength || hash !== scene.sha256)
-            throw Error("MEDIA_INVALID");
-          return bytes;
+      const result = await request(roomPath("preset-library"));
+      for (const preset of result.presets)
+        setDefinitions.set(preset.id, {
+          ...preset,
+          kind: "preset",
+          assets: { audio: preset.audio, video: preset.video },
         });
+      libraryLoaded = result.presets.length > 0;
+    } catch {}
+  }
+  let libraryLoaded = false;
+  async function setBytes(set, kind) {
+    if (set.kind !== "preset") return fetchAsset(set, kind);
+    const response = await request(
+      roomPath(`preset-media/${set.id.slice(7)}/${kind}`),
+      undefined,
+      { raw: true },
+    );
+    const bytes = await response.arrayBuffer(),
+      descriptor = set.assets[kind];
+    const hash = Array.from(
+      new Uint8Array(await crypto.subtle.digest("SHA-256", bytes)),
+      (b) => b.toString(16).padStart(2, "0"),
+    ).join("");
+    if (
+      bytes.byteLength !== descriptor.byteLength ||
+      hash !== descriptor.sha256
+    )
+      throw Error("MEDIA_INVALID");
+    return bytes;
+  }
+  async function prepareSet(set) {
+    if (loaded.has(set.id)) {
+      const video = videos.get(set.id + ":video");
+      if (
+        video &&
+        !video.classList.contains("active") &&
+        video.paused &&
+        video.currentTime > 0.05
+      )
+        video.currentTime = 0;
+      return;
+    }
+    if (loadPending.has(set.id)) return;
+    loadPending.add(set.id);
+    try {
+      await ensurePlayer();
+      await loadScene(set.id + ":video", set.id, set.assets.video, () =>
+        setBytes(set, "video"),
+      );
+      const [buffer] = await Promise.all([
+        context.decodeAudioData(await setBytes(set, "audio")),
+        prepareScene(set.id + ":video"),
+      ]);
+      if (
+        Math.abs(buffer.duration - 12) > 0.05 ||
+        buffer.numberOfChannels !== 2
+      )
+        throw Error("MEDIA_INVALID");
+      loaded.set(set.id, { ...set, buffer });
     } catch {
-      /* An empty/unavailable stock never interrupts owner media. */
+      decodeFailures++;
+      failedUntil.set(set.id, Date.now() + 30000);
+    } finally {
+      loadPending.delete(set.id);
     }
   }
-
+  function presetCandidates() {
+    const presets = [...setDefinitions.values()].filter(
+      (s) => s.kind === "preset",
+    );
+    if (
+      !presetOrder.length ||
+      presets.every((s) => playbackView.presetsPlayed.includes(s.id))
+    ) {
+      presetOrder = presets.map((s) => s.id);
+      for (let i = presetOrder.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [presetOrder[i], presetOrder[j]] = [presetOrder[j], presetOrder[i]];
+      }
+    }
+    const fresh = presetOrder.filter(
+      (id) => !playbackView.presetsPlayed.includes(id),
+    );
+    return (
+      fresh.length
+        ? fresh
+        : presetOrder.filter((id) => id !== playbackView.lastPreset)
+    )
+      .map((id) => setDefinitions.get(id))
+      .filter((s) => s && (failedUntil.get(s.id) ?? 0) < Date.now());
+  }
+  async function refreshCandidates() {
+    if (candidateLoading || !session?.owner) return;
+    candidateLoading = true;
+    try {
+      const preferred = playbackView.queue
+        .map((j) => setDefinitions.get(j.id))
+        .filter((s) => s && (failedUntil.get(s.id) ?? 0) < Date.now())
+        .slice(0, 2);
+      const presets = presetCandidates().slice(0, 2);
+      for (const pair of [preferred, presets])
+        await Promise.all(pair.map(prepareSet));
+      const keep = new Set([
+        ...reservedForPlayback,
+        ...[...preferred, ...presets].map((s) => s.id),
+      ]);
+      for (const s of player?.read().scheduled ?? [])
+        if (s.end > context.currentTime) keep.add(s.id);
+      for (const id of loaded.keys()) {
+        if (keep.has(id)) continue;
+        loaded.delete(id);
+        const key = id + ":video",
+          node = videos.get(key);
+        if (node && !node.classList.contains("active")) {
+          node.pause();
+          node.removeAttribute("src");
+          node.load();
+          node.remove();
+          videos.delete(key);
+          URL.revokeObjectURL(sceneUrls.get(key));
+          sceneUrls.delete(key);
+        }
+      }
+      updatePlayButton();
+    } finally {
+      candidateLoading = false;
+    }
+  }
+  async function chooseSet() {
+    const eligible = new Set(playbackView.queue.map((j) => j.id));
+    const readyIds = [...loaded.values()]
+      .filter((s) => s.kind === "preset" || eligible.has(s.id))
+      .map((s) => s.id)
+      .slice(0, 8);
+    for (const id of readyIds) reservedForPlayback.add(id);
+    const nonce = crypto.randomUUID();
+    let claim;
+    try {
+      ({ claim } = await request(roomPath("playback"), {
+        action: "claim",
+        clientId,
+        nonce,
+        readyIds,
+      }));
+    } finally {
+      for (const id of readyIds) reservedForPlayback.delete(id);
+    }
+    if (claim) {
+      leaseUntil = claim.until;
+      reservedForPlayback.add(claim.id);
+    }
+    return claim ? { ...loaded.get(claim.id), nonce } : null;
+  }
+  function standbySet() {
+    let available = [...loaded.values()].filter(
+      (s) => s.kind === "preset" && !emergencySeen.has(s.id),
+    );
+    if (!available.length) {
+      emergencySeen.clear();
+      available = [...loaded.values()].filter(
+        (s) => s.kind === "preset" && s.id !== player?.read().currentId,
+      );
+    }
+    const set = available[Math.floor(Math.random() * available.length)];
+    if (set) emergencySeen.add(set.id);
+    return set;
+  }
+  async function acknowledge(set) {
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        await request(roomPath("playback"), {
+          action: "started",
+          clientId,
+          nonce: set.nonce,
+          id: set.id,
+        });
+        if (set.kind !== "preset") playbackView.played.push(set.id);
+        else playbackView.presetsPlayed.push(set.id);
+        await poll();
+        return;
+      } catch (e) {
+        if (attempt === 2) throw e;
+      }
+    }
+  }
   async function loadCapabilities() {
     capabilities = await request("/api/room-capabilities", undefined, {
       authenticated: false,
@@ -526,14 +658,16 @@ export function createRoomController() {
     polling = true;
     try {
       snapshot = await request(roomPath());
-      jobs = (await request(roomPath("generation"))).jobs;
+      const result = await request(roomPath("generation"));
+      jobs = result.jobs;
+      remainingSets = result.remainingSets ?? null;
+      update({ presetBatchId: result.presetBatchId });
+      if (result.playback) playbackView = result.playback;
       render();
       if (session.owner) {
         for (const job of jobs) void load(job);
-        void loadLibrary();
-        // Enqueue can wait behind a media inspection. Keep progress polling,
-        // completed playback and new submissions responsive while it waits.
-        void queuePending();
+        await loadLibrary();
+        void refreshCandidates();
       }
     } catch (e) {
       error(e);
@@ -660,9 +794,9 @@ export function createRoomController() {
       status(
         session.owner
           ? autoGenerate
-            ? "受付完了。音楽と映像を生成しています。"
-            : "受付完了。自動生成をONにすると音楽と映像を生成します。"
-          : "受付完了。オーナーの画面で音楽と映像を準備します。",
+            ? "受付完了。サーバーで音楽と映像を生成しています。"
+            : "受付完了。サーバーで音楽と映像を生成しています。"
+          : "受付完了。サーバーで音楽と映像を生成しています。",
       );
       await poll();
       return true;
@@ -758,7 +892,18 @@ export function createRoomController() {
       await ensurePlayer();
       meterNode.port.postMessage("start");
       await player.start();
-      scenePlayer.start();
+      if (!player.read().running) return;
+      heartbeatTimer = setInterval(
+        () =>
+          request(roomPath("playback"), { action: "heartbeat", clientId })
+            .then((v) => {
+              leaseUntil = v.until;
+            })
+            .catch((e) => {
+              if (e.message === "PLAYBACK_IN_USE") stop();
+            }),
+        5000,
+      );
       vj?.start();
       update({ running: true });
     } catch (e) {
@@ -766,6 +911,11 @@ export function createRoomController() {
     }
   }
   function stop() {
+    clearInterval(heartbeatTimer);
+    if (session?.owner)
+      void request(roomPath("playback"), { action: "release", clientId }).catch(
+        () => {},
+      );
     player?.stop();
     scenePlayer?.stop();
     vj?.stop();
@@ -818,11 +968,18 @@ export function createRoomController() {
     } finally {
       update({ loading: false });
     }
-    pollTimer = setInterval(() => void poll(), 4000);
+    pollTimer = setInterval(() => void poll(), session?.owner ? 1000 : 4000);
     // Read-only playback evidence contains no capabilities, media URLs or samples.
     clockTimer = setInterval(() => {
       if (!player) return;
       const playback = player.read();
+      if (playback.running && leaseUntil && Date.now() > leaseUntil) {
+        stop();
+        status(
+          "再生権の接続を確認できないため停止しました。再接続後に再生してください。",
+        );
+        return;
+      }
       const current = playback.scheduled.findLast(
         (track) =>
           track.start <= playback.audioTime && track.end > playback.audioTime,
@@ -837,6 +994,7 @@ export function createRoomController() {
         });
     }, 500);
     window.addEventListener("pagehide", () => {
+      clearInterval(heartbeatTimer);
       if (referenceImage) URL.revokeObjectURL(referenceImage.previewUrl);
       player?.stop();
       scenePlayer?.stop();
@@ -863,6 +1021,14 @@ export function createRoomController() {
     toggleGeneration,
     toggleAcceptance,
     retry,
+    async startPresets() {
+      if (view.presetBatchId) {
+        await request(roomPath("generation"), {
+          presetBatchId: view.presetBatchId,
+        });
+        status("承認済みの待機音楽38本を準備しています。");
+      }
+    },
     copyInvitation,
     getInvitation,
     play,

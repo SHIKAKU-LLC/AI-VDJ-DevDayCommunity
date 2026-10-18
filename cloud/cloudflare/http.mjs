@@ -1,3 +1,4 @@
+import {DJ_DIRECTION} from './creative-direction.mjs';
 import {createD1JudgeStore} from './d1-store.mjs';
 import {createD1RoomRpc} from './room-api.mjs';
 import {createRoomHandler} from '../room/handler.mjs';
@@ -26,10 +27,11 @@ async function admission(request) {
 
 // This entry can collect ideas before the generation runtime is connected.
 // Capabilities stay disabled until real generation and playback are wired.
-export function createCloudflareRoomApi({db, eventId, origin, generationEnabled = false, imageDirectionEnabled = false} = {}) {
+export function createCloudflareRoomApi({db, eventId, origin, generationEnabled = false, imageDirectionEnabled = false, audienceRooms} = {}) {
   if (!origin || new URL(origin).origin !== origin) throw Error('JUDGE_CONFIGURATION_REQUIRED');
   const store = createD1JudgeStore({db, eventId});
-  const rpc = createD1RoomRpc({db, eventId});
+  const fallbackRpc = createD1RoomRpc({db, eventId});
+  const rpc = audienceRooms ? input => audienceRooms.getByName(input.room_id).roomOperation(input) : fallbackRpc;
   const room = createRoomHandler({rpc, origin, verifyOwner: async () => null});
   return async request => {
     const url = new URL(request.url);
@@ -37,6 +39,7 @@ export function createCloudflareRoomApi({db, eventId, origin, generationEnabled 
     if (request.method === 'GET' && url.pathname === '/api/room-capabilities') return response({mode: 'judge-cloud',
       durable: true, serverManaged: true, generation: generationEnabled, autoDJ: false,
       reason: generationEnabled ? null : 'PROVIDER_NOT_CONNECTED',
+      ...(audienceRooms ? {generationPolicy: {audioSeconds:12,videoSeconds:12,sceneCount:1,maximumSets:100,maximumCents:DJ_DIRECTION.maximumCents,serverDispatch:true}} : {}),
       cloud: {generationJobs: generationEnabled, portableQC: generationEnabled, browserPlayback: generationEnabled, imageDirection: generationEnabled && imageDirectionEnabled,
         clipRelativeTimeline: false, playerObserver: false, macRequired: false}});
     if (request.method === 'POST' && url.pathname === '/api/judge/rooms') {

@@ -6,9 +6,10 @@ const allowedTypes = ['audio/wav', 'image/png', 'image/jpeg', 'video/mp4'];
 
 // Only trusted generation code may call issue(). The download route can read
 // one immutable object for a bounded time and never lists or writes the bucket.
-export function createProviderDelivery({db, bucket, eventId, origin} = {}) {
+export function createProviderDelivery({db, bucket, eventId, origin, maximumGrants = 50} = {}) {
   if (!db?.prepare || !bucket?.head || !bucket?.get || new URL(origin).protocol !== 'https:' || new URL(origin).origin !== origin ||
       !/^judge-[a-z0-9-]{1,60}$/.test(eventId ?? '')) throw Error('PROVIDER_DELIVERY_CONFIGURATION_REQUIRED');
+  if(![50,200].includes(maximumGrants))throw Error('PROVIDER_DELIVERY_CONFIGURATION_REQUIRED');
   const query = (sql, ...values) => db.prepare(sql).bind(...values);
   return {
     async issue({roomId, path, expiresIn, signal}) {
@@ -27,7 +28,7 @@ export function createProviderDelivery({db, bucket, eventId, origin} = {}) {
       const inserted = await query(`insert into vdj_runtime_records(room_id,kind,record_id,version,document)
         select r.id,'provider-delivery',?,0,? from vdj_rooms r join vdj_events e on e.id=r.event_id
         where r.id=? and e.id=? and e.enabled=1 and r.expires_at_ms>${clock} and e.expires_at_ms>${clock}
-        and (select count(*) from vdj_runtime_records g where g.room_id=r.id and g.kind='provider-delivery')<50`,
+        and (select count(*) from vdj_runtime_records g where g.room_id=r.id and g.kind='provider-delivery')<${maximumGrants}`,
       recordId, document, roomId, eventId).run();
       if (inserted.meta.changes !== 1) throw Error('PROVIDER_DELIVERY_LIMIT');
       // The URL stays in the server's transient request, never in a stored record.

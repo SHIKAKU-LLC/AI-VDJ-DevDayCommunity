@@ -1,3 +1,4 @@
+import {playbackState,eligibleSets,claimNext,acknowledgeStart,assertLease} from "../cloud/cloudflare/playback-queue.mjs";
 // Offline browser fixture. Never imports Cloudflare, fal, or production credentials.
 import http from "node:http";
 import { readFile } from "node:fs/promises";
@@ -13,9 +14,11 @@ const descriptor = (bytes, extra) => ({
   byteLength: bytes.length,
   ...extra,
 });
-const audioAsset = descriptor(audio, { duration: 60 }),
+const audioAsset = descriptor(audio, { duration: 12 }),
   videoAsset = descriptor(video, { duration: 12, width: 854, height: 480 });
 const roomId = "11111111-1111-4111-8111-111111111111";
+let playback=playbackState();
+const presets=Array.from({length:38},(_,i)=>({id:"preset:"+createHash("sha256").update(String(i)).digest("hex"),audio:audioAsset,video:videoAsset}));
 let submissions = [],
   jobs = [],
   accepting = true,
@@ -38,6 +41,7 @@ const server = http.createServer(async (req, res) => {
   if (path === "/__fixture/mode") {
     mode = url.searchParams.get("name") || "ready";
     if (mode === "reset") {
+      playback=playbackState();
       submissions = [];
       jobs = [];
       accepting = true;
@@ -78,46 +82,27 @@ const server = http.createServer(async (req, res) => {
         submissionId: id,
         nickname: data.nickname ?? "テスト参加者",
         prompt: data.prompt,
+        participantId:data.nickname?"owner":"participant",
       });
+    if(!jobs.some(j=>j.id===id)){const sub=submissions.find(s=>s.submissionId===id);jobs.push({...sub,id,profile:"audience-12-v1",state:mode==="waiting"?"GENERATING":"READY",sceneCount:1,readyAtMs:Date.now(),progress:{audio:"READY",video:"READY"},...(mode==="waiting"?{}:{assets:{audio:audioAsset,video:videoAsset}})});}
     await new Promise((r) => setTimeout(r, 350));
     return json(res, { submissionId: id });
   }
-  if (path.endsWith("/generation")) {
-    if (req.method === "POST") {
-      const data = await body();
-      for (const id of data.submissionIds ?? []) {
-        const sub = submissions.find((s) => s.submissionId === id);
-        if (sub && !jobs.some((j) => j.id === id) && jobs.length < 5)
-          jobs.push({
-            ...sub,
-            id,
-            state: mode === "waiting" ? "GENERATING" : "READY",
-            sceneCount: 6,
-            progress: Object.fromEntries(
-              Array.from({ length: 6 }, (_, i) => [
-                "video" + i,
-                mode === "waiting" ? "VIDEO_WAIT" : "READY",
-              ]),
-            ),
-            ...(mode === "waiting"
-              ? {}
-              : {
-                  assets: {
-                    audio: audioAsset,
-                    scenes: Array.from({ length: 6 }, (_, i) => ({
-                      key: "video" + i,
-                      ...videoAsset,
-                    })),
-                  },
-                }),
-          });
-      }
-      return json(res, {});
-    }
-    return json(res, { jobs });
+  if(path.endsWith("/generation"))return json(res,{jobs,remainingSets:100-jobs.length,playback:{...playback,queue:eligibleSets(jobs,playback).map(j=>({id:j.id}))}});
+  if(path.endsWith("/preset-library"))return json(res,{presets});
+  if(path.endsWith("/playback")){
+    const input=await body();let result={};
+    try{
+      if(input.action==="claim")result={claim:claimNext(playback,jobs,presets,input)};
+      if(input.action==="started")result=acknowledgeStart(playback,input);
+      if(input.action==="heartbeat")assertLease(playback,input.clientId,Date.now());
+      if(input.action==="release"){playback.lease=null;playback.pending=null;}
+      if(input.action==="abandon")playback.pending=null;
+      return json(res,result);
+    }catch(e){return json(res,{error:e.message},409);}
   }
   if (path.endsWith("/scene-library")) return json(res, { scenes: [] });
-  if (path.includes("/generated-media/")) {
+  if (path.includes("/generated-media/")||path.includes("/preset-media/")) {
     const bytes = path.endsWith("/audio") ? audio : video;
     res.writeHead(200, {
       "content-type": path.endsWith("/audio") ? "audio/wav" : "video/mp4",
