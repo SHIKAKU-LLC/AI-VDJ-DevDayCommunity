@@ -4,12 +4,13 @@ const fail = (reason) => {
 export const playbackState = () => ({
   counts: {},
   played: [],
+  lastParticipantId: null,
   presetsPlayed: [],
   lastPreset: null,
   receipts: {},
   revision: 0,
 });
-export function eligibleSets(jobs, state) {
+function fifoSets(jobs, state) {
   return jobs
     .filter(
       (j) =>
@@ -21,11 +22,45 @@ export function eligibleSets(jobs, state) {
     )
     .sort(
       (a, b) =>
-        (state.counts[a.participantId] ?? 0) -
-          (state.counts[b.participantId] ?? 0) ||
-        (a.readyAtMs ?? a.createdAtMs) - (b.readyAtMs ?? b.createdAtMs) ||
+        (a.submittedAtMs ?? a.createdAtMs ?? a.readyAtMs ?? 0) -
+          (b.submittedAtMs ?? b.createdAtMs ?? b.readyAtMs ?? 0) ||
+        (a.submissionOrder ?? 0) - (b.submissionOrder ?? 0) ||
         a.id.localeCompare(b.id),
     );
+}
+export function eligibleSets(jobs, state) {
+  const queue = fifoSets(jobs, state).sort(
+    (a, b) => (state.counts[a.participantId] ?? 0) -
+      (state.counts[b.participantId] ?? 0),
+  );
+  if (queue[0]?.participantId === state.lastParticipantId) {
+    const next = queue.findIndex((j) => j.participantId !== state.lastParticipantId);
+    if (next > 0) queue.unshift(...queue.splice(next, 1));
+  }
+  return queue;
+}
+
+// The model may choose an action, never an arbitrary submission or a ranking.
+// Recompute this plan at claim time, including the browser's decoded media.
+export function playbackPlan(jobs, state, readyIds) {
+  const playable = readyIds ? jobs.filter((j) => readyIds.includes(j.id)) : jobs;
+  const head = fifoSets(playable, state)[0];
+  if (!head) return null;
+  const next = eligibleSets(playable, state)[0];
+  const headCount = state.counts[head.participantId] ?? 0;
+  const nextCount = state.counts[next.participantId] ?? 0;
+  return {
+    key: JSON.stringify([head.id, next.id, headCount, nextCount, state.lastParticipantId ?? null]),
+    headId: head.id,
+    nextId: next.id,
+    action: head.id === next.id ? "PLAY_HEAD" : "DEFER_REPEAT",
+    facts: {
+      head_adopted_count: headCount,
+      next_adopted_count: nextCount,
+      head_is_previous_participant: head.participantId === state.lastParticipantId,
+      next_is_different_participant: head.participantId !== next.participantId,
+    },
+  };
 }
 export function assertLease(state, clientId, now) {
   if (!/^[a-f0-9-]{36}$/.test(clientId ?? "")) fail("PLAYBACK_CLIENT_INVALID");
@@ -41,7 +76,7 @@ export function claimNext(
   state,
   jobs,
   presets,
-  { clientId, nonce, readyIds, now = Date.now(), random = Math.random },
+  { clientId, nonce, readyIds, decision, now = Date.now(), random = Math.random },
 ) {
   assertLease(state, clientId, now);
   if (
@@ -59,7 +94,17 @@ export function claimNext(
   )
     fail("PLAYBACK_INPUT_INVALID");
   const ready = new Set(readyIds);
-  const chosen = eligibleSets(jobs, state).find((j) => ready.has(j.id));
+  // The browser warms the fair queue, so the deferred FIFO head may have been
+  // unloaded already. Its media need not be decoded to let a ready peer play.
+  const prepared = playbackPlan(jobs, state);
+  const plan = prepared && ready.has(prepared.nextId)
+    ? prepared : playbackPlan(jobs, state, readyIds);
+  const advice = decision;
+  const accepted = plan && advice?.key === plan.key &&
+    advice.status === "ready" && advice.action === plan.action;
+  const action = accepted ? advice.action : plan?.action;
+  const selectedId = action === "PLAY_HEAD" ? plan.headId : plan?.nextId;
+  const chosen = jobs.find((j) => j.id === selectedId);
   let item;
   if (chosen)
     item = {
@@ -87,6 +132,11 @@ export function claimNext(
       };
   }
   if (!item) return null;
+  state.lastSelection = {
+    id: item.id,
+    source: chosen ? (accepted ? "decisions" : "rules") : "preset",
+    action: chosen ? action : "PLAY_PRESET",
+  };
   state.pending = {
     id: item.id,
     kind: item.kind,
@@ -117,6 +167,7 @@ export function acknowledgeStart(
     state.played.push(id);
     state.counts[pending.participantId] =
       (state.counts[pending.participantId] ?? 0) + 1;
+    state.lastParticipantId = pending.participantId;
   } else if (pending.kind === "preset") {
     if (!state.presetsPlayed.includes(id)) state.presetsPlayed.push(id);
     state.lastPreset = id;

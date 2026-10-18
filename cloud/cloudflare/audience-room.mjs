@@ -9,6 +9,8 @@ import {
   acknowledgeStart,
 } from "./playback-queue.mjs";
 import { presetManifest } from "./preset-library.mjs";
+import { readSubmissionRecords } from "./submission-records.mjs";
+import { preparePlaybackDecision, requestPlaybackDecision } from "./playback-decisions.mjs";
 
 export function createAudienceRoomClass(Base) {
   return class AudienceRoom extends Base {
@@ -146,17 +148,30 @@ export function createAudienceRoomClass(Base) {
       });
     }
     async playback(roomId, input) {
-      return this.locked(async () => {
+      let decision;
+      const result = await this.locked(async () => {
         const store = createGenerationStore({
           db: this.env.DB,
           eventId: this.env.EVENT_ID,
           normalized: true,
         });
-        await store.active(roomId);
+        const room = await store.active(roomId);
         const state =
           (await this.ctx.storage.get("playback")) ?? playbackState();
-        const jobs = await store.records(roomId),
-          presets = await presetManifest(this.env);
+        let jobs = await store.records(roomId);
+        // Older jobs have generation timestamps only. Recover receipt order
+        // without rewriting those jobs or redispatching their paid generation.
+        if (jobs.some((j) => j.submittedAtMs === undefined)) {
+          const submissions = new Map((await readSubmissionRecords(
+            this.env.DB, roomId, JSON.parse(room.document),
+          )).map((s) => [s.submissionId, s]));
+          jobs = jobs.map((j) => {
+            const receipt = submissions.get(j.id);
+            return receipt ? { ...j, submittedAtMs: receipt.createdAtMs,
+              submissionOrder: receipt.submissionOrder } : j;
+          });
+        }
+        const presets = await presetManifest(this.env);
         let result;
         if (input.action === "release") {
           if (state.lease?.clientId === input.clientId) {
@@ -171,7 +186,11 @@ export function createAudienceRoomClass(Base) {
           assertLease(state, input.clientId, Date.now());
           result = { until: state.lease.until };
         } else if (input.action === "claim")
-          result = { claim: claimNext(state, jobs, presets, input) };
+          result = { claim: claimNext(state, jobs, presets, {
+            ...input,
+            decision: this.env.DECISIONS_ENABLED === "true" && this.env.OPENAI_API_KEY
+              ? state.decisions?.latest : undefined,
+          }) };
         else if (input.action === "started")
           result = acknowledgeStart(state, input);
         else if (input.action === "view")
@@ -186,10 +205,35 @@ export function createAudienceRoomClass(Base) {
             })),
             presetsPlayed: state.presetsPlayed,
             lastPreset: state.lastPreset,
+            selection: state.lastSelection ?? null,
+            decisions: {
+              enabled: this.env.DECISIONS_ENABLED === "true" && !!this.env.OPENAI_API_KEY,
+              calls: state.decisions?.calls ?? 0,
+              status: state.decisions?.latest?.status ?? "idle",
+            },
           };
         else throw Error("PLAYBACK_INPUT_INVALID");
+        decision = preparePlaybackDecision(state, jobs, this.env);
         await this.ctx.storage.put("playback", state);
         return result;
+      });
+      // No network wait inside the room lock or playback response. Preparation
+      // normally starts at the previous set's acknowledgement, 12s in advance.
+      if (decision) this.ctx.waitUntil(this.finishPlaybackDecision(decision));
+      return result;
+    }
+    async finishPlaybackDecision(plan) {
+      const answer = await requestPlaybackDecision(plan, {
+        key: this.env.OPENAI_API_KEY,
+        fetchImpl: this.env.testDecisionFetch ?? fetch,
+      });
+      await this.locked(async () => {
+        const state = await this.ctx.storage.get("playback");
+        if (state?.decisions?.latest?.key !== plan.key) return;
+        // Merge only the advice into fresh state; never resurrect a consumed
+        // claim, rewind counts, or replace a newer plan with an old response.
+        state.decisions.latest = { key: plan.key, ...answer };
+        await this.ctx.storage.put("playback", state);
       });
     }
   };

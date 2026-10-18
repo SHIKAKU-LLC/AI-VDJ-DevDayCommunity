@@ -43,6 +43,7 @@ export default defineConfig(({mode}) => {
           GENERATION_JOBS: bindings.durableObject({worker:name,exportName:'GenerationJob'}),
           PRESET_BATCHES: bindings.durableObject({worker:name,exportName:'PresetBatch'})} : {}),
         AUDIENCE_MODE: bindings.text(local ? 'false' : 'true'),
+        DECISIONS_ENABLED: bindings.text(process.env.VDJ_DECISIONS_ENABLED === 'true' ? 'true' : 'false'),
         NATIVE_POOL_SIZE: bindings.text('4'),
         GENERATION_ENABLED: bindings.text(process.env.VDJ_GENERATION_ENABLED === 'true' ? 'true' : 'false'),
         IMAGE_DIRECTION_ENABLED: bindings.text(process.env.VDJ_IMAGE_DIRECTION_ENABLED === 'true' ? 'true' : 'false'),

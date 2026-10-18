@@ -178,8 +178,10 @@ async function fixture() {
       return pool.get(name);
     },
   };
+  const background = [];
+  const context = { storage: storage(), waitUntil: (task) => background.push(task) };
   const Room = createAudienceRoomClass(class {}),
-    coordinator = new Room({ storage: storage() }, env);
+    coordinator = new Room(context, env);
   env.AUDIENCE_ROOMS = { getByName: () => coordinator };
   const owner = "a".repeat(64),
     join = "b".repeat(64),
@@ -206,6 +208,8 @@ async function fixture() {
     call,
     pool,
     posted,
+    background,
+    context,
   };
 }
 const job = (id, participantId, time) => ({
@@ -869,4 +873,185 @@ test("a newly registered preset is used before repeating the completed initial l
     now: 3,
   });
   assert.equal(next.id, "preset:three");
+});
+
+test("receipt order survives generation enqueue and save, and old jobs recover original receipt time", async () => {
+  const f = await fixture();
+  try {
+    const first = await f.call("submit", f.owner, { nonce: crypto.randomUUID(), prompt: "合成の一番目", nickname: "合成オーナー" });
+    const second = await f.call("submit", f.owner, { nonce: crypto.randomUUID(), prompt: "合成の二番目" });
+    assert.equal(first.submissionOrder, 1);
+    assert.equal(second.submissionOrder, 2);
+    assert.deepEqual(await f.call("submit", f.owner, { nonce: first.nonce, prompt: "合成の一番目", nickname: "合成オーナー" }), first);
+    const store = createGenerationStore({ db: f.db, eventId: f.env.EVENT_ID, normalized: true });
+    const saved = await store.enqueue(f.room.roomId, second.submissionId);
+    assert.equal(saved.submissionOrder, 2);
+    assert.equal(saved.submittedAtMs, second.createdAtMs);
+    await store.save({ ...saved, state: "READY" });
+    assert.equal((await store.records(f.room.roomId))[0].submissionOrder, 2);
+    for (const [receipt, completion] of [[first, 200], [second, 100]]) {
+      const old = { ...job(receipt.submissionId, "owner", completion), roomId: f.room.roomId, createdAtMs: completion };
+      f.sqlite.prepare("insert or replace into vdj_runtime_records values(?,'cloud-generation',?,0,?)").run(f.room.roomId, old.id, JSON.stringify(old));
+    }
+    const view = await f.coordinator.playback(f.room.roomId, { action: "view" });
+    assert.deepEqual(view.queue.map((j) => j.id), [first.submissionId, second.submissionId]);
+    assert.equal((await store.records(f.room.roomId))[0].submittedAtMs, undefined);
+  } finally { f.sqlite.close(); }
+});
+
+async function decisionRoom(f, { start = true } = {}) {
+  f.env.DECISIONS_ENABLED = "true";
+  f.env.OPENAI_API_KEY = "placeholder";
+  const jobs = [job("a1", "a", 1), job("a2", "a", 2), job("b1", "b", 3), job("c1", "c", 4)];
+  for (const j of jobs) f.sqlite.prepare("insert into vdj_runtime_records values(?,'cloud-generation',?,0,?)").run(f.room.roomId, j.id, JSON.stringify({ ...j, submittedAtMs: j.readyAtMs }));
+  const clientId = crypto.randomUUID();
+  const nonce = crypto.randomUUID();
+  const playback = (input) => f.coordinator.playback(f.room.roomId, input);
+  if (start) {
+    const { claim } = await playback({ action: "claim", clientId, nonce, readyIds: jobs.map((j) => j.id) });
+    assert.equal(claim.id, "a1");
+    await playback({ action: "started", clientId, nonce, id: claim.id });
+  }
+  return { clientId, playback };
+}
+
+test("API prefetch runs outside the room lock and does not delay claims, receipt writes or heartbeat", async () => {
+  const f = await fixture();
+  let release;
+  try {
+    let requests = 0;
+    const stalled = new Promise((resolve) => { release = resolve; });
+    f.env.testDecisionFetch = async () => { requests++; return stalled; };
+    const { clientId, playback } = await decisionRoom(f);
+    assert.equal(requests, 1);
+    assert.equal(f.background.length, 1);
+    const receipt = await f.call("submit", f.owner, { nonce: crypto.randomUUID(), prompt: "合成の待機中投稿" });
+    assert.ok(receipt.submissionId);
+    assert.ok((await playback({ action: "heartbeat", clientId })).until > Date.now());
+    for (let i = 0; i < 4; i++) await playback({ action: "view" });
+    assert.equal(requests, 1);
+    const nonce = crypto.randomUUID();
+    const { claim } = await playback({ action: "claim", clientId, nonce, readyIds: ["a2", "b1", "c1"] });
+    assert.equal(claim.id, "b1");
+    assert.equal((await playback({ action: "view" })).selection.source, "rules");
+    await playback({ action: "started", clientId, nonce, id: claim.id });
+    release(Response.json({ answers: [{ type: "choice", name: "playback_action", choice: "DEFER_REPEAT" }] }));
+    await Promise.all(f.background);
+    const next = await playback({ action: "claim", clientId, nonce: crypto.randomUUID(), readyIds: ["a2", "c1"] });
+    assert.equal(next.claim.id, "c1");
+    const view = await playback({ action: "view" });
+    assert.deepEqual(view.counts, { a: 1, b: 1 });
+    assert.equal(view.selection.source, "rules");
+    assert.equal(requests, 1);
+  } finally {
+    release?.(Response.json({}));
+    await Promise.all(f.background);
+    f.sqlite.close();
+  }
+});
+
+test("prepared Decisions answer is applied, survives restart, and is disabled immediately by the feature flag", async () => {
+  const f = await fixture();
+  try {
+    let requests = 0;
+    f.env.testDecisionFetch = async () => { requests++; return Response.json({ answers: [{ type: "choice", name: "playback_action", choice: "DEFER_REPEAT" }] }); };
+    const { clientId } = await decisionRoom(f);
+    await Promise.all(f.background);
+    const Room = createAudienceRoomClass(class {});
+    const restored = new Room(f.context, f.env);
+    const playback = (input) => restored.playback(f.room.roomId, input);
+    for (let i = 0; i < 3; i++) await playback({ action: "view" });
+    assert.equal(requests, 1);
+    const { claim } = await playback({ action: "claim", clientId, nonce: crypto.randomUUID(), readyIds: ["b1", "c1"] });
+    assert.equal(claim.id, "b1");
+    let view = await playback({ action: "view" });
+    assert.equal(view.selection.source, "decisions");
+    assert.equal(view.decisions.status, "ready");
+    assert.equal(view.decisions.calls, 1);
+    await playback({ action: "abandon", clientId });
+    f.env.DECISIONS_ENABLED = "false";
+    assert.equal((await playback({ action: "claim", clientId, nonce: crypto.randomUUID(), readyIds: ["a2", "b1", "c1"] })).claim.id, "b1");
+    view = await playback({ action: "view" });
+    assert.equal(view.selection.source, "rules");
+    assert.equal(view.decisions.enabled, false);
+  } finally {
+    await Promise.all(f.background);
+    f.sqlite.close();
+  }
+});
+
+test("late API completion after stop cannot create a claim, reset counts or reacquire a lease", async () => {
+  const f = await fixture();
+  let release;
+  try {
+    const stalled = new Promise((resolve) => { release = resolve; });
+    f.env.testDecisionFetch = async () => stalled;
+    const { clientId, playback } = await decisionRoom(f);
+    await playback({ action: "release", clientId });
+    release(Response.json({ answers: [{ type: "choice", name: "playback_action", choice: "DEFER_REPEAT" }] }));
+    await Promise.all(f.background);
+    const saved = await f.context.storage.get("playback");
+    assert.equal(saved.lease, null);
+    assert.equal(saved.pending, null);
+    assert.deepEqual(saved.counts, { a: 1 });
+    assert.deepEqual(saved.played, ["a1"]);
+  } finally {
+    release?.(Response.json({}));
+    await Promise.all(f.background);
+    f.sqlite.close();
+  }
+});
+
+test("the existing player keeps twelve-second pairs and a full fair round while Decisions is stalled", async () => {
+  const f = await fixture();
+  let release, player;
+  try {
+    f.env.testDecisionFetch = () => new Promise((resolve) => { release = resolve; });
+    const { clientId, playback } = await decisionRoom(f, { start: false });
+    let now = 0;
+    const starts = [], adopted = [], acknowledgements = [];
+    const context = {
+      get currentTime() { return now; }, state: "running", async resume() {},
+      createBufferSource: () => ({ connect() {}, disconnect() {}, stop() {},
+        start(at, offset, duration) { starts.push({ at, duration }); } }),
+      createGain: () => ({ connect() {}, disconnect() {}, gain: { setValueAtTime() {}, linearRampToValueAtTime() {} } }),
+    };
+    player = createSetPlayer({
+      context,
+      choose: async () => {
+        const view = await playback({ action: "view" });
+        const { claim } = await playback({ action: "claim", clientId, nonce: crypto.randomUUID(), readyIds: view.queue.slice(0, 2).map((j) => j.id) });
+        return claim ? { ...claim, buffer: { duration: 12 } } : null;
+      },
+      fallback: () => null,
+      onStart: (set) => {
+        adopted.push(set.id);
+        acknowledgements.push(playback({ action: "started", clientId, nonce: set.nonce, id: set.id }));
+      },
+      setTimer() {}, clearTimer() {},
+    });
+    await player.start();
+    for (let turn = 0; turn < 4; turn++) {
+      now = turn * 12 + 0.10001;
+      player.tick();
+      await Promise.all(acknowledgements);
+      if (turn < 3) {
+        now = turn * 12 + 10.2;
+        player.tick();
+        await new Promise(setImmediate);
+      }
+    }
+    assert.deepEqual(adopted, ["a1", "b1", "c1", "a2"]);
+    assert.equal(starts.length, 4);
+    for (let i = 0; i < starts.length; i++) {
+      assert.equal(starts[i].duration, 12);
+      assert.ok(Math.abs(starts[i].at - (0.1 + i * 12)) < 0.0001);
+    }
+    assert.deepEqual((await playback({ action: "view" })).counts, { a: 2, b: 1, c: 1 });
+  } finally {
+    player?.stop();
+    release?.(Response.json({ answers: [{ type: "choice", name: "playback_action", choice: "DEFER_REPEAT" }] }));
+    await Promise.all(f.background);
+    f.sqlite.close();
+  }
 });
