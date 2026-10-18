@@ -843,9 +843,18 @@
   .stage-empty { @apply absolute inset-0 flex flex-col items-center justify-center gap-4 p-5 text-center; }
   .stage-empty>svg { @apply size-16 text-stone-500; }
   .stage-empty .text-muted-foreground { @apply text-stone-400; }
-  .stage-credit { @apply absolute bottom-5 left-5 flex flex-col gap-1 rounded-xl bg-black/60 px-3 py-2; }
-  .stage-credit span { @apply text-xs; }
-  .stage-credit strong { @apply text-sm; }
+  .stage-credit {
+    --credit-inset: calc(var(--spacing) * 3);
+    @apply absolute flex w-max items-center gap-3 rounded-2xl border border-white/15 bg-black/70 p-3 text-white shadow-lg backdrop-blur-md;
+    bottom: var(--credit-inset);
+    left: var(--credit-inset);
+    max-width: min(var(--container-xs), calc(100% - var(--credit-inset) * 2));
+  }
+  .stage-credit-icon { @apply flex size-9 shrink-0 items-center justify-center rounded-full bg-white/10 text-stone-200; }
+  .stage-credit-icon svg { @apply size-5; }
+  .stage-credit-copy { @apply flex min-w-0 flex-col gap-1; }
+  .stage-credit-label { @apply text-label-12 text-stone-300; }
+  .stage-credit-name { @apply block truncate text-label-16 font-semibold; }
   .transport-panel { @apply surface-panel grid items-center gap-4 border-t border-border p-4; }
   .transport-main { @apply grid min-w-0 grid-cols-[1fr_auto] items-center gap-3; }
   .transport-buttons { @apply flex flex-wrap items-center gap-2; }
@@ -874,6 +883,9 @@
 .stage:fullscreen .transport-panel { @apply absolute inset-x-4 bottom-4 z-10 mx-auto max-w-4xl rounded-2xl border border-border opacity-0 transition-opacity duration-150; }
 .stage:fullscreen:hover .transport-panel, .stage:fullscreen:focus-within .transport-panel { @apply opacity-100; }
 .stage:fullscreen .stage-credit { @apply bottom-40; }
+@media (width < 44rem) {
+  .stage:fullscreen .stage-credit { top: var(--credit-inset); bottom: auto; }
+}
 @media (prefers-reduced-motion:reduce) { *,*::before,*::after { animation-duration:.01ms!important; transition-duration:.01ms!important; } }
 
 @theme inline {
@@ -884,6 +896,7 @@
 
 /* Use the console width, not the viewport: the sidebar also takes space. */
 @container (min-width: 44rem) {
+  .stage-credit { --credit-inset: calc(var(--spacing) * 5); @apply px-4; }
   .transport-panel { @apply grid-cols-[minmax(0,1fr)_14rem]; }
   .master-output { @apply border-t-0 border-l border-border pt-0 pl-4; }
 }
