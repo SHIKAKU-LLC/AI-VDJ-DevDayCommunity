@@ -3,6 +3,7 @@ import { createSetPlayer } from "./judge-set-player.mjs";
 import { createAudioReactiveVj } from "./judge-vj.mjs";
 import { prepareReferenceImage } from "./judge-image.mjs";
 import { createMasterOutput } from "./judge-output.mjs";
+import { createDisplayHost, videoDescriptor, displaySchedule } from "./judge-display.mjs";
 
 export function createRoomController() {
   let elements = {};
@@ -64,6 +65,7 @@ export function createRoomController() {
     NEEDS_REVIEW: "生成結果の確認が必要です",
   };
   const messages = {
+    DISPLAY_UNAVAILABLE: "表示タブを開けませんでした。ブラウザのポップアップ設定を確認してください。",
     PLAYBACK_IN_USE:
       "別のオーナー画面で再生中です。その画面で停止してから開始してください。",
     PLAYBACK_NOT_READY:
@@ -122,6 +124,22 @@ export function createRoomController() {
     sceneAssets = new Map();
   const clientId = crypto.randomUUID();
   const setDefinitions = new Map();
+  const display = createDisplayHost({
+    onConnected: connected => {
+      if (view.displayConnected !== connected) update({ displayConnected: connected });
+    },
+    snapshot: () => {
+      const playback = player?.read();
+      const describe = id => videoDescriptor(setDefinitions.get(id), sceneUrls.get(id + ":video"), location.origin);
+      return {
+        running: !!playback?.running,
+        audioTime: playback?.audioTime ?? 0,
+        scheduled: displaySchedule(playback, describe),
+        preload: [...loaded.keys()].map(describe).filter(Boolean).slice(0, 6),
+        visual: vj?.sample() ?? null,
+      };
+    },
+  });
   let playbackView = { queue: [], counts: {}, played: [], presetsPlayed: [] };
   let remainingSets = null,
     candidateLoading = false,
@@ -1001,6 +1019,7 @@ export function createRoomController() {
         });
     }, 500);
     window.addEventListener("pagehide", () => {
+      display.close();
       clearInterval(heartbeatTimer);
       if (referenceImage) URL.revokeObjectURL(referenceImage.previewUrl);
       player?.stop();
@@ -1041,6 +1060,10 @@ export function createRoomController() {
     play,
     stop,
     fullscreen,
+    openDisplay() {
+      if (!session?.owner) return;
+      try { display.open(); } catch { error(new Error("DISPLAY_UNAVAILABLE")); }
+    },
     setOutput,
     poll,
     recheck,

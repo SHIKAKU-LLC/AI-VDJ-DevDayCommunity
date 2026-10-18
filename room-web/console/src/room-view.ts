@@ -45,4 +45,5 @@ export interface RoomView {
   maximumSets?: number;
   remainingSets?: number | null;
   hasVideo?: boolean;
+  displayConnected?: boolean;
 }

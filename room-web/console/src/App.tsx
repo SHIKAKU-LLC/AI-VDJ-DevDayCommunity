@@ -15,6 +15,7 @@ import {
   SpeakerHighIcon,
   SpeakerSlashIcon,
   CornersOutIcon,
+  ArrowSquareOutIcon,
   PaperPlaneTiltIcon,
   ImageIcon,
   UsersIcon,
@@ -836,6 +837,10 @@ export function App({
                       >
                         <CornersOutIcon />
                       </Button>
+                      <Button variant="outline" onClick={() => controller.openDisplay()}>
+                        <ArrowSquareOutIcon />
+                        別タブで大画面を開く
+                      </Button>
                     </div>
                     <LcdDisplay
                       matrix={false}
@@ -855,6 +860,11 @@ export function App({
                   <Output controller={controller} state={state} />
                 </div>
               </section>
+              <p className="mt-2 text-copy-13 text-muted-foreground">
+                表示タブは映像をクリック、またはFキーで全画面にできます。再生と音量はこの画面で操作します。
+                {state.displayConnected && " 表示タブに接続しました。"}
+                {!state.displayConnected && " 開かない場合は、このサイトのポップアップを許可してください。"}
+              </p>
               <Panel
                 title="このルームの曲"
                 description="音楽と映像を12秒ずつ。みんなの投稿を公平に、途切れずにつなぎます。"

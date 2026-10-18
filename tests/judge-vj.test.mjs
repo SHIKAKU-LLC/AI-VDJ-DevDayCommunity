@@ -29,3 +29,33 @@ test('an unavailable canvas leaves audio untouched', () => {
   vj.start(); vj.stop(); vj.dispose();
   assert.deepEqual(vj.read(), {active: false, reason: 'canvas-unavailable'});
 });
+
+test('display requests can sample the signal without the owner animation loop', () => {
+  const originals = Object.fromEntries(['matchMedia','ResizeObserver','devicePixelRatio','cancelAnimationFrame'].map(key => [key, globalThis[key]]));
+  const connections = [], analyser = {
+    frequencyBinCount:512, fftSize:1024,
+    getByteFrequencyData: bins => bins.fill(220,1,6),
+    getFloatTimeDomainData: wave => wave.fill(.2),
+  };
+  Object.assign(globalThis, {
+    matchMedia: () => ({matches:false}),
+    ResizeObserver: class {observe(){} disconnect(){}},
+    devicePixelRatio:1, cancelAnimationFrame() {},
+  });
+  try {
+    const context = {currentTime:1, sampleRate:44100, createAnalyser:()=>analyser};
+    const input = {connect:node=>connections.push(node),disconnect() {}};
+    const vj=createAudioReactiveVj({context,input,canvas:{getContext:()=>({clearRect(){}}),getBoundingClientRect:()=>({width:100,height:100})},videoLayer:{style:{}}});
+    const sampled=vj.sample();
+    assert.ok(sampled.signal.bass>0);
+    assert.equal(vj.read().frames,0);
+    assert.equal(vj.read().active,false);
+    assert.deepEqual(connections,[analyser]);
+    const sameFrame=vj.sample();assert.equal(sameFrame.signal.beats,sampled.signal.beats);
+    vj.dispose();
+  } finally {
+    for(const [key,value] of Object.entries(originals)) {
+      if(value===undefined)delete globalThis[key];else globalThis[key]=value;
+    }
+  }
+});

@@ -927,3 +927,35 @@
   .transport-panel { @apply grid-cols-[minmax(0,1fr)_14rem]; }
   .master-output { @apply border-t-0 border-l border-border pt-0 pl-4; }
 }
+
+/* Projector view deliberately contains no transport or surrounding interface. */
+.display-screen {
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+  background: #000;
+  color: #fff;
+  outline: none;
+}
+.display-screen .videos,
+.display-screen .display-vj {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+.display-screen .display-credit {
+  background: none;
+  border: 0;
+  box-shadow: none;
+  backdrop-filter: none;
+  padding: 0;
+  width: auto;
+  max-width: none;
+  bottom: clamp(1rem, 4vh, 3rem);
+  left: clamp(1rem, 4vw, 4rem);
+  right: clamp(1rem, 4vw, 4rem);
+}
+.display-screen .stage-credit-name { font-size: clamp(1.5rem, 3vw, 3rem); }
+.display-screen:fullscreen { cursor: none; }
