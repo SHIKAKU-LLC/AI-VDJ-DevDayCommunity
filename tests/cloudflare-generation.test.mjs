@@ -275,6 +275,41 @@ test('fallback library exposes only approved source rooms to authenticated owner
     assert.deepEqual(await (await sceneLibraryHttp(request(), f.env)).json(), {scenes: []});
   } finally { f.sqlite.close(); }
 });
+test('operator-approved image presets are event-scoped, revocable and require an authenticated owner', async () => {
+  const f = await fixture({flow:true});
+  try {
+    const bytes = new Uint8Array([4,5,6]), hash = await sha256(bytes);
+    const path = `curated/judge-test/${hash}.media`;
+    await f.env.MEDIA.put(path,bytes,{httpMetadata:{contentType:'video/mp4'}});
+    const url = `https://test.example/api/rooms/${f.room.roomId}/scene-library`;
+    const request = value => new Request(value ?? url,{headers:{'x-room-owner':f.owner}});
+    assert.deepEqual(await (await sceneLibraryHttp(request(),f.env)).json(),{scenes:[]});
+    const insert=f.sqlite.prepare('insert into vdj_curated_scenes values(?,?,?,?,?,?,?,?)');
+    insert.run('judge-test',hash,bytes.length,12,1920,1080,1,Date.now());
+    const list=await (await sceneLibraryHttp(request(),f.env)).json();
+    assert.deepEqual(list.scenes,[{sha256:hash,byteLength:3,duration:12,width:1920,height:1080,contentType:'video/mp4'}]);
+    assert.ok(!JSON.stringify(list).includes('curated/'));
+    const mediaUrl=url.replace('scene-library','library-media/'+hash);
+    assert.equal((await sceneLibraryHttp(new Request(mediaUrl),f.env)).status,403);
+    const media=await sceneLibraryHttp(request(mediaUrl),f.env);
+    assert.equal(media.status,200);
+    assert.equal(await sha256(new Uint8Array(await media.arrayBuffer())),hash);
+    f.sqlite.prepare('update vdj_curated_scenes set byte_length=4').run();
+    assert.equal((await sceneLibraryHttp(request(mediaUrl),f.env)).status,503);
+    f.sqlite.prepare('update vdj_curated_scenes set byte_length=3,enabled=0').run();
+    assert.deepEqual(await (await sceneLibraryHttp(request(),f.env)).json(),{scenes:[]});
+    assert.equal((await sceneLibraryHttp(request(mediaUrl),f.env)).status,404);
+    f.sqlite.prepare('insert into vdj_events values(?,1,?,1,15000)').run('other-event',Date.now()+3600000);
+    f.sqlite.prepare('update vdj_curated_scenes set event_id=?,enabled=1').run('other-event');
+    assert.deepEqual(await (await sceneLibraryHttp(request(),f.env)).json(),{scenes:[]});
+    assert.throws(()=>insert.run('judge-test','../unregistered',3,12,1920,1080,1,Date.now()),/CHECK/);
+    assert.equal(f.sqlite.prepare('select count(*) n from vdj_budget_reservations').get().n,0);
+    const migration=await readFile(new URL('../cloud/cloudflare/curated-scenes-migration.sql',import.meta.url),'utf8');
+    f.sqlite.exec(migration); // Reapplying does not reset approved entries.
+    assert.equal(f.sqlite.prepare('select count(*) n from vdj_curated_scenes').get().n,1);
+  } finally { f.sqlite.close(); }
+});
+
 test('retrying an existing audio result restores unsent scenes without purchasing duplicate results', async () => {
   const f = await fixture({flow: true});
   try {

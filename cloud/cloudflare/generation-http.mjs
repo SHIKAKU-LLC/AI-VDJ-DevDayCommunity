@@ -78,7 +78,8 @@ export async function generationHttp(request, env) {
 }
 
 
-// Only explicitly approved, non-personal stock rooms can supply fallback scenes.
+// Ordinary stock comes from approved rooms. Image-derived shared presets need
+// a separate, per-asset operator entry; room membership never grants consent.
 export async function sceneLibraryHttp(request, env) {
   const url = new URL(request.url);
   const match = /^\/api\/rooms\/([a-f0-9-]{36})\/(scene-library|library-media)(?:\/([a-f0-9]{64}))?$/.exec(url.pathname);
@@ -90,19 +91,29 @@ export async function sceneLibraryHttp(request, env) {
     const result = await env.DB.prepare(`select g.document from vdj_runtime_records g
       join vdj_stock_sources s on s.room_id=g.room_id join vdj_rooms r on r.id=s.room_id
       where s.event_id=? and g.kind='cloud-generation' and coalesce(json_extract(r.document,'$.purged'),0)=0`).bind(env.EVENT_ID).all();
-    const files = result.results.flatMap(row => {
+    const stock = result.results.flatMap(row => {
       const job = JSON.parse(row.document);
       // An approved stock room must never promote later audience images into
       // other rooms' fallback library.
       if (job.reference || job.direction) return [];
       return sceneKeys(job).filter(key => job.assets?.[key]).map(key => job.assets[key]);
-    }).slice(0, 50);
+    });
+    const curated = await env.DB.prepare(`select sha256,byte_length,duration,width,height from vdj_curated_scenes
+      where event_id=? and enabled=1 order by created_at_ms,sha256 limit 50`).bind(env.EVENT_ID).all();
+    const files = [...curated.results.map(row => ({sha256: row.sha256, byteLength: row.byte_length,
+      duration: row.duration, width: row.width, height: row.height, contentType: 'video/mp4', curated: true,
+      path: `curated/${env.EVENT_ID}/${row.sha256}.media`})), ...stock]
+      .slice(0, 50);
     if (match[2] === 'scene-library' && !match[3]) return answer({scenes: files.map(({sha256, duration, byteLength, contentType, width, height}) =>
       ({sha256, duration, byteLength, contentType, width, height}))});
     const file = files.find(f => f.sha256 === match[3]);
     if (!file) return answer({error: 'NOT_FOUND'}, 404);
     const object = await env.MEDIA.get(file.path);
-    if (!object?.body || object.size !== file.byteLength || object.customMetadata?.sha256 !== file.sha256) return answer({error: 'MEDIA_UNAVAILABLE'}, 503);
+    // Curated objects are uploaded through the operator's R2 API, which does
+    // not set Worker custom metadata. Their immutable key is the reviewed
+    // content hash; the browser verifies every downloaded byte against it.
+    if (!object?.body || object.size !== file.byteLength ||
+        (object.customMetadata?.sha256 !== file.sha256 && (!file.curated || object.customMetadata?.sha256 !== undefined))) return answer({error: 'MEDIA_UNAVAILABLE'}, 503);
     return new Response(object.body, {headers: {'content-type': 'video/mp4', 'content-length': String(file.byteLength),
       'cache-control': 'private, no-store', 'x-content-sha256': file.sha256}});
   } catch { return answer({error: 'DENIED'}, 403); }
