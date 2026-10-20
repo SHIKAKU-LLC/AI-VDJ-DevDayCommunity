@@ -29,7 +29,7 @@ Workersの画面配信とローカルビルドも接続済み。Cloudflare上の
 生成の実行許可・履歴・再生状態を含む処理全体は移植中。
 R2の単一素材を期限・取得回数付きで渡す処理は単体検証済み。生成サービスからの実取得とContainersとの接続は未完了。
 検証環境の実測は [Cloudflareの検証記録](cloudflare-staging-check.md) に記載する。
-`cloud/server/`にはPostgreSQL向けの接続が含まれるため、そのままCloudflare本番用として配備しない。
+`cloud/server/`は注入するHTTP・権限・CPU処理の共通部品を保持する。旧バックエンドの起動・配備経路は撤去済みであり、現行の入口は`cloud/cloudflare/`にある。[撤去範囲と保持した共通部品](development.md#旧バックエンドの撤去)を参照する。
 
 現在のWorkersは受付専用として動作し、生成・自動DJ・再生の準備完了を返さない。
 Cloudflare用の起動方法と未完事項は[Cloudflareの手順](../cloud/cloudflare/README.md)に記載する。

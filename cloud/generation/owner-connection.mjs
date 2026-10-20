@@ -3,7 +3,7 @@
 export function createHostSessionHandler({authorizeOwner,readRoom,origin='https://ai-vdj.vercel.app',now=Date.now}={}) {
   if(typeof authorizeOwner!=='function'||typeof readRoom!=='function')throw Error('HOST_SESSION_AUTH_REQUIRED');
   return async request=>{
-    const path=new URL(request.url).pathname.replace(/^\/(?:functions\/v1\/)?ai-vdj-room(?=\/|$)/,'');
+    const path=new URL(request.url).pathname;
     const match=path.match(/^\/api\/rooms\/([a-f0-9-]{36})\/host\/session$/i);
     if(!match)return null;
     const out=(body,status=200)=>new Response(JSON.stringify(body),{status,headers:{'Content-Type':'application/json',

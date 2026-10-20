@@ -33,3 +33,12 @@ test('room view carries the authoritative credit, including null after Stop, so 
  assert.deepEqual(roomView({...base,currentCredit:{cueId:'c',playbackRevision:2,actual:true,participantId:'p1',nickname:'n'}}).currentCredit,
   {cueId:'c',playbackRevision:2,actual:true},'only identifying fields');
 });
+test('room HTTP keeps the direct API route and does not mount retired gateway aliases',async()=>{
+ const {createRoomHandler}=await import('../cloud/room/handler.mjs');let calls=0;
+ const handler=createRoomHandler({rpc:async()=>{calls++;return {roomId:rid};},verifyOwner:async()=>null});
+ const path='/api/rooms/'+rid,request=prefix=>new Request('https://example.test'+prefix+path,
+  {headers:{'x-room-owner':'a'.repeat(64)}});
+ assert.equal((await handler(request(''))).status,200);
+ assert.equal((await handler(request('/ai-vdj-room'))).status,404);
+ assert.equal(calls,1);
+});

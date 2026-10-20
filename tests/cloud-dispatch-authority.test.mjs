@@ -1,9 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {readFile} from 'node:fs/promises';
-import {PGlite} from '../qa-tools/node_modules/@electric-sql/pglite/dist/index.js';
 import {createDispatchAuthority} from '../cloud/jobs/dispatch-authority.mjs';
-import {createExistingCloudRepositoryReadPorts} from '../cloud/jobs/repository-read-ports.mjs';
 import {createGenerationDispatcher, DispatchError, GENERATION_CONTRACT, isAuthorityGuardedDispatcher} from '../cloud/generation/dispatch.mjs';
 import {createCloudGenerationJobs, isAuthorityGuardedCloudJobs} from '../cloud/jobs/generation-jobs.mjs';
 import {createCueCoordinator, isAuthorityGuardedCueCoordinator} from '../cloud/generation/cue-coordinator.mjs';
@@ -25,9 +22,9 @@ function fixture() {
     createdAtMs: time, expiresAtMs: time + 600000, maximumUsd: 1, source, sourceSha256: cueDigest(cueSourceIdentity(source)),
     quote: {verified: true, evidenceSha256: '1'.repeat(64), observedAtMs: time, maximumUsd: {intent: .01, music: .1, video: .5}},
     balance: {usd: 2, autoTopUp: false, observedAtMs: time}, assets: {
-      context: {url: 'https://example.supabase.co/private/context', private: true, checksumVerified: true,
+      context: {url: 'https://media.example.invalid/private/context', private: true, checksumVerified: true,
         sha256: source.music.contextSha256, expiresAtMs: time + 660000, serverAudioQC: true, providerOriginVerified: true},
-      reference: {url: 'https://example.supabase.co/private/reference', private: true, checksumVerified: true,
+      reference: {url: 'https://media.example.invalid/private/reference', private: true, checksumVerified: true,
         sha256: source.video.referenceSha256, expiresAtMs: time + 660000}}};
   const metadata = {roomId, sessionId, controlRevision: 0, permitId, revoked: false, expiresAtMs: permit.expiresAtMs, permitSha256: cueDigest(permit)};
   const events = [], mutations = {}, calls = {post: 0, status: 0, result: 0, complete: 0};
@@ -65,10 +62,10 @@ function fixture() {
         ? {audio: {url: 'https://v3.fal.media/example.wav'}} : {video: {url: 'https://v3.fal.media/example.mp4'}}}; }};
   const authorityOptions = {enabled: true, repository, readScope: async () => structuredClone(scope),
     readPermitScope: async () => structuredClone(metadata), readCurrentSource: async input => {
-      assert.deepEqual(input, {roomId}); return structuredClone(current); }, mediaHost: 'example.supabase.co', now: () => time};
+      assert.deepEqual(input, {roomId}); return structuredClone(current); }, mediaHost: 'media.example.invalid', now: () => time};
   const real = createDispatchAuthority(authorityOptions), phases = [];
   const guard = {async assert(input) { phases.push(input.phase); await mutations[input.phase]?.(); return real.assert(input); }};
-  const options = {enabled: true, repository, provider, mediaHost: 'example.supabase.co', now: () => time, requireAuthority: true, authorityGuard: guard};
+  const options = {enabled: true, repository, provider, mediaHost: 'media.example.invalid', now: () => time, requireAuthority: true, authorityGuard: guard};
   const dispatcher = createGenerationDispatcher(options), input = {roomId, operationId, ownerCapability: owner};
   const execute = (action, body = {}, custom = dispatcher) => custom.execute({action, roomId, ownerCapability: owner, key, body: {operationId, ...body}});
   const begin = () => execute('begin', {permitId, submissionId: 'example_submission'});
@@ -209,48 +206,6 @@ test('unconfirmed or owner-denied bookkeeping stays a recovery hold; ambiguous p
   await assert.rejects(unknown.execute('submit', {stage: 'intent'}), /DISPATCH_UNKNOWN_NO_RETRY/);
   assert.equal(unknown.op().stages.intent.state, 'UNKNOWN'); assert.equal(unknown.op().stages.intent.requestId, undefined);
   await assert.rejects(unknown.execute('submit', {stage: 'intent'}, createGenerationDispatcher(unknown.options)), /UNKNOWN_NO_RETRY/); assert.equal(unknown.calls.post, 1);
-});
-test('unchanged SQL RPCs retain a known request after real global cueStop and reconcile lost bookkeeping replies without completion', async () => {
-  const db = new PGlite(); try {
-    await db.exec('create role anon;create role authenticated;create role service_role bypassrls;');
-    for (const file of ['cloud/room/schema.sql', 'cloud/generation/schema.sql', 'cloud/generation/cue-operations.sql'])
-      await db.exec(await readFile(new URL('../' + file, import.meta.url), 'utf8'));
-    const uid = '11111111-1111-4111-a111-111111111111'; await db.query('insert into vdj_internal.owners(uid) values($1)', [uid]);
-    let savedRoom; const roomCall = async (action, capability, payload = {}, verified = null) => (await db.query(
-      'select public.vdj_room_request($1,$2,$3,$4::jsonb,$5) value', [action, savedRoom?.roomId ?? null, capability, JSON.stringify(payload), verified])).rows[0].value;
-    savedRoom = await roomCall('create', null, {ownerCapability: owner, joinCode: 'c'.repeat(64)}, uid);
-    await roomCall('join', 'c'.repeat(64), {nickname: 'example_guest', participantCapability: 'b'.repeat(64)});
-    const submission = await roomCall('submit', 'b'.repeat(64), {nonce: 'submission_' + 's'.repeat(24), prompt: 'example request'});
-    const permit = fixture().permit, time = Date.now(); permit.createdAtMs = time; permit.expiresAtMs = time + 600000;
-    permit.quote.observedAtMs = time; permit.balance.observedAtMs = time;
-    for (const asset of Object.values(permit.assets)) asset.expiresAtMs = time + 660000;
-    await db.query(`insert into vdj_internal.generation_permits(id,room_id,room_epoch,control_revision,expires_at,document)
-      select $1,id,epoch,control_revision,to_timestamp($3),$4::jsonb from vdj_internal.rooms where id=$2`,
-    [permitId, savedRoom.roomId, permit.expiresAtMs / 1000, JSON.stringify(permit)]);
-    const raw = async (action, room, capability, payload = {}) => (await db.query(
-      'select public.vdj_generation_request($1,$2,$3,$4::jsonb) value', [action, room, capability, JSON.stringify(payload)])).rows[0].value;
-    const repository = {request: async (action, ...args) => {
-      const result = await raw(action, ...args);
-      if (['submitted', 'stop'].includes(action)) throw Error('example lost bookkeeping reply');
-      return result;
-    }};
-    const ports = createExistingCloudRepositoryReadPorts({query: (sql, values) => db.query(sql, values),
-      hostGenerationRead: input => raw(input.action, input.roomId, owner, input.operationId ? {operationId: input.operationId} : {})});
-    const authorityGuard = createDispatchAuthority({enabled: true, repository, readScope: ports.readScope, readPermitScope: ports.readPermitScope,
-      readCurrentSource: async () => structuredClone(permit.source), mediaHost: 'example.supabase.co'});
-    let posts = 0, reads = 0;
-    const provider = {submit: async () => { posts++; await raw('cueStop', savedRoom.roomId, owner); return {request_id: 'example_sql_known_request'}; },
-      status: async () => { reads++; return {status: 'COMPLETED'}; }, result: async () => { reads++; return {}; }};
-    const dispatcher = createGenerationDispatcher({enabled: true, requireAuthority: true, authorityGuard, repository, provider, mediaHost: 'example.supabase.co'});
-    const execute = (action, body = {}) => dispatcher.execute({action, roomId: savedRoom.roomId, ownerCapability: owner, key, body: {operationId, ...body}});
-    await execute('begin', {permitId, submissionId: submission.submissionId});
-    await assert.rejects(execute('submit', {stage: 'intent'}), /KNOWN_DELIVERY_STOPPED_NO_RETRY/);
-    const saved = await raw('read', savedRoom.roomId, owner, {operationId});
-    assert.equal(saved.stopped, true); assert.equal(saved.stages.intent.state, 'SUBMITTED'); assert.equal(saved.stages.intent.requestId, 'example_sql_known_request');
-    assert.match(saved.stages.intent.signature, /^[a-f0-9]{64}$/); assert.equal((await raw('cueState', savedRoom.roomId, owner)).stopped, true);
-    assert.equal((await execute('submit', {stage: 'intent'})).state, 'STOPPED'); await assert.rejects(execute('poll', {stage: 'intent'}), /GENERATION_STOPPED/);
-    assert.equal(posts, 1); assert.equal(reads, 0); assert.equal(saved.cue, undefined);
-  } finally { await db.close(); }
 });
 test('strict cloud jobs require the exact registered dispatcher guard identity before credentials; diagnostic read and stop remain available', async () => {
   const x = fixture(); await x.begin(); let consulted = 0, customCalls = 0;

@@ -24,9 +24,9 @@ function fixture(overrides = {}) {
     sourceSha256: cueDigest(cueSourceIdentity(source)),
     quote: {verified: true, evidenceSha256: '1'.repeat(64), observedAtMs: time, maximumUsd: {intent: .01, music: .1, video: .5}},
     balance: {usd: 2, autoTopUp: false, observedAtMs: time}, assets: {
-      context: {url: 'https://synthetic.supabase.co/private/context', private: true, checksumVerified: true,
+      context: {url: 'https://media.example.invalid/private/context', private: true, checksumVerified: true,
         sha256: source.music.contextSha256, expiresAtMs: time + 660000, serverAudioQC: true, providerOriginVerified: true},
-      reference: {url: 'https://synthetic.supabase.co/private/reference', private: true, checksumVerified: true,
+      reference: {url: 'https://media.example.invalid/private/reference', private: true, checksumVerified: true,
         sha256: source.video.referenceSha256, expiresAtMs: time + 660000}}};
   const repository = {async request(action, room, capability, payload = {}) {
     if (room !== roomId || capability !== owner) throw new DispatchError('OWNER_DENIED');
@@ -70,7 +70,7 @@ function fixture(overrides = {}) {
     async result(input) { return {data: input.model === GENERATION_CONTRACT.intent ? {output: JSON.stringify(semantic), usage: {cost: .001}} :
       input.model === GENERATION_CONTRACT.music ? {audio: {url: 'https://v3.fal.media/synthetic.wav'}} :
         {video: {url: 'https://v3.fal.media/synthetic.mp4'}}}; }};
-  const options = {enabled: true, repository, provider, mediaHost: 'synthetic.supabase.co', now: () => time,
+  const options = {enabled: true, repository, provider, mediaHost: 'media.example.invalid', now: () => time,
     credentialForOperation: async binding => { credentialReads++; assert.deepEqual(binding, {roomId, operationId}); return key; },
     schedule: async hint => hints.push(hint)};
   const input = {roomId, operationId, ownerCapability: owner};
@@ -239,7 +239,7 @@ test('private media interface authenticates owner, bounds/checks bytes, never re
   assert.deepEqual(new Uint8Array(await result.arrayBuffer()), bytes); assert.equal(result.headers.get('cache-control'), 'no-store');
   const mismatch = await handler(new Request(url.replace(sha256, '0'.repeat(64)), {headers: {Origin: 'https://ai-vdj.vercel.app', 'X-Room-Owner': owner}}));
   assert.equal(mismatch.status, 409);
-  const rewritten = url.replace('https://ai-vdj.vercel.app', 'https://synthetic.supabase.co');
+  const rewritten = url.replace('https://ai-vdj.vercel.app', 'https://media.example.invalid');
   assert.equal((await handler(new Request(rewritten, {headers: {'Sec-Fetch-Site': 'same-origin', 'X-Room-Owner': owner}}))).status, 200);
   for (const value of ['cross-site', 'same-site', 'none'])
     assert.equal((await handler(new Request(url, {headers: {'Sec-Fetch-Site': value, 'X-Room-Owner': owner}}))).status, 403);

@@ -29,7 +29,7 @@ export function createCloudFirstHandler({enabled = false, jobs, coordinator, roo
     return JSON.parse(new TextDecoder('utf-8', {fatal: true}).decode(bytes));
   };
   return async request => {
-    const url = new URL(request.url), path = url.pathname.replace(/^\/(?:functions\/v1\/)?ai-vdj-room(?=\/|$)/, '');
+    const url = new URL(request.url), path = url.pathname;
     const attachment = path.match(/^\/api\/rooms\/([a-f0-9-]{36})\/jobs\/attachment$/i);
     if (attachment) {
       if (request.headers.get('origin') !== origin || request.headers.has('authorization') || request.headers.has('x-fal-key') ||

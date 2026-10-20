@@ -10,7 +10,7 @@ import {createPortableCloudWorker} from '../cloud/worker/portable-worker.mjs';
 import {createPortableNativeRuntime} from '../cloud/worker/native-runtime.mjs';
 import {createSyntheticCloudWorkerFixture,fixtureSha} from './cloud-worker-fixture.mjs';
 import {createPrivateMediaIngestion} from '../cloud/worker/private-ingestion.mjs';
-import {createSupabasePrivateStore} from '../cloud/worker/supabase-private-store.mjs';
+import {createPrivateStore} from '../cloud/worker/private-store.mjs';
 import {syntheticStorageTransport} from './cloud-worker-store-fixture.mjs';
 import {TECHNICAL_VISUAL_POLICY} from '../integration/qc/visual-policy.mjs';
 import {generationIdentity} from '../cloud/generation/dispatch.mjs';
@@ -24,7 +24,7 @@ for(const savedOrigin of ['provider','owner-supplied-bootstrap-video'])test(`rea
  const scope={roomId,['sessionId']:'native-visual-session',controlRevision:0,expiresAtMs:2000000,ownerEnabled:true};
  let fixture,privateStore,ingestion,nativeRuntime,plan,worker,directory,op;
  try{
-  privateStore=createSupabasePrivateStore({enabled:true,roomId,transport:objects.transport});
+  privateStore=createPrivateStore({enabled:true,roomId,transport:objects.transport});
   fixture=await createSyntheticCloudWorkerFixture({roomId,assetStore:privateStore.assetStore,runtime,
    readOperation:i=>ingestion.readOperation(i)});
   const source=fixture.source,identity=generationIdentity(operationId);

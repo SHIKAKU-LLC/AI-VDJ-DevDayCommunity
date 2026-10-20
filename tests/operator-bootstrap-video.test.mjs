@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createOperatorMedia} from '../cloud/worker/operator-media.mjs';
-import {createSupabasePrivateStore} from '../cloud/worker/supabase-private-store.mjs';
+import {createPrivateStore} from '../cloud/worker/private-store.mjs';
 import {syntheticStorageTransport} from './cloud-worker-store-fixture.mjs';
 import {fixtureSha,syntheticWave,syntheticReference} from './cloud-worker-fixture.mjs';
 import {createPortableNativeRuntime} from '../cloud/worker/native-runtime.mjs';
@@ -18,7 +18,7 @@ async function upload(media,bytes,{role='saved-video',mimeType='video/mp4',conse
  return media.finish({...scope,uploadId:u.uploadId});
 }
 function fixture({approved=true,resolve=async()=>null,inspectVideo,inspectReference}={}){
- const storage=syntheticStorageTransport(),store=createSupabasePrivateStore({enabled:true,roomId:scope.roomId,transport:storage.transport});
+ const storage=syntheticStorageTransport(),store=createPrivateStore({enabled:true,roomId:scope.roomId,transport:storage.transport});
  let current={...scope},inspections=0;
  const create=()=>createOperatorMedia({enabled:true,assetStore:store.assetStore,readScope:async()=>current,now:()=>1000,
   ownerBootstrapVideoApproved:approved,verifySavedVideo:resolve,inspectReference:inspectReference??(async bytes=>({sha256:fixtureSha(bytes),fullyDecoded:true,width:2,height:2})),inspectAudio:async bytes=>({assetSha256:fixtureSha(bytes),frameCount:24*44100,

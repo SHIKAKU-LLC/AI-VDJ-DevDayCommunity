@@ -4,7 +4,7 @@ import {DispatchError} from './dispatch.mjs';
 // bearer and a browser-supplied permit/budget never grant provider authority.
 export function createGenerationHandler({dispatcher, origin = 'https://ai-vdj.vercel.app'} = {}) {
   return async req => {
-    const path = new URL(req.url).pathname.replace(/^\/(?:functions\/v1\/)?ai-vdj-room(?=\/|$)/, '');
+    const path = new URL(req.url).pathname;
     const match = path.match(/^\/api\/rooms\/([a-f0-9-]{36})\/generation\/(begin|submit|poll|read|descriptor|stop)$/i);
     if (!match) return null;
     const out = (value, status = 200) => new Response(JSON.stringify(value), {status, headers: {

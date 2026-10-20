@@ -38,7 +38,7 @@ const sourceIdFor=(roomId,source)=>'source-'+cueDigest({roomId,identity:cueSourc
   audioAssetId:source.audioAssetId,contextAssetId:source.contextAssetId,referenceAssetId:source.referenceAssetId}).slice(0,48);
 
 /** Mount only inside an authorized private broker/worker host, never a browser. */
-export function createSupabasePrivateStore({enabled=false,roomId,transport,timeoutMs=30000}={}) {
+export function createPrivateStore({enabled=false,roomId,transport,timeoutMs=30000}={}) {
   if(!id(roomId)||!['describeBucket','readObject','putObjectIfAbsent'].every(k=>typeof transport?.[k]==='function'))
     fail('PRIVATE_STORE_HOST_DEPENDENCIES_REQUIRED');
   if(!Number.isSafeInteger(timeoutMs)||timeoutMs<10||timeoutMs>120000)fail('PRIVATE_STORE_BOUNDED_TIMEOUT_REQUIRED');

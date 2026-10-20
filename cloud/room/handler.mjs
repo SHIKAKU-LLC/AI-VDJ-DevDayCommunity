@@ -20,9 +20,7 @@ export function createRoomHandler({rpc,verifyOwner,requestOTP=null,verifyOTP=nul
   try{
    if(req.headers.get('origin')&&req.headers.get('origin')!==origin)return out({error:'ORIGIN_DENIED'},403);
    if(req.method==='OPTIONS')return out({ok:true});
-   // Hosted Edge strips the gateway's /functions/v1 segment before invocation.
-   // Accept its function-name prefix and the full gateway path used by direct tests.
-   const url=new URL(req.url),path=url.pathname.replace(/^\/(?:functions\/v1\/)?ai-vdj-room(?=\/|$)/,'');
+   const url=new URL(req.url),path=url.pathname;
    if(path==='/api/room-capabilities'&&req.method==='GET')return out({mode:'collect',durable:true,
     cloud:{generationJobs:false,portableQC:false,browserPlayback:false,clipRelativeTimeline:false,transport:'same-origin',macRequired:false},
     generation:false,autoDJ:false,actualCredit:false,ownerLogin:requestLink&&exchangeLink?'email-link-pkce':null,reason:'PROVIDER_NOT_CONNECTED'});

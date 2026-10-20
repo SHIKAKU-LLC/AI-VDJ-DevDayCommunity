@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {createSupabasePrivateStore} from '../cloud/worker/supabase-private-store.mjs';
+import {createPrivateStore} from '../cloud/worker/private-store.mjs';
 import {syntheticStorageTransport} from './cloud-worker-store-fixture.mjs';
 import {cueDigest} from '../snapshot/app/runtime/intent-compiler.mjs';
 
@@ -21,15 +21,15 @@ function record() {
 }
 
 test('source-start private store is default-off and has a dedicated typed namespace surviving restart without ingestion receipt reuse', async () => {
-  const transport = syntheticStorageTransport(), off = createSupabasePrivateStore({roomId, transport: transport.transport});
+  const transport = syntheticStorageTransport(), off = createPrivateStore({roomId, transport: transport.transport});
   await assert.rejects(off.sourceStartReceiptStore.saveImmutable(record()), /NOT_ACTIVATED/);
   assert.equal(transport.calls.length, 0); off.close();
-  const live = createSupabasePrivateStore({enabled: true, roomId, transport: transport.transport});
+  const live = createPrivateStore({enabled: true, roomId, transport: transport.transport});
   try {
     const saved = await live.sourceStartReceiptStore.saveImmutable(record()); assert.equal(saved.duplicate, false);
     assert.equal([...transport.objects.keys()].length, 1); assert([...transport.objects.keys()].every(path => path.includes('/source-start-receipts/')));
     const puts = transport.calls.filter(call => call.action === 'put').length;
-    const restarted = createSupabasePrivateStore({enabled: true, roomId, transport: transport.transport});
+    const restarted = createPrivateStore({enabled: true, roomId, transport: transport.transport});
     try {
       assert.deepEqual(await restarted.sourceStartReceiptStore.read(key), record());
       assert.equal((await restarted.sourceStartReceiptStore.saveImmutable(record())).duplicate, true);
@@ -39,7 +39,7 @@ test('source-start private store is default-off and has a dedicated typed namesp
 });
 
 test('source-start typed store rejects cross-room keys, changed ACKs and physical metadata corruption without overwriting', async () => {
-  const transport = syntheticStorageTransport(), live = createSupabasePrivateStore({enabled: true, roomId, transport: transport.transport});
+  const transport = syntheticStorageTransport(), live = createPrivateStore({enabled: true, roomId, transport: transport.transport});
   try {
     await live.sourceStartReceiptStore.saveImmutable(record()); const puts = transport.calls.filter(call => call.action === 'put').length;
     await assert.rejects(live.sourceStartReceiptStore.read({...key, roomId: '22222222-2222-4222-a222-222222222222'}), /ROOM_BINDING/);
@@ -57,9 +57,9 @@ test('source-start typed store rejects cross-room keys, changed ACKs and physica
 test('unknown source-start write reply recovers the same immutable typed receipt after process replacement without another put', async () => {
   const transport = syntheticStorageTransport(), basePut = transport.transport.putObjectIfAbsent; let lose = true;
   transport.transport.putObjectIfAbsent = async input => {await basePut(input); if (lose) {lose = false; throw Error('synthetic lost metadata response');}};
-  const first = createSupabasePrivateStore({enabled: true, roomId, transport: transport.transport});
+  const first = createPrivateStore({enabled: true, roomId, transport: transport.transport});
   await assert.rejects(first.sourceStartReceiptStore.saveImmutable(record()), /PRIVATE_STORE_FAILED/); first.close();
-  const fresh = createSupabasePrivateStore({enabled: true, roomId, transport: transport.transport});
+  const fresh = createPrivateStore({enabled: true, roomId, transport: transport.transport});
   try {
     const recovered = await fresh.sourceStartReceiptStore.saveImmutable(record()); assert.equal(recovered.duplicate, true);
     assert.deepEqual(recovered.record, record()); assert.equal(transport.calls.filter(call => call.action === 'put').length, 1);

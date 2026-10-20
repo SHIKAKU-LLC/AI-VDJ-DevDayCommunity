@@ -92,10 +92,8 @@ test('late owner acknowledgment after session expiry cannot show a connected res
  assert(!f.field('[data-phase]').textContent.includes('接続済み'));assert.equal(f.field('[name=refresh]').disabled,true);
  assert.match(f.field('[data-next]').textContent,/手順2/);
 });
-test('the update checker uses the same Mac guide revision the page and the release advertise',async()=>{
+test('the update checker uses the same Mac guide revision the page advertises',async()=>{
  const {GUIDE_REVISION}=await import('../room-web/mac-owner-bridge.mjs'),{readFile}=await import('node:fs/promises');
  const html=await readFile(new URL('../room-web/room-entry.html',import.meta.url),'utf8');
- const builder=await readFile(new URL('../scripts/build_room_candidate.py',import.meta.url),'utf8');
  assert.equal(html.match(/name="vdj-mac-guide" content="([^"]+)"/)[1],GUIDE_REVISION);
- assert.equal(builder.match(/'macConnectionGuide': '([^']+)'/)[1],GUIDE_REVISION);
 });

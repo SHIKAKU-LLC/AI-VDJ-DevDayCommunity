@@ -19,6 +19,6 @@ test('browser room creation keeps local CSP, tab-scoped ownership and one output
  assert.deepEqual([...host.matchAll(/sessionStorage\.(\w+)/g)].map(m=>m[1]).sort(),['getItem','removeItem','setItem']);
  assert.ok(html.includes("frame-src 'self'")&&!html.includes("frame-src 'none'"));assert.ok(html.includes('id="show-stage"'));
  assert.ok(host.includes("location.origin"));assert.ok(host.includes("'X-Room-Owner':raw.ownerToken"));
- assert.ok(host.includes('clearSession();location.reload()'));assert.ok(!host.includes('SUPABASE_'));
+ assert.ok(host.includes('clearSession();location.reload()'));assert.ok(!/process\.env|Deno\.env/.test(host));
  assert.ok(!host.includes('mountOwnerLinkLogin')&&!host.includes('getBearer()'));
 });

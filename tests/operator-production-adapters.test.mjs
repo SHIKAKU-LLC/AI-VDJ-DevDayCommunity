@@ -4,8 +4,6 @@ import {createFalPlatformAdapter,createFalQuoteAndBalance} from '../cloud/worker
 import {createOperatorConnections,resolveOperatorConnectionBinding} from '../cloud/worker/operator-connections.mjs';
 import {createOperatorSourceSigner,createSavedVideoResolver} from '../cloud/worker/operator-source-adapters.mjs';
 import {createProductionOperatorAdapters} from '../cloud/worker/production-operator-adapters.mjs';
-import {createSupabaseStorageTransport} from '../cloud/worker/supabase-storage-transport.mjs';
-import {PRIVATE_BUCKET_TARGET} from '../cloud/worker/supabase-private-store.mjs';
 import {cueDigest,cueSourceIdentity} from '../snapshot/app/runtime/intent-compiler.mjs';
 import {verifiedBootstrapContext} from '../cloud/generation/bootstrap-source-contract.mjs';
 import {createDispatchAuthority} from '../cloud/jobs/dispatch-authority.mjs';
@@ -102,24 +100,11 @@ test('custodian callback is once-only, late callbacks are rejected, errors and h
  for(const p of [c,hanging,leaking])p.connections.close();x.platform.close();
 });
 
-test('Supabase signing uses exact private room media path, bounded expiry and official signedURL field',async()=>{
- const path='rooms/'+cueDigest(scope.roomId)+'/assets/synthetic-context.media',bucket=PRIVATE_BUCKET_TARGET;let calls=0,foreign=false;
- const transport=createSupabaseStorageTransport({enabled:true,roomId:scope.roomId,projectUrl:'https://example.supabase.co',now,
- readAuthHeaders:async()=>new Headers([['authorization','Bearer example_platform'],['apikey','example_platform']]),fetchImpl:async(url,o)=>{
-  calls++;assert.equal(url,'https://example.supabase.co/storage/v1/object/sign/'+bucket+'/'+path);assert.deepEqual(JSON.parse(o.body),{expiresIn:9});assert.equal(o.redirect,'error');
-  const payload=Buffer.from(JSON.stringify({url:bucket+'/'+path,exp:10})).toString('base64url');
-  return json({signedURL:(foreign?'https://foreign.example':'')+'/object/sign/'+bucket+'/'+path+'?token=example.'+payload+'.example'});
- }});
- const input={bucket,path,expiresIn:9,signal:new AbortController().signal};const signed=await transport.signObject(input);assert.equal(new URL(signed.url).origin,'https://example.supabase.co');assert.equal(signed.expiresAtMs,10000);
- foreign=true;await assert.rejects(transport.signObject(input),/RESPONSE_REQUIRED/);
- await assert.rejects(transport.signObject({...input,path:'rooms/other/assets/synthetic-context.media'}),/ROOM_PATH/);assert.equal(calls,2);transport.close();
-});
-
 function sourceFixture(){const bytes=syntheticWave(24),parentSha=fixtureSha(bytes),derived=deriveVerifiedWave({bytes,byteLength:bytes.length,sha256:parentSha}),ref=Uint8Array.of(137,80,78,71,13,10,26,10);
  const records=new Map(),source={audioAssetId:'synthetic-parent',contextAssetId:'synthetic-context',referenceAssetId:'synthetic-reference',music:{clipId:'synthetic-seed',sha256:parentSha,contextSha256:derived.contextSha256,contextSeconds:16,contextVerified:true,ready:true,control:{version:1,energy:.4,tension:.3,density:.3,brightness:.45}},video:{motifId:'synthetic-motif',motifSnapshotSha256:'d'.repeat(64),referenceSha256:fixtureSha(ref)},quality:{fixedBpm:145,tempoConfidence:'assumed'},playback:{actual:true,phase:'PLAYING',revision:0,playedUntilFrame:512}};
  const evidence={kind:'verified-source-context-v1',roomId:scope.roomId,originKind:'provider',contextSeconds:16,serverAudioQC:true,parentAssetId:source.audioAssetId,parentSha256:parentSha,contextAssetId:source.contextAssetId,contextSha256:derived.contextSha256,referenceAssetId:source.referenceAssetId,referenceSha256:source.video.referenceSha256,providerReceipt:{requestId:'synthetic-parent-request',resultSha256:'e'.repeat(64)}};
  let signs=0;for(const [assetId,b,contentType] of [[source.audioAssetId,bytes,'audio/wav'],[source.contextAssetId,derived.contextBytes,'audio/wav'],[source.referenceAssetId,ref,'image/png']])records.set(assetId,{assetId,bytes:b,byteLength:b.length,sha256:fixtureSha(b),contentType,binding:{kind:'owner-supplied-bootstrap'},provenance:{kind:'provider',...evidence.providerReceipt}});
- const assetStore={read:async id=>records.get(id),verifySaved:async({binding,asset})=>({...asset,binding,privateSaved:true,checksumVerified:true}),sign:async i=>{signs++;return {...i,url:'https://example.supabase.co/private/synthetic',private:true,checksumVerified:true,expiresAtMs:1000+i.expiresIn*1000};}};
+ const assetStore={read:async id=>records.get(id),verifySaved:async({binding,asset})=>({...asset,binding,privateSaved:true,checksumVerified:true}),sign:async i=>{signs++;return {...i,url:'https://media.example.invalid/private/synthetic',private:true,checksumVerified:true,expiresAtMs:1000+i.expiresIn*1000};}};
  return {source,evidence,records,assetStore,signs:()=>signs,privateStore:{assetStore,readSourceEvidence:async()=>evidence}};}
 test('source signer physically rechecks exact16s bytes/reference and refuses bootstrap relabeling before URL issuance',async()=>{
  const x=sourceFixture(),sign=createOperatorSourceSigner({enabled:true,privateStore:x.privateStore,readScope:async()=>scope,readCurrentSource:async()=>x.source,now});
@@ -134,7 +119,7 @@ test('concrete injected connection/price/balance/source producers satisfy the un
  const evidence=await quote(quoteInput),assets=await sign({...scope,source:source.source,expiresAtMs:10000});
  const permit={permitId:'synthetic-permit-0000000000000000',kind:GENERATION_CONTRACT.version,createdAtMs:1000,expiresAtMs:10000,maximumUsd:.5,counts:GENERATION_CONTRACT.counts,
   source:source.source,sourceSha256:cueDigest((await import('../snapshot/app/runtime/intent-compiler.mjs')).cueSourceIdentity(source.source)),assets,...evidence};
- assert.equal(validatePermit(permit,{now,mediaHost:'example.supabase.co'}),permit);c.connections.close();x.platform.close();
+ assert.equal(validatePermit(permit,{now,mediaHost:'media.example.invalid'}),permit);c.connections.close();x.platform.close();
 });
 function bootstrapFixture({preparation=false}={}){
  const x=sourceFixture();x.evidence.originKind='owner-supplied-bootstrap';delete x.evidence.providerReceipt;
@@ -161,7 +146,7 @@ test('approved preparation signs honest unplayed material; provider phases survi
   quote:{verified:true,evidenceSha256:'a'.repeat(64),observedAtMs:1000,maximumUsd:{intent:.01,music:.05,video:.4}},balance:{usd:2,autoTopUp:false,observedAtMs:1000}};
  let time=1000,stopped=false,scopeNow={...scope};const operationId='synthetic-preparation-operation-00';
  const metadata={...scope,permitId:permit.permitId,revoked:false,permitSha256:cueDigest(permit),expiresAtMs:40000};
- const authority=createDispatchAuthority({enabled:true,now:()=>time,mediaHost:'example.supabase.co',readScope:async()=>scopeNow,
+ const authority=createDispatchAuthority({enabled:true,now:()=>time,mediaHost:'media.example.invalid',readScope:async()=>scopeNow,
   readCurrentSource:()=>assert.fail('preparation must not demand a live source'),readPreparationSource:async()=>x.source,readPermitScope:async()=>metadata,
   repository:{request:async action=>action==='permit'?permit:action==='cueState'?{roomId:scope.roomId,stopped}:
    {operationId,dispatchAllowed:true,stopped:false,permit}}});
@@ -169,9 +154,9 @@ test('approved preparation signs honest unplayed material; provider phases survi
  time=31000;
  for(const phase of ['begin-before','initial-intent-before','initial-intent-after','submit-before-provider','poll-before-result','qc-after-publish'])
   assert.equal((await authority.assert({...input,phase})).phase,phase);
- assert.equal(validatePermit(permit,{now:()=>time,mediaHost:'example.supabase.co'}),permit);
+ assert.equal(validatePermit(permit,{now:()=>time,mediaHost:'media.example.invalid'}),permit);
  const spoof=structuredClone(permit);spoof.assets.context.providerOriginVerified=true;
- assert.throws(()=>validatePermit(spoof,{now:()=>time,mediaHost:'example.supabase.co'}),/VERIFIED_CONTEXT/);
+ assert.throws(()=>validatePermit(spoof,{now:()=>time,mediaHost:'media.example.invalid'}),/VERIFIED_CONTEXT/);
  const fakeLive=structuredClone(x.source);fakeLive.playback={...fakeLive.playback,actual:true,phase:'PLAYING',playedUntilFrame:256};
  assert.equal(verifiedBootstrapContext(assets.context,fakeLive,{now:()=>time,expiresAtMs:40000}),false);
  stopped=true;await assert.rejects(authority.assert({...input,phase:'poll-before-result'}),/GLOBAL_STOP/);stopped=false;
@@ -185,9 +170,9 @@ test('initial approved owner source produces honest private evidence and a scope
   maximumUsd:.5,counts:GENERATION_CONTRACT.counts,source:structuredClone(x.source),sourceSha256:cueDigest(cueSourceIdentity(x.source)),assets,
   quote:{verified:true,evidenceSha256:'a'.repeat(64),observedAtMs:1000,maximumUsd:{intent:.01,music:.05,video:.4}},
   balance:{usd:2,autoTopUp:false,observedAtMs:1000}};
- assert.equal(validatePermit(permit,{now,mediaHost:'example.supabase.co'}),permit);
+ assert.equal(validatePermit(permit,{now,mediaHost:'media.example.invalid'}),permit);
  const operationId='synthetic-operation-0000000000';
- const authority=createDispatchAuthority({enabled:true,now,mediaHost:'example.supabase.co',readScope:async()=>scope,
+ const authority=createDispatchAuthority({enabled:true,now,mediaHost:'media.example.invalid',readScope:async()=>scope,
   readCurrentSource:async()=>x.source,readPermitScope:async()=>({...scope,permitId:permit.permitId,revoked:false,permitSha256:cueDigest(permit),expiresAtMs:10000}),
   repository:{request:async action=>action==='permit'?permit:action==='cueState'?{roomId:scope.roomId,stopped:false}:null}});
  const input={roomId:scope.roomId,ownerCapability:'b'.repeat(64),operationId,permitId:permit.permitId,phase:'begin-before'};
