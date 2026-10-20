@@ -35,7 +35,7 @@ const exact = (value, keys) => value && typeof value === 'object' && !Array.isAr
 export function createCloudMediaManifestHandler({enabled = false, enableClipRelativeTimeline = false, authorizeOwner, checkReservation, describeManifest,
   origin = 'https://ai-vdj.vercel.app'} = {}) {
   return async req => {
-    const path = new URL(req.url).pathname.replace(/^\/(?:functions\/v1\/)?ai-vdj-room(?=\/|$)/, '');
+    const path = new URL(req.url).pathname;
     const match = path.match(/^\/api\/rooms\/([a-f0-9-]{36})\/cloud\/media\/resolve$/i); if (!match) return null;
     if (!authorized(req, origin)) return response({error: 'OWNER_OR_ORIGIN_DENIED'}, 403);
     if (req.method !== 'POST') return response({error: 'POST_REQUIRED'}, 405);
@@ -106,7 +106,7 @@ export function createCloudMediaManifestHandler({enabled = false, enableClipRela
 // A worker can call jobs.advance directly; HTTP requests are not its clock.
 export function createCloudJobHandler({jobs, origin = 'https://ai-vdj.vercel.app'} = {}) {
   return async req => {
-    const path = new URL(req.url).pathname.replace(/^\/(?:functions\/v1\/)?ai-vdj-room(?=\/|$)/, '');
+    const path = new URL(req.url).pathname;
     const match = path.match(/^\/api\/rooms\/([a-f0-9-]{36})\/jobs\/(start|advance|read|stop)$/i);
     if (!match) return null;
     if (!authorized(req, origin)) return response({error: 'OWNER_OR_ORIGIN_DENIED'}, 403);
@@ -131,7 +131,7 @@ export function createCloudMediaHandler({authorizeOwner, readMedia, origin = 'ht
   if (!['media', 'cloud/media'].includes(pathPrefix)) throw new DispatchError('MEDIA_PATH_REQUIRED');
   const route = new RegExp('^/api/rooms/([a-f0-9-]{36})/' + pathPrefix + '/([A-Za-z0-9_-]{1,100})$');
   return async req => {
-    const url = new URL(req.url), path = url.pathname.replace(/^\/(?:functions\/v1\/)?ai-vdj-room(?=\/|$)/, '');
+    const url = new URL(req.url), path = url.pathname;
     const match = path.match(route); if (!match) return null;
     if (!authorized(req, origin, true)) return response({error: 'OWNER_OR_ORIGIN_DENIED'}, 403);
     if (req.method !== 'GET') return response({error: 'GET_REQUIRED'}, 405);

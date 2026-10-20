@@ -370,7 +370,7 @@ export function createPlayerObserverRegistry({enabled=false,roomId,origin,store,
     return stopReceipt;
   }
   async function handleRequest(request) {
-    const path=new URL(request.url).pathname.replace(/^\/(?:functions\/v1\/)?ai-vdj-room(?=\/|$)/,'');
+    const path=new URL(request.url).pathname;
     const match=path.match(/^\/api\/rooms\/([a-f0-9-]{36})\/player\/(register|binding|observe|stop)$/i);if(!match)return null;
     const reply=(body,status=200)=>new Response(JSON.stringify(body),{status,headers:{'content-type':'application/json','cache-control':'no-store'}});
     if(match[1]!==roomId||request.headers.get('origin')!==origin||!hash(request.headers.get('x-room-owner'))||

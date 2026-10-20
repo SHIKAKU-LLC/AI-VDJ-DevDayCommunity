@@ -145,7 +145,7 @@ export function createTypedCloudHostComposition(options = {}) {
     return result;
   }
   async function handleRequest(request) {
-    const path = new URL(request.url).pathname.replace(/^\/(?:functions\/v1\/)?ai-vdj-room(?=\/|$)/, '');
+    const path = new URL(request.url).pathname;
     const match = path.match(/^\/api\/rooms\/([a-f0-9-]{36})\/source\/ack$/i); if (!match) return null;
     if (match[1] !== roomId || request.headers.get('origin') !== origin || !hash(request.headers.get('x-room-owner')) ||
         request.headers.has('authorization') || request.headers.has('x-fal-key') || request.headers.has('x-api-key'))

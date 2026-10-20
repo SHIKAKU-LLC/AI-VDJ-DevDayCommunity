@@ -7,7 +7,7 @@ import {cueDigest,cueSourceIdentity} from '../snapshot/app/runtime/intent-compil
 import {evaluateTransition,transitionDigest} from '../snapshot/app/runtime/dj-transition-selector.mjs';
 import {createSyntheticCloudWorkerFixture} from './cloud-worker-fixture.mjs';
 import {createPrivateMediaIngestion} from '../cloud/worker/private-ingestion.mjs';
-import {createSupabasePrivateStore} from '../cloud/worker/supabase-private-store.mjs';
+import {createPrivateStore} from '../cloud/worker/private-store.mjs';
 import {syntheticStorageTransport} from './cloud-worker-store-fixture.mjs';
 
 const rate=44100;
@@ -81,7 +81,7 @@ test('synthetic 1366x768/24fps replay goes through durable private source/ingest
   const roomId='ingestion-native-room',operationId='ingestion-native-operation',objects=syntheticStorageTransport();let fixture,ingestion,op,privateStore;
   try {
     const setupStarted=performance.now();
-    privateStore=createSupabasePrivateStore({enabled:true,roomId,transport:objects.transport});
+    privateStore=createPrivateStore({enabled:true,roomId,transport:objects.transport});
     fixture=await createSyntheticCloudWorkerFixture({roomId,
       assetStore:privateStore.assetStore,
       videoFixture:{width:1366,height:768,fps:24},

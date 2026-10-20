@@ -52,7 +52,7 @@ jobs:
             room-web/console/package-lock.json
       - name: Confirm 8-core runner
         run: node -e "const os = require('node:os'); const cpu = os.availableParallelism(); console.log(JSON.stringify({cpu, memoryGiB:Math.round(os.totalmem()/2**30)})); if (cpu < 8) process.exit(1)"
-      - name: Install pinned local PostgreSQL verification runtime
+      - name: Install pinned QR verification dependency
         run: npm ci --prefix qa-tools --ignore-scripts --no-audit --no-fund
       - name: Install pinned portable SDK dependencies for synthetic header checks
         run: npm ci --prefix snapshot --ignore-scripts --no-audit --no-fund
@@ -92,7 +92,7 @@ jobs:
         run: node -e "const os = require('node:os'); const cpu = os.availableParallelism(); console.log(JSON.stringify({cpu, memoryGiB:Math.round(os.totalmem()/2**30)})); if (cpu < 8) process.exit(1)"
       - name: Install pinned offline analysis dependencies
         run: python -m pip install -r qa-tools/runtime-requirements.txt
-      - name: Install pinned PostgreSQL runtime for native cloud integration checks
+      - name: Install pinned synthetic verification dependencies
         run: npm ci --prefix qa-tools --ignore-scripts --no-audit --no-fund
       - name: Install FFmpeg for synthetic DSP checks
         run: |
@@ -113,10 +113,5 @@ jobs:
             tests/cloud-worker-native.test.mjs \
             tests/cloud-visual-plan-native.test.mjs \
             tests/operator-bootstrap-video.test.mjs \
-            tests/cloud-production-host-native.test.mjs \
-            tests/cloud-first-e2e.test.mjs \
-            tests/cloud-native-continuation.test.mjs \
-            tests/cloud-owner-autodj-integration.test.mjs \
             tests/cloudflare-native-service.test.mjs \
-            tests/cloudflare-media-prepare.test.mjs \
-            tests/mac-edge-launch-flow.test.mjs
+            tests/cloudflare-media-prepare.test.mjs

@@ -1,7 +1,6 @@
 import test from 'node:test';import assert from 'node:assert/strict';
 import {createOwnerLinkFlow,readOwnerReturn} from '../room-web/owner-link.mjs';
 import {createRoomHandler} from '../cloud/room/handler.mjs';
-import {createOwnerLinkPlatform} from '../cloud/room/owner-link-platform.mjs';
 import {readFile} from 'node:fs/promises';import vm from 'node:vm';
 const state='a'.repeat(64),code='b'.repeat(32),verifier='c'.repeat(64),origin='https://ai-vdj.vercel.app';
 function harness(request){let clock=1000,bus,scheduled=[],calls=[],states=[];const flow=createOwnerLinkFlow({request:async(...args)=>{calls.push(args);return request(...args);},now:()=>clock,onStatus:x=>states.push(x.phase),channel:name=>(bus={name,close(){this.closed=true;},postMessage(data){this.sent=data;}}),schedule:(fn,ms)=>{const timer={fn,ms};scheduled.push(timer);return timer;},cancelTimer:t=>{if(t)t.cancelled=true;}});return{flow,calls,states,get bus(){return bus;},get timers(){return scheduled;},advance:ms=>{clock+=ms;},callback:()=>bus.onmessage({data:{type:'owner-link',state:bus.name.slice('ai-vdj-owner-'.length),code}})};}
@@ -64,15 +63,6 @@ test('callback directs the owner to the originating tab without a fresh unauthen
  assert.match(html,/最初にログインを始めたAI VDJタブ/);
  assert.doesNotMatch(html,/<a\b[^>]*href=["']\/room(?:["'?/#])/i);
  assert.doesNotMatch(html,/<(?:form|input|button)\b/i);
-});
-test('native platform adapter uses PKCE and fixed redirect, strips refresh/profile, refuses failed exchange',async()=>{
- const calls=[],adapter=createOwnerLinkPlatform({projectURL:'https://example.test',serverHeaders:new Headers(),fetcher:async(url,options)=>{calls.push({url:String(url),body:JSON.parse(options.body)});return new Response(JSON.stringify({access_token:'example-short',expires_at:100,refresh_token:'example-never-forward',user:{role:'forged'}}));}});
- await adapter.requestLink('owner@example.test','d'.repeat(43),origin+'/room/auth-return?state='+state);
- assert.equal(new URL(calls[0].url).searchParams.get('redirect_to'),origin+'/room/auth-return?state='+state);
- assert.deepEqual(calls[0].body,{email:'owner@example.test',create_user:false,code_challenge:'d'.repeat(43),code_challenge_method:'s256'});
- assert.deepEqual(await adapter.exchangeLink(code,verifier),{bearer:'example-short',expiresAt:100});
- assert.deepEqual(calls[1].body,{auth_code:code,code_verifier:verifier});
- const denied=createOwnerLinkPlatform({projectURL:'https://example.test',serverHeaders:new Headers(),fetcher:async()=>new Response('{}',{status:400})});assert.equal(await denied.exchangeLink(code,verifier),null);
 });
 test('HTTP uses bounded allowlist permits, never accepts caller redirect or forged UID, forwards only short session',async()=>{
  let sent=[],exchangeCalls=0;const uid='11111111-1111-4111-a111-111111111111';

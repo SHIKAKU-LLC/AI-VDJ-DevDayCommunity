@@ -4,7 +4,7 @@ import {DatabaseSync} from 'node:sqlite';
 import {readFile} from 'node:fs/promises';
 import {createD1JudgeStore} from '../cloud/cloudflare/d1-store.mjs';
 import {createR2RoomTransport} from '../cloud/cloudflare/r2-transport.mjs';
-import {createSupabasePrivateStore} from '../cloud/worker/supabase-private-store.mjs';
+import {createPrivateStore} from '../cloud/worker/private-store.mjs';
 const a='a'.repeat(64),b='b'.repeat(64),c='c'.repeat(64);
 const nonce='11111111-1111-4111-a111-111111111111',other='22222222-2222-4222-a222-222222222222';
 async function database(){
@@ -47,7 +47,7 @@ test('R2 binding supports the existing immutable private store and rejects cross
   async put(key,bytes,options){if(objects.has(key)&&options.onlyIf?.etagDoesNotMatch==='*')return null;
    const value={bytes:Uint8Array.from(bytes),httpMetadata:options.httpMetadata};objects.set(key,value);return value;}};
  const transport=createR2RoomTransport({bucket,roomId:nonce,privateBucketApproved:true});
- const store=createSupabasePrivateStore({enabled:true,roomId:nonce,transport});
+ const store=createPrivateStore({enabled:true,roomId:nonce,transport});
  const input={id:'synthetic-json',bytes:new TextEncoder().encode('{"synthetic":true}'),contentType:'application/json',binding:{kind:'owner-supplied-bootstrap'},provenance:{kind:'owner-supplied-bootstrap'}};
  const first=await store.assetStore.save(input);assert.equal((await store.assetStore.read(input.id)).sha256,first.sha256);
  await assert.rejects(store.assetStore.save({...input,bytes:new TextEncoder().encode('{"changed":true}')}),/IMMUTABLE_CONFLICT/);

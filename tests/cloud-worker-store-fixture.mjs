@@ -1,6 +1,6 @@
-// In-memory private object transport. Never calls Supabase or reads credentials.
+// In-memory private object transport. No network access or credentials.
 import assert from 'node:assert/strict';
-import {PRIVATE_BUCKET_TARGET} from '../cloud/worker/supabase-private-store.mjs';
+import {PRIVATE_BUCKET_TARGET} from '../cloud/worker/private-store.mjs';
 export function syntheticStorageTransport() {
   const objects=new Map(),calls=[];
   const config={id:PRIVATE_BUCKET_TARGET,public:false,fileSizeLimit:32*1024*1024,

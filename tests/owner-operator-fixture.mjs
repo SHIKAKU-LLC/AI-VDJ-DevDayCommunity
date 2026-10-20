@@ -19,13 +19,13 @@ export function createOwnerOperatorFixture({enabled=true,infrastructure=true,amb
  append:async i=>{const u=uploads.get(i.uploadId);assert.equal(u.length,i.offset);u.bytes.push(i.bytes);u.length+=i.bytes.length;return {receivedBytes:u.length};},
  finish:async i=>{const u=uploads.get(i.uploadId),b=Buffer.concat(u.bytes);assert.equal(digest(b),u.selection.sha256);assert.equal(b.length,u.selection.byteLength);
  const a={...scoped,...u.selection,assetId:'asset-'+(++serial),privateSaved:true,checksumVerified:true,serverQC:true};assets.set(a.assetId,a);uploads.delete(i.uploadId);return a;},read:async i=>assets.get(i.assetId)},
- trial:{mediaHost:'example.supabase.co',reserveBudget,infrastructure:{verified:infrastructure,maximumUsd:0},...(fivePerson?{maximumParticipants:5,maximumCents:250}:{}),
+ trial:{mediaHost:'media.example.invalid',reserveBudget,infrastructure:{verified:infrastructure,maximumUsd:0},...(fivePerson?{maximumParticipants:5,maximumCents:250}:{}),
  plans:{active:async()=>[...plans.values()].at(-1)??null,save:async p=>{if(admitted&&!(admitted===2&&p.participants===3))throw Object.assign(Error('OPERATOR_EXISTING_TRIAL'),{code:'OPERATOR_EXISTING_TRIAL'});plans.set(p.planId,structuredClone(p));},read:async i=>structuredClone(plans.get(i.planId)),
  claim:async i=>{const p=plans.get(i.planId);if(p.phase!=='REVIEW'||admitted&&!(admitted===2&&p.participants===3))return false;admitted=p.participants;p.phase='CLAIMED';return true;},record:async i=>{plans.get(i.planId).phase=i.phase;}},
  readSubmissions:async()=>Array.from({length:submissionCount},(_,i)=>({participantId:'synthetic-person-'+(i+1),submissionId:'synthetic-submission-'+(i+1)})),readSource:async()=>structuredClone(source),
  quoteAndBalance:async()=>({quote:{verified:true,evidenceSha256:'1'.repeat(64),observedAtMs:1000,maximumUsd:{intent:.01,music:.05,video:.4}},balance:{usd:balanceUsd,autoTopUp:false,observedAtMs:1000},visualPolicy:TECHNICAL_VISUAL_POLICY}),
- signSource:async i=>({context:{url:'https://example.supabase.co/private/context',private:true,checksumVerified:true,sha256:source.music.contextSha256,expiresAtMs:i.expiresAtMs,serverAudioQC:true,providerOriginVerified:true},
- reference:{url:'https://example.supabase.co/private/reference',private:true,checksumVerified:true,sha256:source.video.referenceSha256,expiresAtMs:i.expiresAtMs}}),
+ signSource:async i=>({context:{url:'https://media.example.invalid/private/context',private:true,checksumVerified:true,sha256:source.music.contextSha256,expiresAtMs:i.expiresAtMs,serverAudioQC:true,providerOriginVerified:true},
+ reference:{url:'https://media.example.invalid/private/reference',private:true,checksumVerified:true,sha256:source.video.referenceSha256,expiresAtMs:i.expiresAtMs}}),
  insertPermits:async i=>inserted.push(...i.plan.operations.map(o=>o.permit)),beginOperation:async i=>{begun.push(i);if(ambiguous)throw Error('synthetic ambiguous response');},readProgress:async()=>({completedParticipants})}};
  const server=createOwnerOperator(ports);
  const request=async(path,options={})=>{calls.push({path,method:options.method});const r=await server.handleRequest(new Request(origin+path,{method:options.method??'GET',

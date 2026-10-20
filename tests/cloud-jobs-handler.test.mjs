@@ -34,7 +34,7 @@ test('attachment route accepts submission ID only and neither participant nor su
   assert.equal((await handler(request('/jobs/attachment', {submissionId: 'synthetic-submission'}, {...Object.fromEntries([['Authorization', ['Bearer', guest].join(' ')]])}))).status, 403);
   assert.equal((await handler(request('/jobs/attachment', ' '.repeat(1025)))).status, 413); assert.equal(prepares, 1);
 });
-test('projection assembly preserves exclusive room proof actors and origin boundary through gateway URL rewrites', async () => {
+test('projection assembly preserves exclusive room proof actors and the same-origin boundary', async () => {
   const calls = [], projection = {readRoom: async input => { calls.push(input); return {submissions: []}; },
     readSubmission: async input => { calls.push(input); return {submissionId: input.submissionId}; }};
   const handler = createCloudFirstHandler({roomProjection: projection});
@@ -44,9 +44,9 @@ test('projection assembly preserves exclusive room proof actors and origin bound
   assert.equal((await handler(participant)).status, 200); assert.deepEqual(calls.at(-1), {roomId, participantCapability: guest, submissionId: 'synthetic-submission'});
   assert.equal((await handler(request('', undefined, {Authorization: 'example_malformed'}))).status, 403);
   assert.equal((await handler(request('', undefined, {Origin: 'https://evil.invalid'}))).status, 403);
-  const rewritten = new Request('https://synthetic.supabase.co/functions/v1/ai-vdj-room/api/rooms/' + roomId,
+  const sameOrigin = new Request(origin + '/api/rooms/' + roomId,
     {headers: {'Sec-Fetch-Site': 'same-origin', 'X-Room-Owner': owner}});
-  assert.equal((await handler(rewritten)).status, 200);
+  assert.equal((await handler(sameOrigin)).status, 200);
   const crossSite = new Request(origin + '/api/rooms/' + roomId, {headers: {'Sec-Fetch-Site': 'cross-site', 'X-Room-Owner': owner}});
   assert.equal((await handler(crossSite)).status, 403);
 });
